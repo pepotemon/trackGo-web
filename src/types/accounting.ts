@@ -43,6 +43,7 @@ export type DailyEventDoc = {
     name?: string;
     business?: string;
     address?: string;
+    mapsUrl?: string;
 
     ratePerVisitSnapshot?: number;
     billingModeSnapshot?: UserBillingMode;
@@ -50,11 +51,16 @@ export type DailyEventDoc = {
 
     rateApplied?: number;
     amount?: number;
+
+    rejectedReason?: string | null;
+    rejectedReasonText?: string | null;
+    note?: string | null;
 };
 
 export type WeeklyInvestmentAllocations = Record<string, number>;
 
 export type InvestmentGroupStatus = "active" | "inactive";
+export type WeeklyAccountingStatus = "draft" | "review" | "closed";
 
 export type InvestmentGroupDoc = {
     id: string;
@@ -82,8 +88,32 @@ export type WeeklyInvestmentDoc = {
     amount: number;
     allocations?: WeeklyInvestmentAllocations;
     groups?: WeeklyInvestmentGroup[];
+    status?: WeeklyAccountingStatus;
+    finalSummary?: AccountingFinalSummary;
+    closedAt?: number | null;
+    closedBy?: string | null;
+    reopenedAt?: number | null;
+    reopenedBy?: string | null;
     createdAt?: number;
     updatedAt?: number;
+};
+
+export type AccountingFinalSummary = {
+    visited: number;
+    rejected: number;
+    gross: number;
+    grossVisits: number;
+    grossSubscriptions: number;
+    subscriptionsPaid: number;
+    investment: number;
+    subscriptionInvestment: number;
+    groupInvestment: number;
+    manualAdjustment: number;
+    real: number;
+    roi: number | null;
+    rowsCount: number;
+    closedAt: number;
+    closedBy?: string | null;
 };
 
 export type AccountingUserRow = {
@@ -116,6 +146,9 @@ export type AccountingSummary = {
     subscriptionsPaid: number;
 
     investment: number;
+    subscriptionInvestment: number;
+    groupInvestment: number;
+    manualAdjustment: number;
     real: number;
     roi: number | null;
 

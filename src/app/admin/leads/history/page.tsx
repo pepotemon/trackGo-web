@@ -77,6 +77,8 @@ export default function LeadHistoryPage() {
         let total = 0;
         if (filters.bucket !== "all") total++;
         if (filters.city !== "all") total++;
+        if (filters.startKey) total++;
+        if (filters.endKey) total++;
         if (filters.search.trim()) total++;
         return total;
     }, [filters]);
@@ -161,7 +163,25 @@ export default function LeadHistoryPage() {
                         />
                     </div>
 
-                    <div className="grid gap-2 md:grid-cols-2">
+                    <div className="grid gap-2 md:grid-cols-4">
+                        <label className="flex flex-col gap-1">
+                            <span className="text-[11px] font-semibold text-[#71717a]">Desde</span>
+                            <Input
+                                type="date"
+                                value={filters.startKey}
+                                onChange={(event) => patchFilters({ startKey: event.target.value })}
+                            />
+                        </label>
+
+                        <label className="flex flex-col gap-1">
+                            <span className="text-[11px] font-semibold text-[#71717a]">Hasta</span>
+                            <Input
+                                type="date"
+                                value={filters.endKey}
+                                onChange={(event) => patchFilters({ endKey: event.target.value })}
+                            />
+                        </label>
+
                         <FilterSelect
                             label="Ciudad"
                             value={filters.city}

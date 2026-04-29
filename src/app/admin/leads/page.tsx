@@ -138,6 +138,19 @@ export default function AdminLeadsPage() {
                 </div>
             ) : null}
 
+            <section className="mb-4 grid gap-3 md:grid-cols-2">
+                <LeadAccessCard
+                    href="/admin/leads/history"
+                    title="Historial"
+                    body="Leads incompletos o descartados fuera de la cola activa."
+                />
+                <LeadAccessCard
+                    href="/admin/leads/assignments"
+                    title="Asignaciones"
+                    body="Auditoria de auto-asignacion y distribucion de trabajo."
+                />
+            </section>
+
             <section className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <StatCard label="Cola activa" value={stats.total} caption="Leads Meta sin asignar" />
                 <StatCard label="Por revisar" value={stats.pendingReview} caption="Listos para validar" />
@@ -243,6 +256,26 @@ export default function AdminLeadsPage() {
                 onAssign={assignLead}
             />
         </div>
+    );
+}
+
+function LeadAccessCard({
+    href,
+    title,
+    body,
+}: {
+    href: string;
+    title: string;
+    body: string;
+}) {
+    return (
+        <Link
+            href={href}
+            className="rounded-lg border border-[#e5e7eb] bg-white px-4 py-3 shadow-sm transition hover:border-[#bfdbfe] hover:bg-[#eff6ff]"
+        >
+            <div className="text-[13px] font-semibold text-[#171717]">{title}</div>
+            <div className="mt-1 text-[12px] font-medium text-[#71717a]">{body}</div>
+        </Link>
     );
 }
 

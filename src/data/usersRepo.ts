@@ -1,15 +1,16 @@
 import {
     collection,
     doc,
+    getDoc,
     getDocs,
     limit,
     orderBy,
     query,
-    setDoc,
     updateDoc,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import type { UserDoc, UserGeoCoverage, UserGeoCoverageType, UserRole } from "@/types/users";
+import { httpsCallable } from "firebase/functions";
+import { db, functions } from "@/lib/firebase";
+import type { UserBillingMode, UserDoc, UserGeoCoverage, UserGeoCoverageType, UserRole } from "@/types/users";
 
 function safeNumber(value: unknown, fallback = 0) {
     const n = Number(value);
@@ -151,37 +152,58 @@ export async function listAdminUsers(): Promise<UserDoc[]> {
     }));
 }
 
-export async function createUserProfile(
-    userId: string,
-    patch: Partial<UserDoc>
-): Promise<UserDoc> {
-    const now = Date.now();
+type CreateManagedUserInput = {
+    name: string;
+    email: string;
+    password: string;
+    whatsappPhone?: string;
+    role: UserRole;
+    billingMode?: UserBillingMode;
+    ratePerVisit?: number;
+    weeklySubscriptionAmount?: number;
+    weeklySubscriptionCost?: number;
+    weeklySubscriptionActive?: boolean;
+    autoAssignEnabled?: boolean;
+    autoAssignDailyLimit?: number | null;
+    geoCoverage?: UserGeoCoverage[];
+};
 
-    const data = cleanUserPatch({
-        active: true,
-        role: "user" as UserRole,
-        billingMode: "per_visit",
-        ratePerVisit: 0,
-        weeklySubscriptionAmount: 0,
-        weeklySubscriptionCost: 0,
-        weeklySubscriptionActive: true,
-        autoAssignEnabled: false,
-        autoAssignDailyLimit: null,
-        ...patch,
+type CreateManagedUserCallableInput = CreateManagedUserInput & {
+    primaryGeoCoverageLabel?: string | null;
+};
+
+export async function createManagedUserProfile(input: CreateManagedUserInput): Promise<UserDoc> {
+    const createManagedUser = httpsCallable<
+        CreateManagedUserCallableInput,
+        { uid?: string; email?: string }
+    >(functions, "createManagedUser");
+
+    const normalizedCoverage = normalizeCoverageList(input.geoCoverage);
+    const result = await createManagedUser({
+        ...input,
+        email: cleanText(input.email).toLowerCase(),
+        name: cleanText(input.name) || "Usuario",
+        whatsappPhone: cleanPhone(input.whatsappPhone),
+        geoCoverage: normalizedCoverage,
+        primaryGeoCoverageLabel: normalizedCoverage[0]?.displayLabel ?? null,
     });
 
-    await setDoc(doc(db, "users", userId), {
-        ...data,
-        createdAt: now,
-        updatedAt: now,
-    });
+    const uid = cleanText(result.data?.uid);
+
+    if (!uid) {
+        throw new Error("La funcion no devolvio el UID del usuario creado.");
+    }
+
+    const snap = await getDoc(doc(db, "users", uid));
+
+    if (!snap.exists()) {
+        throw new Error("El usuario fue creado en Auth, pero no se encontro su perfil.");
+    }
 
     return {
-        id: userId,
-        ...data,
-        createdAt: now,
-        updatedAt: now,
-    } as UserDoc;
+        id: snap.id,
+        ...(snap.data() as Omit<UserDoc, "id">),
+    };
 }
 
 export async function toggleUserActive(userId: string, active: boolean) {

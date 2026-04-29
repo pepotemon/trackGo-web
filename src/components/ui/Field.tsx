@@ -9,7 +9,7 @@ export function Field({
 }) {
     return (
         <label className="grid gap-1.5">
-            <span className="text-[11px] font-medium text-[#71717a]">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#667085]">
                 {label}
             </span>
             {children}

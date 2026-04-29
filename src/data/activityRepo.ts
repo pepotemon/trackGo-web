@@ -21,6 +21,23 @@ export type ActivityPage = {
     hasMore: boolean;
 };
 
+function safeNumber(value: unknown, fallback = 0) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+}
+
+function dayKeyFromMs(ms: number) {
+    const d = new Date(ms);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+}
+
+function text(value: unknown) {
+    return typeof value === "string" ? value.trim() : "";
+}
+
 export async function listActivityEventsPage(input: {
     startKey: string;
     endKey: string;
@@ -51,4 +68,45 @@ export async function listActivityEventsPage(input: {
         cursor: pageDocs.at(-1) ?? input.cursor ?? null,
         hasMore: docs.length > input.pageSize || snap.docs.length > input.pageSize,
     };
+}
+
+export async function listPendingClientsForActivity(input: {
+    startKey: string;
+    endKey: string;
+    pageSize: number;
+}): Promise<DailyEventDoc[]> {
+    const snap = await getDocs(
+        query(
+            collection(db, "clients"),
+            where("status", "==", "pending"),
+            orderBy("updatedAt", "desc"),
+            limit(input.pageSize)
+        )
+    );
+
+    return snap.docs
+        .map((docSnap) => {
+            const data = docSnap.data();
+            const assignedAt = safeNumber(data.assignedAt, 0);
+            const updatedAt = safeNumber(data.updatedAt, 0);
+            const createdAt = assignedAt || updatedAt || Date.now();
+            const dayKey = text(data.assignedDayKey) || dayKeyFromMs(createdAt);
+
+            return {
+                id: `pending_${docSnap.id}`,
+                type: "pending",
+                userId: text(data.assignedTo),
+                clientId: docSnap.id,
+                createdAt,
+                dayKey,
+                phone: text(data.phone),
+                name: text(data.name),
+                business: text(data.business),
+                address: text(data.address),
+                mapsUrl: text(data.mapsUrl),
+            } satisfies DailyEventDoc;
+        })
+        .filter((event) => {
+            return event.userId && event.dayKey >= input.startKey && event.dayKey <= input.endKey;
+        });
 }

@@ -1,5 +1,6 @@
 import {
     collection,
+    deleteDoc,
     doc,
     getDoc,
     getDocs,
@@ -11,6 +12,8 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type {
+    AccountingFinalSummary,
+    AccountingSummary,
     DailyEventDoc,
     InvestmentGroupDoc,
     UserDoc,
@@ -56,6 +59,53 @@ function normalizeInvestmentGroup(id: string, data: Record<string, unknown>): In
             )
         ),
         status,
+        createdAt: safeNumber(data.createdAt, undefined),
+        updatedAt: safeNumber(data.updatedAt, undefined),
+    };
+}
+
+function normalizeFinalSummary(value: unknown): AccountingFinalSummary | undefined {
+    const data = record(value);
+    if (!Object.keys(data).length) return undefined;
+
+    return {
+        visited: safeNumber(data.visited, 0),
+        rejected: safeNumber(data.rejected, 0),
+        gross: clamp2(safeNumber(data.gross, 0)),
+        grossVisits: clamp2(safeNumber(data.grossVisits, 0)),
+        grossSubscriptions: clamp2(safeNumber(data.grossSubscriptions, 0)),
+        subscriptionsPaid: safeNumber(data.subscriptionsPaid, 0),
+        investment: clamp2(safeNumber(data.investment, 0)),
+        subscriptionInvestment: clamp2(safeNumber(data.subscriptionInvestment, 0)),
+        groupInvestment: clamp2(safeNumber(data.groupInvestment, 0)),
+        manualAdjustment: clamp2(safeNumber(data.manualAdjustment, 0)),
+        real: clamp2(safeNumber(data.real, 0)),
+        roi: data.roi == null ? null : safeNumber(data.roi, 0),
+        rowsCount: safeNumber(data.rowsCount, 0),
+        closedAt: safeNumber(data.closedAt, 0),
+        closedBy: typeof data.closedBy === "string" ? data.closedBy : null,
+    };
+}
+
+function normalizeWeeklyInvestment(id: string, data: Record<string, unknown>): WeeklyInvestmentDoc {
+    const status =
+        data.status === "closed" || data.status === "review" || data.status === "draft"
+            ? data.status
+            : "draft";
+
+    return {
+        id,
+        weekStartKey: typeof data.weekStartKey === "string" ? data.weekStartKey : id,
+        weekEndKey: typeof data.weekEndKey === "string" ? data.weekEndKey : "",
+        amount: safeNumber(data.amount, 0),
+        allocations: normalizeAllocations(data.allocations),
+        groups: Array.isArray(data.groups) ? (data.groups as WeeklyInvestmentGroup[]) : [],
+        status,
+        finalSummary: normalizeFinalSummary(data.finalSummary),
+        closedAt: data.closedAt == null ? null : safeNumber(data.closedAt, 0),
+        closedBy: typeof data.closedBy === "string" ? data.closedBy : null,
+        reopenedAt: data.reopenedAt == null ? null : safeNumber(data.reopenedAt, 0),
+        reopenedBy: typeof data.reopenedBy === "string" ? data.reopenedBy : null,
         createdAt: safeNumber(data.createdAt, undefined),
         updatedAt: safeNumber(data.updatedAt, undefined),
     };
@@ -117,18 +167,7 @@ export async function getWeeklyInvestment(
 
     if (!snap.exists()) return null;
 
-    const data = record(snap.data());
-
-    return {
-        id: snap.id,
-        weekStartKey: typeof data.weekStartKey === "string" ? data.weekStartKey : snap.id,
-        weekEndKey: typeof data.weekEndKey === "string" ? data.weekEndKey : "",
-        amount: safeNumber(data.amount, 0),
-        allocations: normalizeAllocations(data.allocations),
-        groups: Array.isArray(data.groups) ? (data.groups as WeeklyInvestmentGroup[]) : [],
-        createdAt: safeNumber(data.createdAt, undefined),
-        updatedAt: safeNumber(data.updatedAt, undefined),
-    };
+    return normalizeWeeklyInvestment(snap.id, record(snap.data()));
 }
 
 function clamp2(value: number) {
@@ -141,6 +180,8 @@ export function buildAllocationsFromGroups(
     const out: WeeklyInvestmentAllocations = {};
 
     for (const group of groups) {
+        if (group.status === "inactive") continue;
+
         const userIds = Array.from(
             new Set(
                 (Array.isArray(group.userIds) ? group.userIds : [])
@@ -171,6 +212,16 @@ export async function upsertWeeklyInvestment(input: {
     groups: WeeklyInvestmentGroup[];
 }) {
     const now = Date.now();
+    const ref = doc(db, "weeklyInvestments", input.weekStartKey);
+    const currentSnap = await getDoc(ref);
+    const current = currentSnap.exists()
+        ? normalizeWeeklyInvestment(currentSnap.id, record(currentSnap.data()))
+        : null;
+
+    if (current?.status === "closed") {
+        throw new Error("La semana esta cerrada. Reabre la semana para editarla.");
+    }
+
     const amount = clamp2(safeNumber(input.amount, 0));
     const groups = input.groups
         .map((group, index) => {
@@ -191,19 +242,20 @@ export async function upsertWeeklyInvestment(input: {
                 status: group.status === "inactive" ? ("inactive" as const) : ("active" as const),
             };
         })
-        .filter((group) => group.status === "active" && group.amount > 0 && group.userIds.length > 0);
+        .filter((group) => group.amount > 0 && group.userIds.length > 0);
     const allocations = buildAllocationsFromGroups(groups);
 
     await setDoc(
-        doc(db, "weeklyInvestments", input.weekStartKey),
+        ref,
         {
             weekStartKey: input.weekStartKey,
             weekEndKey: input.weekEndKey,
             amount,
             groups,
             allocations,
+            status: current?.status ?? "draft",
             updatedAt: now,
-            createdAt: now,
+            createdAt: current?.createdAt ?? now,
         },
         { merge: true }
     );
@@ -215,6 +267,113 @@ export async function upsertWeeklyInvestment(input: {
         amount,
         groups,
         allocations,
+        status: current?.status ?? "draft",
+        finalSummary: current?.finalSummary,
+        closedAt: current?.closedAt,
+        closedBy: current?.closedBy,
+        reopenedAt: current?.reopenedAt,
+        reopenedBy: current?.reopenedBy,
+        createdAt: current?.createdAt ?? now,
+        updatedAt: now,
+    } satisfies WeeklyInvestmentDoc;
+}
+
+export async function closeWeeklyInvestment(input: {
+    weekStartKey: string;
+    weekEndKey: string;
+    summary: AccountingSummary;
+    closedBy?: string | null;
+}) {
+    const now = Date.now();
+    const ref = doc(db, "weeklyInvestments", input.weekStartKey);
+    const currentSnap = await getDoc(ref);
+    const current = currentSnap.exists()
+        ? normalizeWeeklyInvestment(currentSnap.id, record(currentSnap.data()))
+        : null;
+
+    const finalSummary: AccountingFinalSummary = {
+        visited: input.summary.visited,
+        rejected: input.summary.rejected,
+        gross: clamp2(input.summary.gross),
+        grossVisits: clamp2(input.summary.grossVisits),
+        grossSubscriptions: clamp2(input.summary.grossSubscriptions),
+        subscriptionsPaid: input.summary.subscriptionsPaid,
+        investment: clamp2(input.summary.investment),
+        subscriptionInvestment: clamp2(input.summary.subscriptionInvestment),
+        groupInvestment: clamp2(input.summary.groupInvestment),
+        manualAdjustment: clamp2(input.summary.manualAdjustment),
+        real: clamp2(input.summary.real),
+        roi: input.summary.roi == null ? null : input.summary.roi,
+        rowsCount: input.summary.rows.length,
+        closedAt: now,
+        closedBy: input.closedBy ?? null,
+    };
+
+    await setDoc(
+        ref,
+        {
+            weekStartKey: input.weekStartKey,
+            weekEndKey: input.weekEndKey,
+            status: "closed",
+            finalSummary,
+            closedAt: now,
+            closedBy: input.closedBy ?? null,
+            updatedAt: now,
+            createdAt: current?.createdAt ?? now,
+        },
+        { merge: true }
+    );
+
+    return {
+        ...(current ?? {
+            id: input.weekStartKey,
+            weekStartKey: input.weekStartKey,
+            weekEndKey: input.weekEndKey,
+            amount: 0,
+            groups: [],
+            allocations: {},
+        }),
+        weekEndKey: input.weekEndKey,
+        status: "closed" as const,
+        finalSummary,
+        closedAt: now,
+        closedBy: input.closedBy ?? null,
+        updatedAt: now,
+        createdAt: current?.createdAt ?? now,
+    } satisfies WeeklyInvestmentDoc;
+}
+
+export async function reopenWeeklyInvestment(input: {
+    weekStartKey: string;
+    reopenedBy?: string | null;
+}) {
+    const now = Date.now();
+    const ref = doc(db, "weeklyInvestments", input.weekStartKey);
+    const currentSnap = await getDoc(ref);
+    const current = currentSnap.exists()
+        ? normalizeWeeklyInvestment(currentSnap.id, record(currentSnap.data()))
+        : null;
+
+    if (!current) {
+        throw new Error("No existe historial para esta semana.");
+    }
+
+    await setDoc(
+        ref,
+        {
+            status: "draft",
+            reopenedAt: now,
+            reopenedBy: input.reopenedBy ?? null,
+            updatedAt: now,
+        },
+        { merge: true }
+    );
+
+    return {
+        ...current,
+        status: "draft" as const,
+        reopenedAt: now,
+        reopenedBy: input.reopenedBy ?? null,
         updatedAt: now,
     } satisfies WeeklyInvestmentDoc;
 }
@@ -255,4 +414,44 @@ export async function upsertInvestmentGroup(input: {
         id,
         ...payload,
     };
+}
+
+export async function deleteInvestmentGroup(groupId: string) {
+    const cleanId = String(groupId || "").trim();
+    if (!cleanId) throw new Error("Grupo invalido.");
+
+    await deleteDoc(doc(db, "investmentGroups", cleanId));
+}
+
+export async function updateWeeklySubscriptionPayment(input: {
+    userId: string;
+    weekStartKey: string;
+    paid: boolean;
+    amount: number;
+    cost: number;
+    updatedBy?: string | null;
+}) {
+    const now = Date.now();
+    const weekSnap = await getDoc(doc(db, "weeklyInvestments", input.weekStartKey));
+
+    if (weekSnap.exists() && record(weekSnap.data()).status === "closed") {
+        throw new Error("La semana esta cerrada. Reabre la semana para editar pagos.");
+    }
+
+    await setDoc(
+        doc(db, "users", input.userId),
+        {
+            weeklySubscriptionWeeks: {
+                [input.weekStartKey]: {
+                    paid: input.paid,
+                    amount: clamp2(safeNumber(input.amount, 0)),
+                    cost: clamp2(safeNumber(input.cost, 0)),
+                    updatedAt: now,
+                    updatedBy: input.updatedBy ?? null,
+                },
+            },
+            updatedAt: now,
+        },
+        { merge: true }
+    );
 }

@@ -8,13 +8,13 @@ export function StatCard({
     caption?: string;
 }) {
     return (
-        <div className="rounded-xl border border-[#e5e7eb] bg-white p-4 shadow-sm">
-            <p className="text-[12px] font-medium text-[#71717a]">{label}</p>
-            <p className="mt-2 text-[24px] font-semibold tracking-[-0.04em] text-[#171717]">
+        <div className="rounded-lg border border-[#e4e7ec] bg-white p-4 shadow-sm">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-[#667085]">{label}</p>
+            <p className="mt-2 font-mono text-[24px] font-medium tracking-[-0.04em] text-[#172033]">
                 {value}
             </p>
             {caption ? (
-                <p className="mt-1 text-[12px] font-medium text-[#9ca3af]">
+                <p className="mt-1 text-[11px] font-medium text-[#667085]">
                     {caption}
                 </p>
             ) : null}

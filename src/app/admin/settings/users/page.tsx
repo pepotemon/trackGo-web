@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState, type ButtonHTMLAttributes } from "react";
 import {
-    createUserProfile,
+    createManagedUserProfile,
     listAdminUsers,
     toggleUserActive,
     updateUserAutoAssign,
@@ -60,6 +60,13 @@ function safeNumber(value: unknown, fallback = 0) {
 
 function norm(text: unknown) {
     return String(text ?? "").toLowerCase().trim();
+}
+
+function selectClassName(extra = "") {
+    return [
+        "h-9 w-full rounded-lg border border-[#e4e7ec] bg-white px-3 text-[12px] font-semibold text-[#344054] outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-blue-100",
+        extra,
+    ].join(" ");
 }
 
 function normalizeCoverageText(value: unknown) {
@@ -376,7 +383,7 @@ export default function UsersPage() {
                 <StatCard label="Usuarios" value={stats.total} caption="Total registrado" />
                 <StatCard label="Activos" value={stats.active} caption="Usuarios operativos" />
                 <StatCard label="Admins" value={stats.admins} caption="Permisos admin" />
-                <StatCard label="Suscripción" value={stats.weekly} caption="Modelo semanal" />
+                <StatCard label="Suscripcion" value={stats.weekly} caption="Modelo semanal" />
             </section>
 
             <section>
@@ -384,10 +391,10 @@ export default function UsersPage() {
                     <div className="flex flex-col gap-4 px-4 py-4">
                         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                             <div>
-                                <h2 className="text-[14px] font-semibold text-[#171717]">
+                                <h2 className="text-[14px] font-semibold text-[#172033]">
                                     Equipo
                                 </h2>
-                                <p className="mt-0.5 text-[12px] font-medium text-[#9ca3af]">
+                                <p className="mt-0.5 text-[12px] font-medium text-[#667085]">
                                     Busca, filtra y selecciona un usuario para editarlo.
                                 </p>
                             </div>
@@ -406,69 +413,63 @@ export default function UsersPage() {
                             </div>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-2">
-                            <FilterGroup label="Rol">
-                                <FilterPill active={roleFilter === "all"} onClick={() => setRoleFilter("all")}>
-                                    Todos
-                                </FilterPill>
-                                <FilterPill active={roleFilter === "admin"} onClick={() => setRoleFilter("admin")}>
-                                    Admins
-                                </FilterPill>
-                                <FilterPill active={roleFilter === "user"} onClick={() => setRoleFilter("user")}>
-                                    Vendedores
-                                </FilterPill>
-                            </FilterGroup>
+                        <div className="grid gap-2 md:grid-cols-3">
+                            <FilterSelect
+                                label="Rol"
+                                value={roleFilter}
+                                onChange={(value) => setRoleFilter(value as RoleFilter)}
+                            >
+                                <option value="all">Todos los roles</option>
+                                <option value="admin">Admins</option>
+                                <option value="user">Vendedores</option>
+                            </FilterSelect>
 
-                            <FilterGroup label="Auto">
-                                <FilterPill active={autoFilter === "all"} onClick={() => setAutoFilter("all")}>
-                                    Todos
-                                </FilterPill>
-                                <FilterPill active={autoFilter === "on"} onClick={() => setAutoFilter("on")}>
-                                    ON
-                                </FilterPill>
-                                <FilterPill active={autoFilter === "off"} onClick={() => setAutoFilter("off")}>
-                                    OFF
-                                </FilterPill>
-                            </FilterGroup>
+                            <FilterSelect
+                                label="Auto-asignacion"
+                                value={autoFilter}
+                                onChange={(value) => setAutoFilter(value as AutoFilter)}
+                            >
+                                <option value="all">Todos</option>
+                                <option value="on">Auto ON</option>
+                                <option value="off">Auto OFF</option>
+                            </FilterSelect>
 
-                            <FilterGroup label="Cobro">
-                                <FilterPill active={billingFilter === "all"} onClick={() => setBillingFilter("all")}>
-                                    Todos
-                                </FilterPill>
-                                <FilterPill active={billingFilter === "per_visit"} onClick={() => setBillingFilter("per_visit")}>
-                                    Por visita
-                                </FilterPill>
-                                <FilterPill active={billingFilter === "weekly_subscription"} onClick={() => setBillingFilter("weekly_subscription")}>
-                                    Suscripción
-                                </FilterPill>
-                            </FilterGroup>
+                            <FilterSelect
+                                label="Modelo de cobro"
+                                value={billingFilter}
+                                onChange={(value) => setBillingFilter(value as BillingFilter)}
+                            >
+                                <option value="all">Todos los modelos</option>
+                                <option value="per_visit">Por visita</option>
+                                <option value="weekly_subscription">Suscripcion</option>
+                            </FilterSelect>
                         </div>
                     </div>
 
-                    <div className="overflow-x-auto border-t border-[#f0f1f2]">
+                    <div className="overflow-x-auto border-t border-[#eef1f5]">
                         <table className="w-full min-w-[1040px] border-collapse">
                             <thead>
-                                <tr className="border-b border-[#f0f1f2] text-left text-[11px] font-medium text-[#9ca3af]">
+                                <tr className="border-b border-[#eef1f5] text-left text-[11px] font-medium text-[#667085]">
                                     <th className="px-4 py-3">Usuario</th>
                                     <th className="px-4 py-3">Rol</th>
                                     <th className="px-4 py-3">Estado</th>
                                     <th className="px-4 py-3">Modelo</th>
                                     <th className="px-4 py-3">Cobertura</th>
                                     <th className="px-4 py-3">Auto</th>
-                                    <th className="px-4 py-3 text-right">Acción</th>
+                                    <th className="px-4 py-3 text-right">Accion</th>
                                 </tr>
                             </thead>
 
                             <tbody>
                                 {loading ? (
                                     <tr>
-                                        <td colSpan={7} className="p-8 text-center text-[13px] font-medium text-[#71717a]">
-                                            Cargando usuarios…
+                                        <td colSpan={7} className="p-8 text-center text-[13px] font-medium text-[#667085]">
+                                            Cargando usuarios...
                                         </td>
                                     </tr>
                                 ) : filteredUsers.length === 0 ? (
                                     <tr>
-                                        <td colSpan={7} className="p-8 text-center text-[13px] font-medium text-[#71717a]">
+                                        <td colSpan={7} className="p-8 text-center text-[13px] font-medium text-[#667085]">
                                             No hay usuarios con ese filtro.
                                         </td>
                                     </tr>
@@ -483,8 +484,8 @@ export default function UsersPage() {
                                                 onClick={() => setSelectedUserId(u.id)}
                                                 className={
                                                     selected
-                                                        ? "cursor-pointer border-b border-[#f0f1f2] bg-[#f4f7ff] last:border-0"
-                                                        : "cursor-pointer border-b border-[#f0f1f2] last:border-0 hover:bg-[#fafafa]"
+                                                        ? "cursor-pointer border-b border-[#eef1f5] bg-[#eff6ff] last:border-0"
+                                                        : "cursor-pointer border-b border-[#eef1f5] last:border-0 hover:bg-[#f9fafb]"
                                                 }
                                             >
                                                 <td className="px-4 py-3">
@@ -493,10 +494,10 @@ export default function UsersPage() {
                                                             {(u.name || u.email || "U").slice(0, 1).toUpperCase()}
                                                         </div>
                                                         <div className="min-w-0">
-                                                            <div className="truncate text-[12px] font-semibold text-[#171717]">
+                                                            <div className="truncate text-[12px] font-semibold text-[#172033]">
                                                                 {u.name || "Usuario"}
                                                             </div>
-                                                            <div className="mt-0.5 truncate text-[11px] font-medium text-[#9ca3af]">
+                                                            <div className="mt-0.5 truncate text-[11px] font-medium text-[#98a2b3]">
                                                                 {u.email || u.id}
                                                             </div>
                                                         </div>
@@ -517,12 +518,12 @@ export default function UsersPage() {
 
                                                 <td className="px-4 py-3">
                                                     <Badge tone="gray">
-                                                        {u.billingMode === "weekly_subscription" ? "Suscripción" : "Por visita"}
+                                                        {u.billingMode === "weekly_subscription" ? "Suscripcion" : "Por visita"}
                                                     </Badge>
                                                 </td>
 
                                                 <td className="px-4 py-3">
-                                                    <div className="max-w-[220px] truncate text-[12px] font-semibold text-[#52525b]">
+                                                    <div className="max-w-[220px] truncate text-[12px] font-semibold text-[#344054]">
                                                         {coverageLabel(u)}
                                                     </div>
                                                 </td>
@@ -576,44 +577,30 @@ export default function UsersPage() {
     );
 }
 
-function FilterGroup({
+function FilterSelect({
     label,
+    value,
     children,
+    onChange,
 }: {
     label: string;
+    value: string;
     children: React.ReactNode;
+    onChange: (value: string) => void;
 }) {
     return (
-        <div className="inline-flex items-center gap-1 rounded-xl border border-[#e5e7eb] bg-[#f4f5f6] p-1">
-            <span className="px-2 text-[11px] font-semibold text-[#71717a]">
+        <label className="block">
+            <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.07em] text-[#667085]">
                 {label}
             </span>
-            {children}
-        </div>
-    );
-}
-
-function FilterPill({
-    active,
-    children,
-    onClick,
-}: {
-    active: boolean;
-    children: React.ReactNode;
-    onClick: () => void;
-}) {
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            className={
-                active
-                    ? "rounded-lg bg-white px-3 py-1.5 text-[11px] font-semibold text-[#171717] shadow-sm"
-                    : "rounded-lg px-3 py-1.5 text-[11px] font-semibold text-[#71717a] transition hover:bg-white/70 hover:text-[#171717]"
-            }
-        >
-            {children}
-        </button>
+            <select
+                value={value}
+                onChange={(event) => onChange(event.target.value)}
+                className={selectClassName()}
+            >
+                {children}
+            </select>
+        </label>
     );
 }
 
@@ -628,19 +615,24 @@ function CreateUserModal({
     onCreated: (user: UserDoc) => void;
     onError: (msg: string | null) => void;
 }) {
-    const [userId, setUserId] = useState("");
     const [name, setName] = useState("");
     const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
     const [whatsappPhone, setWhatsappPhone] = useState("");
     const [role, setRole] = useState<UserRole>("user");
-    const [active, setActive] = useState(true);
     const [saving, setSaving] = useState(false);
 
     async function create() {
-        const cleanId = userId.trim();
+        const cleanEmail = email.trim().toLowerCase();
+        const cleanPassword = password.trim();
 
-        if (!cleanId) {
-            onError("Debes colocar el UID del usuario de Firebase Auth.");
+        if (!cleanEmail) {
+            onError("El email es obligatorio.");
+            return;
+        }
+
+        if (cleanPassword.length < 6) {
+            onError("La contrasena debe tener minimo 6 caracteres.");
             return;
         }
 
@@ -648,22 +640,29 @@ function CreateUserModal({
         onError(null);
 
         try {
-            const created = await createUserProfile(cleanId, {
+            const created = await createManagedUserProfile({
                 name: name.trim() || "Usuario",
-                email: email.trim(),
+                email: cleanEmail,
+                password: cleanPassword,
                 whatsappPhone: whatsappPhone.trim(),
                 role,
-                active,
+                billingMode: "per_visit",
+                ratePerVisit: 0,
+                weeklySubscriptionAmount: 0,
+                weeklySubscriptionCost: 0,
+                weeklySubscriptionActive: true,
+                autoAssignEnabled: false,
+                autoAssignDailyLimit: null,
+                geoCoverage: [],
             });
 
             onCreated(created);
 
-            setUserId("");
             setName("");
             setEmail("");
+            setPassword("");
             setWhatsappPhone("");
             setRole("user");
-            setActive(true);
         } catch (e: unknown) {
             onError(e instanceof Error ? e.message : "No se pudo crear el usuario.");
         } finally {
@@ -676,17 +675,9 @@ function CreateUserModal({
             open={open}
             onClose={onClose}
             title="Crear usuario"
-            subtitle="Crea el perfil administrativo usando el UID real de Firebase Auth."
+            subtitle="Crea el acceso real en Firebase Auth y su perfil operativo."
         >
             <div className="space-y-4">
-                <Field label="UID de Firebase Auth">
-                    <Input
-                        value={userId}
-                        onChange={(e) => setUserId(e.target.value)}
-                        placeholder="Ej: R8ds9..."
-                    />
-                </Field>
-
                 <div className="grid gap-3 sm:grid-cols-2">
                     <Field label="Nombre">
                         <Input value={name} onChange={(e) => setName(e.target.value)} />
@@ -696,6 +687,15 @@ function CreateUserModal({
                         <Input value={email} onChange={(e) => setEmail(e.target.value)} />
                     </Field>
                 </div>
+
+                <Field label="Contrasena temporal">
+                    <Input
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Minimo 6 caracteres"
+                    />
+                </Field>
 
                 <Field label="WhatsApp operativo">
                     <Input
@@ -710,16 +710,9 @@ function CreateUserModal({
                     <Choice active={role === "admin"} onClick={() => setRole("admin")} label="Admin" />
                 </div>
 
-                <label className="flex items-center justify-between rounded-lg border border-[#e5e7eb] bg-[#fafafa] px-3 py-2">
-                    <span className="text-[12px] font-semibold text-[#52525b]">
-                        Usuario activo
-                    </span>
-                    <input
-                        type="checkbox"
-                        checked={active}
-                        onChange={(e) => setActive(e.target.checked)}
-                    />
-                </label>
+                <div className="rounded-lg border border-[#e4e7ec] bg-[#f9fafb] px-3 py-2 text-[12px] font-medium text-[#667085]">
+                    El usuario se crea activo. Luego puedes ajustar cobertura, auto-asignacion y contabilidad desde editar.
+                </div>
 
                 <div className="flex justify-end gap-2 border-t border-[#f0f1f2] pt-4">
                     <IconButton icon="x" label="Cancelar" onClick={onClose} />
@@ -854,7 +847,7 @@ function EditUserModal({
             open={open}
             onClose={onClose}
             title={`Editar ${user.name || "usuario"}`}
-            subtitle="Modifica perfil, rol, auto-asignación y contabilidad."
+            subtitle="Modifica perfil, rol, auto-asignaciÃ³n y contabilidad."
         >
             <div className="space-y-4">
                 <div className="flex flex-wrap gap-2">
@@ -949,10 +942,10 @@ function EditUserModal({
                 ) : null}
 
                 {activeTab === "autoAssign" ? (
-                    <EditorBlock title="Auto-asignación">
+                    <EditorBlock title="Auto-asignaciÃ³n">
                         <label className="flex items-center justify-between rounded-lg border border-[#e5e7eb] bg-white px-3 py-2">
                             <span className="text-[12px] font-semibold text-[#52525b]">
-                                Recibir leads automáticamente
+                                Recibir leads automÃ¡ticamente
                             </span>
                             <input
                                 type="checkbox"
@@ -962,11 +955,11 @@ function EditUserModal({
                         </label>
 
                         {autoAssignEnabled ? (
-                            <Field label="Límite diario">
+                            <Field label="LÃ­mite diario">
                                 <Input
                                     value={autoAssignDailyLimit}
                                     onChange={(e) => setAutoAssignDailyLimit(onlyNumberLike(e.target.value))}
-                                    placeholder="Vacío = sin límite"
+                                    placeholder="VacÃ­o = sin lÃ­mite"
                                 />
                             </Field>
                         ) : null}
@@ -977,7 +970,7 @@ function EditUserModal({
                     <EditorBlock title="Contabilidad">
                         <div className="grid grid-cols-2 gap-2">
                             <Choice active={billingMode === "per_visit"} onClick={() => setBillingMode("per_visit")} label="Por visita" />
-                            <Choice active={billingMode === "weekly_subscription"} onClick={() => setBillingMode("weekly_subscription")} label="Suscripción" />
+                            <Choice active={billingMode === "weekly_subscription"} onClick={() => setBillingMode("weekly_subscription")} label="SuscripciÃ³n" />
                         </div>
 
                         {billingMode === "per_visit" ? (
@@ -996,7 +989,7 @@ function EditUserModal({
 
                                 <label className="col-span-2 flex items-center justify-between rounded-lg border border-[#e5e7eb] bg-white px-3 py-2">
                                     <span className="text-[12px] font-semibold text-[#52525b]">
-                                        Suscripción activa
+                                        SuscripciÃ³n activa
                                     </span>
                                     <input type="checkbox" checked={weeklyActive} onChange={(e) => setWeeklyActive(e.target.checked)} />
                                 </label>
@@ -1198,3 +1191,4 @@ function MiniTab({
         </button>
     );
 }
+

@@ -2,9 +2,13 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { listActivityEventsPage, type ActivityCursor } from "@/data/activityRepo";
+import {
+    listActivityEventsPage,
+    listPendingClientsForActivity,
+    type ActivityCursor,
+} from "@/data/activityRepo";
 import { listAccountingUsers } from "@/data/accountingRepo";
-import { dayKeyFromDate, addDays, money } from "@/lib/date";
+import { dayKeyFromDate, addDays } from "@/lib/date";
 import type {
     ActivityEventRow,
     ActivityEventType,
@@ -27,6 +31,19 @@ const typeTone: Record<Exclude<ActivityEventType, "all">, "green" | "red" | "gra
     visited: "green",
     rejected: "red",
     pending: "gray",
+};
+
+const rejectReasonLabel: Record<string, string> = {
+    clavo: "Clavo",
+    localizacion: "Localizacion",
+    zona_riesgosa: "Zona riesgosa",
+    ingresos_insuficientes: "Ingresos insuficientes",
+    muy_endeudado: "Muy endeudado",
+    informacion_dudosa: "Informacion dudosa",
+    no_le_interesa: "No le interesa",
+    no_estaba_cerrado: "No estaba cerrado",
+    fuera_de_ruta: "Fuera de ruta",
+    otro: "Otro",
 };
 
 function selectClassName(extra = "") {
@@ -61,28 +78,46 @@ function formatDate(value?: number | null) {
     }).format(new Date(value));
 }
 
-function resolveAmount(event: DailyEventDoc) {
-    const candidates = [
-        event.amount,
-        event.rateApplied,
-        event.amountSnapshot,
-        event.ratePerVisitSnapshot,
-    ];
-
-    for (const value of candidates) {
-        const n = Number(value);
-        if (Number.isFinite(n)) return n;
-    }
-
-    return 0;
-}
-
 function eventTitle(event: ActivityEventRow) {
     return event.name || event.business || event.phone || event.clientId || "Cliente";
 }
 
 function eventSubtitle(event: ActivityEventRow) {
-    return [event.business, event.address].filter(Boolean).join(" - ") || event.phone || event.clientId;
+    const business = String(event.business || "").trim();
+    const address = String(event.address || "").trim();
+    const cleanAddress = /^https?:\/\//i.test(address) ? "" : address;
+
+    return business || cleanAddress || event.phone || event.clientId;
+}
+
+function rejectedReasonText(event: ActivityEventRow) {
+    if (event.type !== "rejected") return "";
+
+    const reason = String(event.rejectedReason || event.note || "").trim();
+    const custom = String(event.rejectedReasonText || "").trim();
+
+    if (reason === "otro" && custom) return custom;
+    if (reason) return rejectReasonLabel[reason] || reason;
+    if (custom) return custom;
+    return "";
+}
+
+function mergeActivityEvents(events: DailyEventDoc[], pendingClients: DailyEventDoc[]) {
+    const map = new Map<string, DailyEventDoc>();
+
+    for (const event of events) {
+        map.set(`${event.type}_${event.clientId}`, event);
+    }
+
+    for (const event of pendingClients) {
+        map.set(`pending_${event.clientId}`, event);
+    }
+
+    return Array.from(map.values()).sort((a, b) => {
+        const dayCompare = String(b.dayKey || "").localeCompare(String(a.dayKey || ""));
+        if (dayCompare !== 0) return dayCompare;
+        return Number(b.createdAt || 0) - Number(a.createdAt || 0);
+    });
 }
 
 export default function ActivityPage() {
@@ -102,10 +137,10 @@ export default function ActivityPage() {
             const user = userMap.get(event.userId);
             return {
                 ...event,
+                source: String(event.id || "").startsWith("pending_") ? "pending_client" : "daily_event",
                 userName: user?.name || event.userId || "Usuario",
                 userEmail: user?.email,
                 billingMode: user?.billingMode || event.billingModeSnapshot || "per_visit",
-                amountResolved: resolveAmount(event),
             };
         });
     }, [events, userMap]);
@@ -128,6 +163,9 @@ export default function ActivityPage() {
                 row.business,
                 row.phone,
                 row.address,
+                row.rejectedReason,
+                row.rejectedReasonText,
+                row.note,
                 row.type,
                 row.dayKey,
             ]
@@ -162,17 +200,22 @@ export default function ActivityPage() {
         setErr(null);
 
         try {
-            const [userDocs, page] = await Promise.all([
+            const [userDocs, page, pendingClients] = await Promise.all([
                 listAccountingUsers(),
                 listActivityEventsPage({
                     startKey: nextFilters.startKey,
                     endKey: nextFilters.endKey,
                     pageSize: PAGE_SIZE,
                 }),
+                listPendingClientsForActivity({
+                    startKey: nextFilters.startKey,
+                    endKey: nextFilters.endKey,
+                    pageSize: 500,
+                }),
             ]);
 
             setUsers(userDocs.map(userToOption));
-            setEvents(page.events);
+            setEvents(mergeActivityEvents(page.events, pendingClients));
             setCursor(page.cursor);
             setHasMore(page.hasMore);
         } catch (error) {
@@ -196,7 +239,7 @@ export default function ActivityPage() {
                 cursor,
             });
 
-            setEvents((prev) => [...prev, ...page.events]);
+            setEvents((prev) => mergeActivityEvents([...prev, ...page.events], []));
             setCursor(page.cursor);
             setHasMore(page.hasMore);
         } catch (error) {
@@ -362,7 +405,6 @@ function ActivityTable({ rows, loading }: { rows: ActivityEventRow[]; loading: b
                         <th className="px-4 py-3">Estado</th>
                         <th className="px-4 py-3">Usuario</th>
                         <th className="px-4 py-3">Dia</th>
-                        <th className="px-4 py-3 text-right">Monto</th>
                         <th className="px-4 py-3 text-right">Accion</th>
                     </tr>
                 </thead>
@@ -370,19 +412,32 @@ function ActivityTable({ rows, loading }: { rows: ActivityEventRow[]; loading: b
                 <tbody>
                     {loading ? (
                         <tr>
-                            <td colSpan={6} className="p-8 text-center text-[13px] font-medium text-[#71717a]">
+                                <td colSpan={5} className="p-8 text-center text-[13px] font-medium text-[#71717a]">
                                 Cargando actividad...
                             </td>
                         </tr>
                     ) : rows.length === 0 ? (
                         <tr>
-                            <td colSpan={6} className="p-8 text-center text-[13px] font-medium text-[#71717a]">
+                            <td colSpan={5} className="p-8 text-center text-[13px] font-medium text-[#71717a]">
                                 No hay actividad con esos filtros.
                             </td>
                         </tr>
                     ) : (
                         rows.map((row) => (
-                            <tr key={row.id} className="border-b border-[#f0f1f2] last:border-0 hover:bg-[#fafafa]">
+                            <ActivityRow key={row.id} row={row} />
+                        ))
+                    )}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
+function ActivityRow({ row }: { row: ActivityEventRow }) {
+    const reason = rejectedReasonText(row);
+
+    return (
+        <tr className="border-b border-[#f0f1f2] last:border-0 hover:bg-[#fafafa]">
                                 <td className="px-4 py-3">
                                     <div className="max-w-[360px]">
                                         <div className="truncate text-[12px] font-semibold text-[#171717]">
@@ -395,9 +450,19 @@ function ActivityTable({ rows, loading }: { rows: ActivityEventRow[]; loading: b
                                 </td>
 
                                 <td className="px-4 py-3">
-                                    <Badge tone={typeTone[row.type]}>
-                                        {typeLabel[row.type]}
-                                    </Badge>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <Badge tone={typeTone[row.type]}>
+                                            {typeLabel[row.type]}
+                                        </Badge>
+                                        {reason ? (
+                                            <span className="max-w-[190px] truncate rounded-md bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-600">
+                                                {reason}
+                                            </span>
+                                        ) : null}
+                                        {row.source === "pending_client" ? (
+                                            <Badge tone="yellow">Actual</Badge>
+                                        ) : null}
+                                    </div>
                                 </td>
 
                                 <td className="px-4 py-3">
@@ -418,24 +483,47 @@ function ActivityTable({ rows, loading }: { rows: ActivityEventRow[]; loading: b
                                     </div>
                                 </td>
 
-                                <td className="px-4 py-3 text-right text-[12px] font-semibold text-[#171717]">
-                                    {money(row.amountResolved)}
-                                </td>
-
                                 <td className="px-4 py-3 text-right">
-                                    <Link
-                                        href={`/admin/leads/${row.clientId}`}
-                                        className="inline-flex items-center justify-center rounded-lg border border-[#e5e7eb] bg-white px-3 py-2 text-[12px] font-semibold text-[#52525b] shadow-sm transition hover:bg-[#f9fafb]"
-                                    >
-                                        Ver cliente
-                                    </Link>
+                                    <div className="flex justify-end gap-2">
+                                        <ActionIconLink href={`/admin/clients/${row.clientId}`} label="Ver cliente">
+                                            Ver
+                                        </ActionIconLink>
+                                        {row.mapsUrl ? (
+                                            <ActionIconLink href={row.mapsUrl} label="Abrir maps" external>
+                                                Map
+                                            </ActionIconLink>
+                                        ) : null}
+                                        <ActionIconLink href={`/admin/leads/${row.clientId}`} label="Editar lead">
+                                            Edit
+                                        </ActionIconLink>
+                                    </div>
                                 </td>
-                            </tr>
-                        ))
-                    )}
-                </tbody>
-            </table>
-        </div>
+        </tr>
+    );
+}
+
+function ActionIconLink({
+    href,
+    label,
+    external,
+    children,
+}: {
+    href: string;
+    label: string;
+    external?: boolean;
+    children: React.ReactNode;
+}) {
+    return (
+        <Link
+            href={href}
+            target={external ? "_blank" : undefined}
+            rel={external ? "noreferrer" : undefined}
+            title={label}
+            aria-label={label}
+            className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg border border-[#e5e7eb] bg-white px-2 text-[11px] font-semibold text-[#52525b] shadow-sm transition hover:bg-[#f9fafb]"
+        >
+            {children}
+        </Link>
     );
 }
 

@@ -5,6 +5,7 @@ import {
     getLeadHistoryPage,
     reopenLeadForReview,
 } from "@/data/leadsRepo";
+import { dayKeyFromDate, addDays } from "@/lib/date";
 import type {
     LeadCityOption,
     LeadHistoryBucket,
@@ -15,11 +16,16 @@ import type {
     MetaLeadDoc,
 } from "@/types/leads";
 
-const EMPTY_FILTERS: LeadHistoryFilters = {
-    bucket: "all",
-    city: "all",
-    search: "",
-};
+function defaultFilters(): LeadHistoryFilters {
+    const today = new Date();
+    return {
+        bucket: "all",
+        city: "all",
+        startKey: dayKeyFromDate(addDays(today, -30)),
+        endKey: dayKeyFromDate(today),
+        search: "",
+    };
+}
 
 const DEFAULT_PAGE_SIZE = 80;
 const FILTERED_PAGE_SIZE = 150;
@@ -68,6 +74,14 @@ function cityLabel(lead: MetaLeadDoc) {
         lead.location.adminStateLabel ||
         "Sin ciudad"
     );
+}
+
+function historyActivityAt(lead: MetaLeadDoc) {
+    return lead.lastInboundMessageAt || lead.verificationStatusChangedAt || lead.updatedAt || lead.createdAt || 0;
+}
+
+function dayKeyFromMs(ms: number) {
+    return dayKeyFromDate(new Date(ms));
 }
 
 function leadMatchesSearch(lead: MetaLeadDoc, queryText: string, queryDigits: string) {
@@ -123,6 +137,10 @@ function filterLeads(leads: MetaLeadDoc[], filters: LeadHistoryFilters) {
             return false;
         }
 
+        const dayKey = dayKeyFromMs(historyActivityAt(lead));
+        if (filters.startKey && dayKey < filters.startKey) return false;
+        if (filters.endKey && dayKey > filters.endKey) return false;
+
         return leadMatchesSearch(lead, queryText, queryDigits);
     });
 }
@@ -133,7 +151,7 @@ function errorMessage(error: unknown, fallback: string) {
 
 export function useAdminLeadHistory() {
     const [leads, setLeads] = useState<MetaLeadDoc[]>([]);
-    const [filters, setFilters] = useState<LeadHistoryFilters>(EMPTY_FILTERS);
+    const [filters, setFilters] = useState<LeadHistoryFilters>(() => defaultFilters());
     const deferredSearch = useDeferredValue(filters.search);
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
@@ -265,7 +283,7 @@ export function useAdminLeadHistory() {
     }
 
     function resetFilters() {
-        setFilters(EMPTY_FILTERS);
+        setFilters(defaultFilters());
     }
 
     return {

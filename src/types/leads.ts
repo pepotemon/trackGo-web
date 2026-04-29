@@ -74,6 +74,8 @@ export type LeadFilters = {
 export type LeadHistoryFilters = {
     bucket: LeadHistoryBucket | "all";
     city: string;
+    startKey: string;
+    endKey: string;
     search: string;
 };
 

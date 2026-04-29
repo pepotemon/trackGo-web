@@ -18,10 +18,10 @@ export type ActivityUserOption = {
 };
 
 export type ActivityEventRow = DailyEventDoc & {
+    source: "daily_event" | "pending_client";
     userName: string;
     userEmail?: string;
     billingMode: UserBillingMode;
-    amountResolved: number;
 };
 
 export type ActivityStats = {

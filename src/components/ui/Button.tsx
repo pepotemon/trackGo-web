@@ -14,19 +14,19 @@ export function Button({
 }: ButtonProps) {
     const variants: Record<ButtonVariant, string> = {
         primary:
-            "bg-black text-white border-black hover:bg-[#27272a] disabled:opacity-60",
+            "bg-[#2563eb] text-white border-[#2563eb] hover:bg-[#1d4ed8] disabled:opacity-50",
         secondary:
-            "bg-white text-[#52525b] border-[#e5e7eb] hover:bg-[#f9fafb] disabled:opacity-60",
+            "bg-white text-[#344054] border-[#e4e7ec] hover:bg-[#f9fafb] hover:text-[#172033] disabled:opacity-50",
         danger:
-            "bg-white text-red-500 border-red-200 hover:bg-red-50 disabled:opacity-60",
+            "bg-white text-[#dc2626] border-[#fecaca] hover:bg-[#fef2f2] disabled:opacity-50",
         ghost:
-            "bg-transparent text-[#71717a] border-transparent hover:bg-[#f4f5f6] disabled:opacity-60",
+            "bg-transparent text-[#667085] border-transparent hover:bg-[#f2f4f7] hover:text-[#172033] disabled:opacity-50",
     };
 
     return (
         <button
             className={[
-                "inline-flex items-center justify-center rounded-lg border px-3 py-2 text-[12px] font-semibold shadow-sm transition",
+                "inline-flex items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-[12px] font-semibold shadow-sm transition",
                 variants[variant],
                 className,
             ].join(" ")}

@@ -1,0 +1,520 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function myUserDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && myUserDoc().data.role == "admin"
+        && myUserDoc().data.active == true;
+    }
+
+    function clientDoc(clientId) {
+      return get(/databases/$(database)/documents/clients/$(clientId));
+    }
+
+    function isAssignedToClient(clientId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/clients/$(clientId))
+        && clientDoc(clientId).data.assignedTo == request.auth.uid;
+    }
+
+    // -------------------------
+    // Generic helpers
+    // -------------------------
+    function validOptionalString(d, field) {
+      return !(field in d) || d[field] == null || d[field] is string;
+    }
+
+    function validOptionalInt(d, field) {
+      return !(field in d) || d[field] == null || d[field] is int;
+    }
+
+    function validOptionalBool(d, field) {
+      return !(field in d) || d[field] is bool;
+    }
+
+    function validOptionalNumber(d, field) {
+      return !(field in d) || d[field] == null || d[field] is number;
+    }
+
+    function validClientStatusValue(s) {
+      return s in ["pending", "visited", "rejected"];
+    }
+
+    function validDailyEventTypeValue(t) {
+      return t in ["visited", "rejected", "pending"];
+    }
+
+    // -------------------------
+    // Helpers: investment groups
+    // -------------------------
+    function validInvestmentGroupStatusValue(v) {
+      return v is string && (
+        v == "active" ||
+        v == "inactive"
+      );
+    }
+
+    function validInvestmentGroupDoc(d) {
+      return d.name is string
+        && d.name.size() > 0
+        && d.defaultAmount is number
+        && d.defaultAmount >= 0
+        && d.userIds is list
+        && d.userIds.size() <= 500
+        && validInvestmentGroupStatusValue(d.status)
+        && d.createdAt is int
+        && d.updatedAt is int;
+    }
+
+    // -------------------------
+    // Helpers: source / parseStatus
+    // -------------------------
+    function validClientSourceValue(v) {
+      return v is string && (
+        v == "manual" ||
+        v == "whatsapp_meta"
+      );
+    }
+
+    function validOptionalClientSource(d) {
+      return !("source" in d) || validClientSourceValue(d.source);
+    }
+
+    function validParseStatusValue(v) {
+      return v is string && (
+        v == "ready" ||
+        v == "partial" ||
+        v == "empty"
+      );
+    }
+
+    function validOptionalParseStatus(d) {
+      return !("parseStatus" in d) || validParseStatusValue(d.parseStatus);
+    }
+
+    // -------------------------
+    // Helpers: rejectedReason / note / rejectedReasonText
+    // -------------------------
+    function validRejectedReasonValue(r) {
+      return r is string && (
+        r == "clavo" ||
+        r == "localizacion" ||
+        r == "zona_riesgosa" ||
+        r == "ingresos_insuficientes" ||
+        r == "muy_endeudado" ||
+        r == "informacion_dudosa" ||
+        r == "no_le_interesa" ||
+        r == "no_estaba_cerrado" ||
+        r == "fuera_de_ruta" ||
+        r == "otro"
+      );
+    }
+
+    function validOptionalNote(d) {
+      return !("note" in d) || d.note == null || d.note is string;
+    }
+
+    function validOptionalRejectedReason(d) {
+      return !("rejectedReason" in d)
+        || d.rejectedReason == null
+        || validRejectedReasonValue(d.rejectedReason);
+    }
+
+    function validOptionalRejectedReasonText(d) {
+      return !("rejectedReasonText" in d)
+        || d.rejectedReasonText == null
+        || d.rejectedReasonText is string;
+    }
+
+    function validLegacyRejectNoteValue(n) {
+      return n is string && (
+        n == "clavo" ||
+        n == "localizacion" ||
+        n == "zona_riesgosa" ||
+        n == "ingresos_insuficientes" ||
+        n == "muy_endeudado" ||
+        n == "informacion_dudosa" ||
+        n == "no_le_interesa" ||
+        n == "no_estaba_cerrado" ||
+        n == "fuera_de_ruta" ||
+        n == "otro"
+      );
+    }
+
+    function hasValidRejectReasonOrLegacy(d) {
+      return (
+        (("rejectedReason" in d) && validRejectedReasonValue(d.rejectedReason))
+        || (("note" in d) && validLegacyRejectNoteValue(d.note))
+        || (!("rejectedReason" in d) && !("note" in d))
+        || (("rejectedReason" in d) && d.rejectedReason == null)
+        || (("note" in d) && d.note == null)
+      );
+    }
+
+    function rejectReasonTextOk(d) {
+      return (
+        !("rejectedReason" in d)
+        || d.rejectedReason == null
+        || d.rejectedReason != "otro"
+        || (
+          ("rejectedReasonText" in d)
+          && d.rejectedReasonText is string
+          && d.rejectedReasonText.size() > 0
+        )
+      );
+    }
+
+    function isCleanOrUnchanged(fieldName) {
+      return (
+        !(fieldName in request.resource.data)
+        || request.resource.data[fieldName] == null
+        || request.resource.data[fieldName] == resource.data[fieldName]
+      );
+    }
+
+    // -------------------------
+    // Helpers: client messages
+    // -------------------------
+    function validMessageDirectionValue(v) {
+      return v is string && (
+        v == "inbound" ||
+        v == "outbound"
+      );
+    }
+
+    function validMessageSenderTypeValue(v) {
+      return v is string && (
+        v == "client" ||
+        v == "bot" ||
+        v == "admin"
+      );
+    }
+
+    function validMessageStatusValue(v) {
+      return v is string && (
+        v == "received" ||
+        v == "sent" ||
+        v == "error"
+      );
+    }
+
+    function validOptionalMessageType(d) {
+      return !("messageType" in d)
+        || d.messageType == null
+        || d.messageType is string;
+    }
+
+    function validOptionalMessageMetaFields(d) {
+      return validOptionalString(d, "source")
+        && validOptionalString(d, "stage")
+        && validOptionalString(d, "profileName")
+        && validOptionalString(d, "mapsUrl")
+        && validOptionalBool(d, "locationCaptured")
+        && validOptionalNumber(d, "lat")
+        && validOptionalNumber(d, "lng");
+    }
+
+    function validClientMessageDoc(d, clientId, messageId) {
+      return d.id is string
+        && d.id == messageId
+        && d.clientId is string
+        && d.clientId == clientId
+        && validMessageDirectionValue(d.direction)
+        && validMessageSenderTypeValue(d.senderType)
+        && d.text is string
+        && d.text.size() > 0
+        && d.createdAt is int
+        && validOptionalString(d, "senderId")
+        && validOptionalMessageType(d)
+        && validOptionalString(d, "whatsappMessageId")
+        && (
+          !("status" in d)
+          || d.status == null
+          || validMessageStatusValue(d.status)
+        )
+        && validOptionalMessageMetaFields(d);
+    }
+
+    // -------------------------
+    // USERS
+    // -------------------------
+    match /users/{uid} {
+      allow read, write: if isAdmin();
+
+      allow read: if isSelf(uid);
+
+      allow create: if isSelf(uid)
+        && request.resource.data.id == request.auth.uid
+        && request.resource.data.role == "user"
+        && request.resource.data.active == true
+        && request.resource.data.createdAt is int
+        && validOptionalString(request.resource.data, "name")
+        && validOptionalString(request.resource.data, "email")
+        && (
+          !("ratePerVisit" in request.resource.data)
+          || request.resource.data.ratePerVisit is number
+        )
+        && (
+          !("expoPushToken" in request.resource.data)
+          || request.resource.data.expoPushToken == null
+          || request.resource.data.expoPushToken is string
+        )
+        && (
+          !("expoPushTokenUpdatedAt" in request.resource.data)
+          || request.resource.data.expoPushTokenUpdatedAt is int
+        )
+        && (
+          !("whatsappPhone" in request.resource.data)
+          || request.resource.data.whatsappPhone == null
+          || request.resource.data.whatsappPhone is string
+        )
+        && (
+          !("primaryGeoCoverageLabel" in request.resource.data)
+          || request.resource.data.primaryGeoCoverageLabel == null
+          || request.resource.data.primaryGeoCoverageLabel is string
+        )
+        && (
+          !("autoAssignEnabled" in request.resource.data)
+          || request.resource.data.autoAssignEnabled is bool
+        )
+        && (
+          !("autoAssignPriority" in request.resource.data)
+          || request.resource.data.autoAssignPriority is number
+        )
+        && (
+          !("autoAssignDailyLimit" in request.resource.data)
+          || request.resource.data.autoAssignDailyLimit == null
+          || request.resource.data.autoAssignDailyLimit is number
+        )
+        && (
+          !("assignmentMode" in request.resource.data)
+          || request.resource.data.assignmentMode == null
+          || request.resource.data.assignmentMode is string
+        );
+
+      allow update: if isSelf(uid)
+        && request.resource.data.diff(resource.data).changedKeys()
+          .hasOnly([
+            "expoPushToken",
+            "expoPushTokenUpdatedAt"
+          ])
+        && (
+          !("expoPushToken" in request.resource.data)
+          || request.resource.data.expoPushToken == null
+          || request.resource.data.expoPushToken is string
+        )
+        && (
+          !("expoPushTokenUpdatedAt" in request.resource.data)
+          || request.resource.data.expoPushTokenUpdatedAt is int
+        );
+
+      allow delete: if false;
+    }
+
+    // -------------------------
+    // CLIENTS
+    // -------------------------
+    match /clients/{clientId} {
+      allow read, write: if isAdmin();
+
+      allow read: if signedIn() && resource.data.assignedTo == request.auth.uid;
+
+      allow update: if signedIn()
+        && resource.data.assignedTo == request.auth.uid
+
+        && request.resource.data.diff(resource.data).changedKeys()
+          .hasOnly([
+            "status",
+            "statusBy",
+            "statusAt",
+            "updatedAt",
+            "rejectedReason",
+            "rejectedReasonText",
+            "note"
+          ])
+
+        && validClientStatusValue(request.resource.data.status)
+        && request.resource.data.updatedAt is int
+
+        && validOptionalNote(request.resource.data)
+        && validOptionalRejectedReason(request.resource.data)
+        && validOptionalRejectedReasonText(request.resource.data)
+
+        && (
+          (request.resource.data.status == "visited"
+            && request.resource.data.statusBy == request.auth.uid
+            && request.resource.data.statusAt is int
+            && isCleanOrUnchanged("rejectedReason")
+            && isCleanOrUnchanged("rejectedReasonText")
+            && isCleanOrUnchanged("note")
+          )
+
+          ||
+
+          (request.resource.data.status == "rejected"
+            && request.resource.data.statusBy == request.auth.uid
+            && request.resource.data.statusAt is int
+            && hasValidRejectReasonOrLegacy(request.resource.data)
+            && rejectReasonTextOk(request.resource.data)
+          )
+
+          ||
+
+          (request.resource.data.status == "pending"
+            && ( !("statusBy" in request.resource.data) || request.resource.data.statusBy == null )
+            && ( !("statusAt" in request.resource.data) || request.resource.data.statusAt == null )
+            && (
+              !("rejectedReason" in request.resource.data)
+              || request.resource.data.rejectedReason == null
+              || request.resource.data.rejectedReason == resource.data.rejectedReason
+            )
+            && (
+              !("rejectedReasonText" in request.resource.data)
+              || request.resource.data.rejectedReasonText == null
+              || request.resource.data.rejectedReasonText == resource.data.rejectedReasonText
+            )
+            && (
+              !("note" in request.resource.data)
+              || request.resource.data.note == null
+              || request.resource.data.note == resource.data.note
+            )
+          )
+        );
+
+      allow create, delete: if false;
+
+      // -------------------------
+      // CLIENT MESSAGES
+      // -------------------------
+      match /messages/{messageId} {
+        allow read: if isAdmin() || isAssignedToClient(clientId);
+
+        allow create, update: if isAdmin()
+          && validClientMessageDoc(request.resource.data, clientId, messageId);
+
+        allow delete: if false;
+      }
+    }
+
+    // -------------------------
+    // DAILY EVENTS
+    // -------------------------
+    match /dailyEvents/{eventId} {
+      allow read, write: if isAdmin();
+
+      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+
+      allow create, update: if signedIn()
+        && request.resource.data.clientId is string
+        && request.resource.data.dayKey is string
+        && eventId == (request.resource.data.dayKey + "_" + request.resource.data.clientId)
+
+        && validDailyEventTypeValue(request.resource.data.type)
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.createdAt is int
+
+        && isAssignedToClient(request.resource.data.clientId)
+
+        && validOptionalNote(request.resource.data)
+        && validOptionalRejectedReason(request.resource.data)
+        && validOptionalRejectedReasonText(request.resource.data)
+
+        && validOptionalNumber(request.resource.data, "rateApplied")
+        && validOptionalNumber(request.resource.data, "amount")
+
+        && validOptionalString(request.resource.data, "phone")
+        && validOptionalString(request.resource.data, "name")
+        && validOptionalString(request.resource.data, "business")
+        && validOptionalString(request.resource.data, "address")
+
+        && (
+          (request.resource.data.type == "rejected"
+            && hasValidRejectReasonOrLegacy(request.resource.data)
+            && rejectReasonTextOk(request.resource.data)
+          )
+
+          ||
+
+          (request.resource.data.type in ["visited", "pending"]
+            && ( !("rejectedReason" in request.resource.data) || request.resource.data.rejectedReason == null )
+            && ( !("rejectedReasonText" in request.resource.data) || request.resource.data.rejectedReasonText == null )
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    // -------------------------
+    // INCOMING LEADS
+    // -------------------------
+    match /incomingLeads/{leadId} {
+      allow read, write: if isAdmin();
+    }
+
+    // -------------------------
+    // WEEKLY INVESTMENTS
+    // -------------------------
+    match /weeklyInvestments/{weekId} {
+      allow read, write: if isAdmin();
+    }
+
+    // -------------------------
+    // INVESTMENT GROUPS
+    // Catalogo persistente de grupos de inversion.
+    // -------------------------
+    match /investmentGroups/{groupId} {
+      allow read: if isAdmin();
+
+      allow create, update: if isAdmin()
+        && validInvestmentGroupDoc(request.resource.data);
+
+      allow delete: if isAdmin();
+    }
+
+    // -------------------------
+    // WEEKLY INVESTMENT GROUP TEMPLATES
+    // Legacy: dejar lectura/escritura admin mientras migramos datos viejos.
+    // -------------------------
+    match /weeklyInvestmentGroupTemplates/{templateId} {
+      allow read, write: if isAdmin();
+    }
+
+    // -------------------------
+    // AUTO ASSIGN LOGS
+    // -------------------------
+    match /autoAssignLogs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // -------------------------
+    // AUTO ASSIGN STATE / POINTERS
+    // Solo backend (Admin SDK) si existe esta coleccion.
+    // -------------------------
+    match /autoAssignState/{docId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------
+    // DEFAULT DENY
+    // -------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

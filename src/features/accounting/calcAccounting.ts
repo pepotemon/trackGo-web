@@ -43,8 +43,7 @@ function getWeekSubscription(user: UserDoc | undefined, weekStartKey: string) {
     }
 
     const week = user.weeklySubscriptionWeeks?.[weekStartKey];
-    const defaultActive = user.weeklySubscriptionActive !== false;
-    const paid = week?.paid ?? defaultActive;
+    const paid = week?.paid === true;
 
     if (!paid) {
         return {
@@ -66,16 +65,16 @@ function getWeekSubscription(user: UserDoc | undefined, weekStartKey: string) {
 }
 
 function getEventAmount(event: DailyEventDoc, user?: UserDoc) {
-    const amount = safeNumber((event as any).amount, NaN);
+    const amount = safeNumber(event.amount, NaN);
     if (Number.isFinite(amount)) return amount;
 
-    const amountSnapshot = safeNumber((event as any).amountSnapshot, NaN);
+    const amountSnapshot = safeNumber(event.amountSnapshot, NaN);
     if (Number.isFinite(amountSnapshot)) return amountSnapshot;
 
-    const rateApplied = safeNumber((event as any).rateApplied, NaN);
+    const rateApplied = safeNumber(event.rateApplied, NaN);
     if (Number.isFinite(rateApplied)) return rateApplied;
 
-    const rateSnapshot = safeNumber((event as any).ratePerVisitSnapshot, NaN);
+    const rateSnapshot = safeNumber(event.ratePerVisitSnapshot, NaN);
     if (Number.isFinite(rateSnapshot)) return rateSnapshot;
 
     return safeNumber(user?.ratePerVisit, 0);
@@ -83,15 +82,22 @@ function getEventAmount(event: DailyEventDoc, user?: UserDoc) {
 
 function buildGroupAllocations(investment: WeeklyInvestmentDoc | null) {
     const out: Record<string, number> = {};
+    const groups = Array.isArray(investment?.groups) ? investment.groups : [];
 
-    for (const [uid, amount] of Object.entries(investment?.allocations ?? {})) {
-        const cleanUid = String(uid || "").trim();
-        if (!cleanUid) continue;
+    if (!groups.length) {
+        for (const [uid, amount] of Object.entries(investment?.allocations ?? {})) {
+            const cleanUid = String(uid || "").trim();
+            if (!cleanUid) continue;
 
-        out[cleanUid] = clamp2((out[cleanUid] ?? 0) + safeNumber(amount, 0));
+            out[cleanUid] = clamp2((out[cleanUid] ?? 0) + safeNumber(amount, 0));
+        }
+
+        return out;
     }
 
-    for (const group of investment?.groups ?? []) {
+    for (const group of groups) {
+        if (group.status === "inactive") continue;
+
         const amount = safeNumber(group.amount, 0);
         const userIds = Array.isArray(group.userIds)
             ? Array.from(
@@ -115,26 +121,27 @@ function buildGroupAllocations(investment: WeeklyInvestmentDoc | null) {
     return out;
 }
 
-function getWeeklyInvestmentTotal(investment: WeeklyInvestmentDoc | null) {
+function getGroupInvestmentTotal(investment: WeeklyInvestmentDoc | null) {
     const groups = Array.isArray(investment?.groups) ? investment.groups : [];
 
-    const groupsTotal = clamp2(
-        groups.reduce((acc, group) => acc + safeNumber(group.amount, 0), 0)
-    );
+    if (groups.length) {
+        return clamp2(
+            groups.reduce(
+                (acc, group) =>
+                    group.status === "inactive"
+                        ? acc
+                        : acc + safeNumber(group.amount, 0),
+                0
+            )
+        );
+    }
 
-    if (groupsTotal > 0) return groupsTotal;
-
-    const allocations = investment?.allocations ?? {};
-    const allocationsTotal = clamp2(
-        Object.values(allocations).reduce(
-            (acc, value) => acc + safeNumber(value, 0),
+    return clamp2(
+        Object.values(investment?.allocations ?? {}).reduce(
+            (acc, amount) => acc + safeNumber(amount, 0),
             0
         )
     );
-
-    if (allocationsTotal > 0) return allocationsTotal;
-
-    return clamp2(investment?.amount ?? 0);
 }
 
 export function buildAccountingSummary(input: {
@@ -150,6 +157,7 @@ export function buildAccountingSummary(input: {
     const rowsMap = new Map<string, AccountingUserRow>();
 
     let grossSubscriptions = 0;
+    let subscriptionInvestment = 0;
     let subscriptionsPaid = 0;
 
     for (const user of input.users) {
@@ -161,6 +169,7 @@ export function buildAccountingSummary(input: {
 
         if (subscription?.paid) {
             grossSubscriptions = clamp2(grossSubscriptions + subscription.gross);
+            subscriptionInvestment = clamp2(subscriptionInvestment + subscription.cost);
             subscriptionsPaid += 1;
         }
 
@@ -215,10 +224,12 @@ export function buildAccountingSummary(input: {
                     ? getWeekSubscription(user, input.startKey)
                     : null;
 
-            const cost =
+            const subscriptionCost =
                 row.billingMode === "weekly_subscription"
                     ? clamp2(subscription?.cost ?? 0)
-                    : clamp2(investmentByUser[row.userId] ?? 0);
+                    : 0;
+            const groupCost = clamp2(investmentByUser[row.userId] ?? 0);
+            const cost = clamp2(subscriptionCost + groupCost);
 
             return {
                 ...row,
@@ -230,7 +241,9 @@ export function buildAccountingSummary(input: {
 
     const gross = clamp2(rows.reduce((acc, row) => acc + row.gross, 0));
 
-    const investment = getWeeklyInvestmentTotal(input.investment);
+    const groupInvestment = getGroupInvestmentTotal(input.investment);
+    const manualAdjustment = clamp2(input.investment?.amount ?? 0);
+    const investment = clamp2(subscriptionInvestment + groupInvestment + manualAdjustment);
     const real = clamp2(gross - investment);
     const roi = investment > 0 ? (real / investment) * 100 : null;
 
@@ -244,6 +257,9 @@ export function buildAccountingSummary(input: {
         grossSubscriptions,
         subscriptionsPaid,
         investment,
+        subscriptionInvestment,
+        groupInvestment,
+        manualAdjustment,
         real,
         roi,
         rows,

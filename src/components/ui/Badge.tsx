@@ -10,17 +10,17 @@ export function Badge({
     tone?: BadgeTone;
 }) {
     const map: Record<BadgeTone, string> = {
-        green: "bg-emerald-50 text-emerald-600",
-        red: "bg-red-50 text-red-500",
-        blue: "bg-blue-50 text-blue-600",
-        gray: "bg-[#f4f5f6] text-[#71717a]",
-        yellow: "bg-yellow-50 text-yellow-700",
-        purple: "bg-violet-50 text-violet-600",
+        green: "bg-[#ecfdf5] text-[#047857]",
+        red: "bg-[#fef2f2] text-[#dc2626]",
+        blue: "bg-[#eff6ff] text-[#2563eb]",
+        gray: "bg-[#f2f4f7] text-[#667085]",
+        yellow: "bg-[#fffbeb] text-[#b45309]",
+        purple: "bg-[#f5f3ff] text-[#7c3aed]",
     };
 
     return (
         <span
-            className={`inline-flex rounded-md px-2 py-1 text-[11px] font-semibold ${map[tone]}`}
+            className={`inline-flex rounded-[4px] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.04em] ${map[tone]}`}
         >
             {children}
         </span>
