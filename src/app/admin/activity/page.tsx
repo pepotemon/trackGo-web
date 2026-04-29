@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     listActivityEventsPage,
@@ -17,7 +16,7 @@ import type {
     ActivityUserOption,
 } from "@/types/activity";
 import type { DailyEventDoc, UserDoc } from "@/types/accounting";
-import { Badge, Button, Card, Field, Input, PageHeader, StatCard } from "@/components/ui";
+import { ActionTile, AppIcon, Badge, Button, Card, Field, Input, KpiCard, Modal, PageHeader } from "@/components/ui";
 
 const PAGE_SIZE = 120;
 
@@ -126,6 +125,7 @@ export default function ActivityPage() {
     const [events, setEvents] = useState<DailyEventDoc[]>([]);
     const [cursor, setCursor] = useState<ActivityCursor>(null);
     const [hasMore, setHasMore] = useState(false);
+    const [quickRow, setQuickRow] = useState<ActivityEventRow | null>(null);
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
     const [err, setErr] = useState<string | null>(null);
@@ -277,13 +277,22 @@ export default function ActivityPage() {
         <div className="mx-auto w-full max-w-[1220px]">
             <PageHeader
                 title="Actividad"
+                subtitle="Auditoria de visitas, rechazos y pendientes del equipo."
+                icon={<AppIcon name="activity" tone="purple" size="sm" className="bg-transparent text-white ring-0" />}
                 actions={
                     <>
                         {activeFiltersCount > 0 ? (
                             <Button onClick={resetFilters}>Limpiar</Button>
                         ) : null}
-                        <Button onClick={() => void loadInitial(filters)} disabled={loading}>
-                            {loading ? "Cargando..." : "Actualizar"}
+                        <Button
+                            variant="primary"
+                            onClick={() => void loadInitial(filters)}
+                            disabled={loading}
+                            aria-label="Actualizar actividad"
+                            title="Actualizar actividad"
+                            className="h-10 w-10 px-0 py-0"
+                        >
+                            <AppIcon name="refresh" tone="purple" size="sm" className="bg-transparent text-white ring-0" />
                         </Button>
                     </>
                 }
@@ -296,15 +305,15 @@ export default function ActivityPage() {
             ) : null}
 
             <section className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-                <StatCard label="Eventos" value={stats.total} caption="Visibles en la vista" />
-                <StatCard label="Visitados" value={stats.visited} caption="Clientes trabajados" />
-                <StatCard label="Rechazados" value={stats.rejected} caption="No concretados" />
-                <StatCard label="Pendientes" value={stats.pending} caption="Sin cierre" />
-                <StatCard label="Usuarios" value={stats.users} caption="Con actividad" />
+                <KpiCard label="Eventos" value={stats.total} caption="Visibles en la vista" icon="activity" tone="purple" />
+                <KpiCard label="Visitados" value={stats.visited} caption="Clientes trabajados" icon="check" tone="green" />
+                <KpiCard label="Rechazados" value={stats.rejected} caption="No concretados" icon="close" tone="red" />
+                <KpiCard label="Pendientes" value={stats.pending} caption="Sin cierre" icon="alert" tone="orange" />
+                <KpiCard label="Usuarios" value={stats.users} caption="Con actividad" icon="users" tone="blue" />
             </section>
 
             <Card className="overflow-hidden">
-                <div className="flex flex-col gap-4 px-4 py-4">
+                <div className="flex flex-col gap-3 bg-gradient-to-b from-white to-[#fbfaff] px-4 py-4">
                     <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                         <div>
                             <h2 className="text-[14px] font-semibold text-[#171717]">
@@ -323,7 +332,7 @@ export default function ActivityPage() {
                         />
                     </div>
 
-                    <div className="grid gap-2 md:grid-cols-5">
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1.25fr_1fr_150px]">
                         <Field label="Desde">
                             <Input
                                 type="date"
@@ -378,68 +387,150 @@ export default function ActivityPage() {
                     </div>
                 </div>
 
-                <ActivityTable rows={filteredRows} loading={loading} />
+                <ActivityTable rows={filteredRows} loading={loading} onQuickActions={setQuickRow} />
 
-                <div className="flex items-center justify-between gap-3 border-t border-[#f0f1f2] px-4 py-3">
+                <div className="flex flex-col gap-3 border-t border-[#f0f1f2] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-[12px] font-medium text-[#9ca3af]">
                         Consulta paginada en bloques de {PAGE_SIZE}
                     </p>
                     {hasMore ? (
-                        <Button onClick={loadMore} disabled={loadingMore}>
+                        <Button onClick={loadMore} disabled={loadingMore} className="w-full sm:w-auto">
                             {loadingMore ? "Cargando..." : "Cargar mas"}
                         </Button>
                     ) : null}
                 </div>
             </Card>
+
+            <ActivityQuickActionsModal
+                row={quickRow}
+                onClose={() => setQuickRow(null)}
+            />
         </div>
     );
 }
 
-function ActivityTable({ rows, loading }: { rows: ActivityEventRow[]; loading: boolean }) {
+function ActivityTable({
+    rows,
+    loading,
+    onQuickActions,
+}: {
+    rows: ActivityEventRow[];
+    loading: boolean;
+    onQuickActions: (row: ActivityEventRow) => void;
+}) {
     return (
-        <div className="overflow-x-auto border-t border-[#f0f1f2]">
-            <table className="w-full min-w-[1120px] border-collapse">
+        <div className="border-t border-[#f0f1f2]">
+            <div className="divide-y divide-[#f0f1f2] lg:hidden">
+                {loading ? (
+                    <ActivityTableState icon="refresh" title="Cargando actividad" body="Estamos consultando eventos y pendientes." />
+                ) : rows.length === 0 ? (
+                    <ActivityTableState icon="filter" title="Sin resultados" body="No hay actividad con esos filtros." />
+                ) : (
+                    rows.map((row) => (
+                        <ActivityMobileCard key={row.id} row={row} onQuickActions={onQuickActions} />
+                    ))
+                )}
+            </div>
+
+            <div className="hidden overflow-x-auto lg:block">
+            <table className="w-full min-w-[900px] border-collapse">
                 <thead>
-                    <tr className="border-b border-[#f0f1f2] text-left text-[11px] font-medium text-[#9ca3af]">
-                        <th className="px-4 py-3">Cliente</th>
-                        <th className="px-4 py-3">Estado</th>
-                        <th className="px-4 py-3">Usuario</th>
-                        <th className="px-4 py-3">Dia</th>
-                        <th className="px-4 py-3 text-right">Accion</th>
+                    <tr className="border-b border-[#f0f1f2] bg-[#fcfcff] text-left text-[10px] font-bold uppercase tracking-[0.06em] text-[#8a93ad]">
+                        <th className="px-3 py-2.5">Cliente</th>
+                        <th className="px-3 py-2.5">Estado</th>
+                        <th className="px-3 py-2.5">Usuario</th>
+                        <th className="px-3 py-2.5">Dia</th>
                     </tr>
                 </thead>
 
                 <tbody>
                     {loading ? (
                         <tr>
-                                <td colSpan={5} className="p-8 text-center text-[13px] font-medium text-[#71717a]">
-                                Cargando actividad...
+                            <td colSpan={4}>
+                                <ActivityTableState icon="refresh" title="Cargando actividad" body="Estamos consultando eventos y pendientes." />
                             </td>
                         </tr>
                     ) : rows.length === 0 ? (
                         <tr>
-                            <td colSpan={5} className="p-8 text-center text-[13px] font-medium text-[#71717a]">
-                                No hay actividad con esos filtros.
+                            <td colSpan={4}>
+                                <ActivityTableState icon="filter" title="Sin resultados" body="No hay actividad con esos filtros." />
                             </td>
                         </tr>
                     ) : (
                         rows.map((row) => (
-                            <ActivityRow key={row.id} row={row} />
+                            <ActivityRow key={row.id} row={row} onQuickActions={onQuickActions} />
                         ))
                     )}
                 </tbody>
             </table>
+            </div>
         </div>
     );
 }
 
-function ActivityRow({ row }: { row: ActivityEventRow }) {
+function ActivityMobileCard({
+    row,
+    onQuickActions,
+}: {
+    row: ActivityEventRow;
+    onQuickActions: (row: ActivityEventRow) => void;
+}) {
     const reason = rejectedReasonText(row);
 
     return (
-        <tr className="border-b border-[#f0f1f2] last:border-0 hover:bg-[#fafafa]">
-                                <td className="px-4 py-3">
-                                    <div className="max-w-[360px]">
+        <button
+            type="button"
+            onClick={() => onQuickActions(row)}
+            className="block w-full px-4 py-3 text-left transition hover:bg-[#f8f7ff]"
+        >
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <div className="truncate text-[13px] font-bold text-[#101936]">
+                        {eventTitle(row)}
+                    </div>
+                    <div className="mt-1 truncate text-[11px] font-medium text-[#8a93ad]">
+                        {eventSubtitle(row)}
+                    </div>
+                </div>
+                <Badge tone={typeTone[row.type]}>
+                    {typeLabel[row.type]}
+                </Badge>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+                {reason ? (
+                    <span className="max-w-full truncate rounded-md bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-600">
+                        {reason}
+                    </span>
+                ) : null}
+                {row.source === "pending_client" ? <Badge tone="yellow">Actual</Badge> : null}
+                <span className="truncate text-[11px] font-semibold text-[#66739a]">
+                    {row.userName}
+                </span>
+                <span className="text-[11px] font-medium text-[#9ca3af]">
+                    {formatDate(row.createdAt)}
+                </span>
+            </div>
+        </button>
+    );
+}
+
+function ActivityRow({
+    row,
+    onQuickActions,
+}: {
+    row: ActivityEventRow;
+    onQuickActions: (row: ActivityEventRow) => void;
+}) {
+    const reason = rejectedReasonText(row);
+
+    return (
+        <tr
+            onClick={() => onQuickActions(row)}
+            className="cursor-pointer border-b border-[#f0f1f2] last:border-0 hover:bg-[#f8f7ff]"
+        >
+            <td className="px-3 py-2.5">
+                                    <div className="max-w-[340px]">
                                         <div className="truncate text-[12px] font-semibold text-[#171717]">
                                             {eventTitle(row)}
                                         </div>
@@ -449,7 +540,7 @@ function ActivityRow({ row }: { row: ActivityEventRow }) {
                                     </div>
                                 </td>
 
-                                <td className="px-4 py-3">
+            <td className="px-3 py-2.5">
                                     <div className="flex flex-wrap items-center gap-2">
                                         <Badge tone={typeTone[row.type]}>
                                             {typeLabel[row.type]}
@@ -465,7 +556,7 @@ function ActivityRow({ row }: { row: ActivityEventRow }) {
                                     </div>
                                 </td>
 
-                                <td className="px-4 py-3">
+            <td className="px-3 py-2.5">
                                     <div className="max-w-[220px]">
                                         <div className="truncate text-[12px] font-semibold text-[#52525b]">
                                             {row.userName}
@@ -476,54 +567,59 @@ function ActivityRow({ row }: { row: ActivityEventRow }) {
                                     </div>
                                 </td>
 
-                                <td className="px-4 py-3">
+            <td className="px-3 py-2.5">
                                     <div className="text-[12px] font-semibold text-[#52525b]">{row.dayKey}</div>
                                     <div className="mt-0.5 text-[11px] font-medium text-[#9ca3af]">
                                         {formatDate(row.createdAt)}
                                     </div>
                                 </td>
 
-                                <td className="px-4 py-3 text-right">
-                                    <div className="flex justify-end gap-2">
-                                        <ActionIconLink href={`/admin/clients/${row.clientId}`} label="Ver cliente">
-                                            Ver
-                                        </ActionIconLink>
-                                        {row.mapsUrl ? (
-                                            <ActionIconLink href={row.mapsUrl} label="Abrir maps" external>
-                                                Map
-                                            </ActionIconLink>
-                                        ) : null}
-                                        <ActionIconLink href={`/admin/leads/${row.clientId}`} label="Editar lead">
-                                            Edit
-                                        </ActionIconLink>
-                                    </div>
-                                </td>
         </tr>
     );
 }
 
-function ActionIconLink({
-    href,
-    label,
-    external,
-    children,
+function ActivityTableState({
+    icon,
+    title,
+    body,
 }: {
-    href: string;
-    label: string;
-    external?: boolean;
-    children: React.ReactNode;
+    icon: "filter" | "refresh";
+    title: string;
+    body: string;
 }) {
     return (
-        <Link
-            href={href}
-            target={external ? "_blank" : undefined}
-            rel={external ? "noreferrer" : undefined}
-            title={label}
-            aria-label={label}
-            className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg border border-[#e5e7eb] bg-white px-2 text-[11px] font-semibold text-[#52525b] shadow-sm transition hover:bg-[#f9fafb]"
+        <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
+            <AppIcon name={icon} tone={icon === "refresh" ? "purple" : "slate"} size="lg" />
+            <div className="mt-3 text-[13px] font-bold text-[#101936]">{title}</div>
+            <div className="mt-1 text-[12px] font-medium text-[#66739a]">{body}</div>
+        </div>
+    );
+}
+
+function ActivityQuickActionsModal({
+    row,
+    onClose,
+}: {
+    row: ActivityEventRow | null;
+    onClose: () => void;
+}) {
+    if (!row) return null;
+
+    return (
+        <Modal
+            open={!!row}
+            onClose={onClose}
+            title={eventTitle(row)}
+            subtitle={eventSubtitle(row)}
         >
-            {children}
-        </Link>
+            <div className="grid gap-3 sm:grid-cols-3">
+                <ActionTile href={`/admin/clients/${row.clientId}`} label="Ver cliente" icon="users" tone="blue" />
+                {row.mapsUrl ? (
+                    <ActionTile href={row.mapsUrl} label="Abrir Maps" icon="map" tone="green" external />
+                ) : null}
+                <ActionTile href={`/admin/leads/${row.clientId}`} label="Editar lead" icon="edit" tone="orange" />
+            </div>
+        </Modal>
     );
 }
 

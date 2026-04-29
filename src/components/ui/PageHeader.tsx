@@ -2,27 +2,38 @@ import type { ReactNode } from "react";
 
 export function PageHeader({
     title,
+    subtitle,
+    icon,
     tabs,
     actions,
 }: {
     title: string;
+    subtitle?: string;
+    icon?: ReactNode;
     tabs?: ReactNode;
     actions?: ReactNode;
 }) {
     return (
-        <header className="mb-4 flex flex-col gap-4 border-b border-[#e4e7ec] bg-[#f6f8fb] pb-4 pt-1 lg:flex-row lg:items-start lg:justify-between">
+        <header className="mb-5 flex flex-col gap-4 rounded-2xl border border-[#e8e7fb] bg-white/85 px-4 py-4 shadow-[0_18px_45px_rgba(36,30,86,0.08)] backdrop-blur-xl lg:flex-row lg:items-start lg:justify-between">
             <div>
-                <div className="flex items-center gap-2">
-                    <div className="flex h-6 w-6 items-center justify-center rounded-[5px] bg-[#2563eb] text-[11px] font-bold text-white">
-                        T
+                <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#7c3aed] via-[#5b21ff] to-[#2563eb] text-white shadow-[0_12px_30px_rgba(91,33,255,0.28)]">
+                        {icon ?? <span className="text-[15px] font-bold">T</span>}
                     </div>
-                    <h1 className="text-[20px] font-semibold tracking-[-0.02em] text-[#172033]">
-                        {title}
-                    </h1>
+                    <div>
+                        <h1 className="text-[24px] font-bold tracking-[-0.035em] text-[#101936]">
+                            {title}
+                        </h1>
+                        {subtitle ? (
+                            <p className="mt-1 text-[13px] font-medium text-[#66739a]">
+                                {subtitle}
+                            </p>
+                        ) : null}
+                    </div>
                 </div>
 
                 {tabs ? (
-                    <div className="mt-5 inline-flex flex-wrap items-center gap-1 rounded-lg border border-[#e4e7ec] bg-white p-1 shadow-sm">
+                    <div className="mt-5 inline-flex flex-wrap items-center gap-1 rounded-xl border border-[#e4e7ec] bg-[#f8f7ff] p-1 shadow-sm">
                         {tabs}
                     </div>
                 ) : null}
@@ -50,8 +61,8 @@ export function PageTab({
             onClick={onClick}
             className={
                 active
-                    ? "rounded-md bg-[#eff6ff] px-3 py-1.5 text-[12px] font-semibold text-[#2563eb] shadow-sm"
-                    : "rounded-md px-3 py-1.5 text-[12px] font-semibold text-[#667085] transition hover:bg-[#f2f4f7] hover:text-[#172033]"
+                    ? "rounded-lg bg-white px-3 py-1.5 text-[12px] font-semibold text-[#5b21ff] shadow-sm"
+                    : "rounded-lg px-3 py-1.5 text-[12px] font-semibold text-[#66739a] transition hover:bg-white/70 hover:text-[#101936]"
             }
         >
             {children}

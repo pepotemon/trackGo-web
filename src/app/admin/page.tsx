@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getAdminDashboardSnapshot } from "@/data/adminDashboardRepo";
 import type { AdminDashboardRange, AdminDashboardSnapshot } from "@/types/dashboard";
 import type { AutoAssignLogDoc, LeadAutoAssignMatchType, MetaLeadDoc } from "@/types/leads";
-import { Badge, Button, Card, PageHeader, StatCard } from "@/components/ui";
+import { AppIcon, Badge, Button, Card, KpiCard, PageHeader } from "@/components/ui";
 
 const EMPTY_SNAPSHOT: AdminDashboardSnapshot = {
     stats: {
@@ -174,13 +174,22 @@ export default function AdminDashboardPage() {
         <div className="mx-auto w-full max-w-[1220px]">
             <PageHeader
                 title="Dashboard"
+                subtitle="Pulso operativo de leads, asignaciones y cobertura."
+                icon={<AppIcon name="activity" tone="purple" size="sm" className="bg-transparent text-white ring-0" />}
                 actions={
                     <>
-                        <QuickLink href="/admin/leads">Leads</QuickLink>
-                        <QuickLink href="/admin/leads/assignments">Asignaciones</QuickLink>
-                        <QuickLink href="/admin/settings/users">Usuarios</QuickLink>
-                        <Button variant="primary" onClick={() => loadDashboard()} disabled={loading}>
-                            {loading ? "Cargando..." : "Actualizar"}
+                        <QuickLink href="/admin/leads" icon="lead">Leads</QuickLink>
+                        <QuickLink href="/admin/leads/assignments" icon="assign">Asignaciones</QuickLink>
+                        <QuickLink href="/admin/settings/users" icon="users">Usuarios</QuickLink>
+                        <Button
+                            variant="primary"
+                            onClick={() => loadDashboard()}
+                            disabled={loading}
+                            aria-label="Actualizar dashboard"
+                            title="Actualizar dashboard"
+                            className="h-10 w-10 px-0 py-0"
+                        >
+                            <AppIcon name="refresh" tone="purple" size="sm" className="bg-transparent text-white ring-0" />
                         </Button>
                     </>
                 }
@@ -193,10 +202,10 @@ export default function AdminDashboardPage() {
             ) : null}
 
             <section className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <StatCard label="Cola activa" value={snapshot.stats.queueTotal} caption="Leads Meta sin asignar" />
-                <StatCard label="Por revisar" value={snapshot.stats.pendingReview} caption="Listos para validar" />
-                <StatCard label="Asignaciones hoy" value={snapshot.stats.autoAssignmentsToday} caption="Auto-asignacion" />
-                <StatCard label="Usuarios activos" value={snapshot.stats.activeUsers} caption={`${snapshot.stats.autoAssignUsers} con auto ON`} />
+                <KpiCard label="Cola activa" value={snapshot.stats.queueTotal} caption="Leads Meta sin asignar" icon="users" tone="blue" />
+                <KpiCard label="Por revisar" value={snapshot.stats.pendingReview} caption="Listos para validar" icon="lead" tone="purple" />
+                <KpiCard label="Asignaciones hoy" value={snapshot.stats.autoAssignmentsToday} caption="Auto-asignacion" icon="assign" tone="green" />
+                <KpiCard label="Usuarios activos" value={snapshot.stats.activeUsers} caption={`${snapshot.stats.autoAssignUsers} con auto ON`} icon="check" tone="orange" />
             </section>
 
             <section className="mb-4 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
@@ -296,12 +305,21 @@ export default function AdminDashboardPage() {
     );
 }
 
-function QuickLink({ href, children }: { href: string; children: React.ReactNode }) {
+function QuickLink({
+    href,
+    icon,
+    children,
+}: {
+    href: string;
+    icon: "lead" | "assign" | "users";
+    children: React.ReactNode;
+}) {
     return (
         <Link
             href={href}
-            className="inline-flex items-center justify-center rounded-lg border border-[#e5e7eb] bg-white px-3 py-2 text-[12px] font-semibold text-[#52525b] shadow-sm transition hover:bg-[#f9fafb]"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#e4e7ec] bg-white px-3 py-2 text-[12px] font-semibold text-[#344054] shadow-sm transition hover:border-[#c4b5fd] hover:bg-[#f8f7ff] hover:text-[#4f46e5]"
         >
+            <AppIcon name={icon} tone={icon === "assign" ? "green" : icon === "users" ? "blue" : "purple"} size="sm" className="h-5 w-5 rounded-lg" />
             {children}
         </Link>
     );

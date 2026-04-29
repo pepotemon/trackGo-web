@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useState, type ButtonHTMLAttributes } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
     listClientDailyEvents,
     updateClientOperationalStatus,
@@ -15,7 +15,7 @@ import { money } from "@/lib/date";
 import type { DailyEventDoc } from "@/types/accounting";
 import type { LeadMessageDoc, MetaLeadDoc } from "@/types/leads";
 import type { UserDoc } from "@/types/users";
-import { Badge, Button, Card, Field, Input, Modal, PageHeader, StatCard } from "@/components/ui";
+import { Badge, Card, Field, IconButton, Input, Modal, PageHeader, StatCard } from "@/components/ui";
 
 type IconName = "activity" | "chat" | "check" | "map" | "pause" | "x";
 type ConfirmStatus = "pending" | "visited" | null;
@@ -113,31 +113,6 @@ function Icon({ name }: { name: IconName }) {
             {name === "pause" ? <path {...common} d="M8 5v14M16 5v14" /> : null}
             {name === "x" ? <path {...common} d="M18 6 6 18M6 6l12 12" /> : null}
         </svg>
-    );
-}
-
-function IconButton({
-    icon,
-    label,
-    variant = "secondary",
-    className = "",
-    ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
-    icon: IconName;
-    label: string;
-    variant?: "primary" | "secondary" | "danger" | "ghost";
-}) {
-    return (
-        <Button
-            type="button"
-            variant={variant}
-            aria-label={label}
-            title={label}
-            className={`h-9 w-9 px-0 py-0 ${className}`}
-            {...props}
-        >
-            <Icon name={icon} />
-        </Button>
     );
 }
 
@@ -303,7 +278,7 @@ export default function ClientDetailPage() {
                             disabled={!client || savingStatus || status === "pending"}
                         />
                         <IconButton
-                            icon="x"
+                            icon="close"
                             label="Rechazar"
                             onClick={() => setRejectOpen(true)}
                             disabled={!client || savingStatus || status === "rejected"}
@@ -506,7 +481,7 @@ export default function ClientDetailPage() {
 
                     <div className="flex justify-end gap-2 border-t border-[#eef1f5] pt-4">
                         <IconButton
-                            icon="x"
+                            icon="close"
                             label="Cancelar"
                             onClick={() => setRejectOpen(false)}
                             disabled={savingStatus}
@@ -541,7 +516,7 @@ export default function ClientDetailPage() {
 
                     <div className="flex justify-end gap-2 border-t border-[#eef1f5] pt-4">
                         <IconButton
-                            icon="x"
+                            icon="close"
                             label="Cancelar"
                             onClick={() => setConfirmStatus(null)}
                             disabled={savingStatus}

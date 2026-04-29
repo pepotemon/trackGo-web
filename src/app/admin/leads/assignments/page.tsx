@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useAutoAssignLogs } from "@/features/leads/useAutoAssignLogs";
+import { LeadSectionNav } from "@/features/leads/LeadSectionNav";
 import type {
     AutoAssignLogDoc,
     AutoAssignLogFilters,
     LeadAutoAssignMatchType,
 } from "@/types/leads";
-import { Badge, Button, Card, Field, Input, PageHeader, StatCard } from "@/components/ui";
+import { ActionTile, AppIcon, Badge, Button, Card, Field, Input, KpiCard, Modal, PageHeader } from "@/components/ui";
 
 const MATCH_OPTIONS: { value: LeadAutoAssignMatchType; label: string }[] = [
     { value: "city", label: "Ciudad" },
@@ -74,6 +75,7 @@ function leadGeo(log: AutoAssignLogDoc) {
 }
 
 export default function AutoAssignLogsPage() {
+    const [quickLog, setQuickLog] = useState<AutoAssignLogDoc | null>(null);
     const {
         users,
         filters,
@@ -105,6 +107,8 @@ export default function AutoAssignLogsPage() {
         <div className="mx-auto w-full max-w-[1220px]">
             <PageHeader
                 title="Asignaciones"
+                subtitle="Auditoria de auto-asignacion y distribucion de trabajo."
+                icon={<AppIcon name="assign" tone="green" size="sm" className="bg-transparent text-white ring-0" />}
                 actions={
                     <>
                         <Link
@@ -116,8 +120,15 @@ export default function AutoAssignLogsPage() {
                         {activeFiltersCount > 0 ? (
                             <Button onClick={resetFilters}>Limpiar filtros</Button>
                         ) : null}
-                        <Button variant="primary" onClick={reloadLogs} disabled={loading}>
-                            {loading ? "Cargando..." : "Actualizar"}
+                        <Button
+                            variant="primary"
+                            onClick={reloadLogs}
+                            disabled={loading}
+                            aria-label="Actualizar asignaciones"
+                            title="Actualizar asignaciones"
+                            className="h-10 w-10 px-0 py-0"
+                        >
+                            <AppIcon name="refresh" tone="purple" size="sm" className="bg-transparent text-white ring-0" />
                         </Button>
                     </>
                 }
@@ -129,11 +140,13 @@ export default function AutoAssignLogsPage() {
                 </div>
             ) : null}
 
+            <LeadSectionNav />
+
             <section className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <StatCard label="Asignaciones" value={stats.total} caption="Logs cargados" />
-                <StatCard label="Usuarios" value={stats.users} caption="Recibieron leads" />
-                <StatCard label="Ciudad / Hub" value={stats.city + stats.hubCity} caption="Matches precisos" />
-                <StatCard label="Estado / Pais" value={stats.state + stats.country} caption="Matches amplios" />
+                <KpiCard label="Asignaciones" value={stats.total} caption="Logs cargados" icon="assign" tone="green" />
+                <KpiCard label="Usuarios" value={stats.users} caption="Recibieron leads" icon="users" tone="blue" />
+                <KpiCard label="Ciudad / Hub" value={stats.city + stats.hubCity} caption="Matches precisos" icon="map" tone="purple" />
+                <KpiCard label="Estado / Pais" value={stats.state + stats.country} caption="Matches amplios" icon="filter" tone="orange" />
             </section>
 
             <Card className="overflow-hidden">
@@ -201,7 +214,7 @@ export default function AutoAssignLogsPage() {
                     </div>
                 </div>
 
-                <AssignmentsTable logs={filteredLogs} loading={loading} />
+                <AssignmentsTable logs={filteredLogs} loading={loading} onQuickActions={setQuickLog} />
 
                 <div className="flex items-center justify-between gap-3 border-t border-[#f0f1f2] px-4 py-3">
                     <p className="text-[12px] font-medium text-[#9ca3af]">
@@ -214,6 +227,11 @@ export default function AutoAssignLogsPage() {
                     ) : null}
                 </div>
             </Card>
+
+            <AssignmentQuickActionsModal
+                log={quickLog}
+                onClose={() => setQuickLog(null)}
+            />
         </div>
     );
 }
@@ -221,9 +239,11 @@ export default function AutoAssignLogsPage() {
 function AssignmentsTable({
     logs,
     loading,
+    onQuickActions,
 }: {
     logs: AutoAssignLogDoc[];
     loading: boolean;
+    onQuickActions: (log: AutoAssignLogDoc) => void;
 }) {
     return (
         <div className="overflow-x-auto border-t border-[#f0f1f2]">
@@ -235,7 +255,6 @@ function AssignmentsTable({
                         <th className="px-4 py-3">Ciudad</th>
                         <th className="px-4 py-3">Match</th>
                         <th className="px-4 py-3">Cobertura usada</th>
-                        <th className="px-4 py-3">Chat</th>
                         <th className="px-4 py-3 text-right">Fecha</th>
                     </tr>
                 </thead>
@@ -243,18 +262,18 @@ function AssignmentsTable({
                 <tbody>
                     {loading ? (
                         <tr>
-                            <td colSpan={7} className="p-8 text-center text-[13px] font-medium text-[#71717a]">
+                            <td colSpan={6} className="p-8 text-center text-[13px] font-medium text-[#71717a]">
                                 Cargando asignaciones...
                             </td>
                         </tr>
                     ) : logs.length === 0 ? (
                         <tr>
-                            <td colSpan={7} className="p-8 text-center text-[13px] font-medium text-[#71717a]">
+                            <td colSpan={6} className="p-8 text-center text-[13px] font-medium text-[#71717a]">
                                 No hay asignaciones con esos filtros.
                             </td>
                         </tr>
                     ) : (
-                        logs.map((log) => <AssignmentRow key={log.id} log={log} />)
+                        logs.map((log) => <AssignmentRow key={log.id} log={log} onQuickActions={onQuickActions} />)
                     )}
                 </tbody>
             </table>
@@ -262,11 +281,20 @@ function AssignmentsTable({
     );
 }
 
-function AssignmentRow({ log }: { log: AutoAssignLogDoc }) {
+function AssignmentRow({
+    log,
+    onQuickActions,
+}: {
+    log: AutoAssignLogDoc;
+    onQuickActions: (log: AutoAssignLogDoc) => void;
+}) {
     const matchType = safeMatchType(log.matchType);
 
     return (
-        <tr className="border-b border-[#f0f1f2] last:border-0 hover:bg-[#fafafa]">
+        <tr
+            onClick={() => onQuickActions(log)}
+            className="cursor-pointer border-b border-[#f0f1f2] last:border-0 hover:bg-[#f8f7ff]"
+        >
             <td className="px-4 py-3">
                 <div className="min-w-0">
                     <div className="truncate text-[12px] font-semibold text-[#171717]">
@@ -318,22 +346,39 @@ function AssignmentRow({ log }: { log: AutoAssignLogDoc }) {
                 ) : null}
             </td>
 
-            <td className="px-4 py-3">
-                {log.leadId ? (
-                    <Link
-                        href={`/admin/leads/${log.leadId}`}
-                        className="inline-flex h-8 items-center rounded-lg border border-[#e5e7eb] bg-white px-3 text-[12px] font-semibold text-[#52525b] shadow-sm transition hover:bg-[#f9fafb]"
-                    >
-                        Ver chat
-                    </Link>
-                ) : (
-                    <Badge tone="gray">Sin lead</Badge>
-                )}
-            </td>
-
             <td className="px-4 py-3 text-right text-[12px] font-semibold text-[#71717a]">
                 {formatDate(log.createdAt)}
             </td>
         </tr>
+    );
+}
+
+function AssignmentQuickActionsModal({
+    log,
+    onClose,
+}: {
+    log: AutoAssignLogDoc | null;
+    onClose: () => void;
+}) {
+    if (!log) return null;
+
+    return (
+        <Modal
+            open={!!log}
+            onClose={onClose}
+            title={leadTitle(log)}
+            subtitle={leadGeo(log)}
+        >
+            {log.leadId ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                    <ActionTile href={`/admin/leads/${log.leadId}`} icon="chat" label="Chat" tone="purple" />
+                    <ActionTile href={`/admin/leads/${log.leadId}`} icon="edit" label="Editar lead" tone="orange" />
+                </div>
+            ) : (
+                <div className="rounded-2xl border border-dashed border-[#d0d5dd] bg-[#f9fafb] px-4 py-6 text-center text-[12px] font-semibold text-[#667085]">
+                    Esta asignacion no tiene lead asociado.
+                </div>
+            )}
+        </Modal>
     );
 }

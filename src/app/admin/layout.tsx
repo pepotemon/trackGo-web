@@ -61,35 +61,35 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     }
 
     return (
-        <div className="min-h-screen bg-[#f6f8fb] text-[#172033]">
-            <aside className="fixed left-0 top-0 hidden h-screen w-[228px] border-r border-[#e4e7ec] bg-white px-3 py-4 xl:block">
-                <div className="mb-5 flex items-center gap-2 border-b border-[#eef1f5] px-2 pb-4">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#2563eb] text-[12px] font-bold text-white shadow-sm">
+        <div className="min-h-screen bg-[#f7f8ff] text-[#101936]">
+            <aside className="fixed left-0 top-0 hidden h-screen w-[244px] border-r border-[#c8c0ff] bg-[linear-gradient(180deg,#eee8ff_0%,#ddd5ff_46%,#f2f0ff_100%)] px-3 py-4 text-[#172033] shadow-[18px_0_55px_rgba(82,63,169,0.15)] xl:block">
+                <div className="mb-5 flex items-center gap-2 border-b border-[#c8c0ff] px-2 pb-4">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#8b5cf6] to-[#5b21ff] text-[13px] font-bold text-white shadow-lg shadow-violet-200/70">
                         T
                     </div>
 
                     <div className="min-w-0">
-                        <p className="truncate text-[14px] font-semibold leading-none text-[#172033]">
+                        <p className="truncate text-[17px] font-bold leading-none text-[#101936]">
                             TrackGo
                         </p>
-                        <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#98a2b3]">
+                        <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#7c70ba]">
                             Admin OS
                         </p>
                     </div>
                 </div>
 
                 <div className="mb-4">
-                    <div className="flex h-8 items-center gap-2 rounded-lg border border-[#e4e7ec] bg-[#f9fafb] px-2 text-[#667085] shadow-sm">
+                    <div className="flex h-9 items-center gap-2 rounded-xl border border-[#c8c0ff] bg-white/62 px-2 text-[#5b4ea6] shadow-sm shadow-violet-200/70">
                         <span className="text-[12px]">/</span>
                         <span className="text-[12px] font-medium">Buscar</span>
-                        <span className="ml-auto rounded border border-[#e4e7ec] bg-white px-1.5 py-0.5 text-[10px] text-[#98a2b3]">
+                        <span className="ml-auto rounded border border-[#e4e7ec] bg-white px-1.5 py-0.5 text-[10px] text-[#8a93ad]">
                             K
                         </span>
                     </div>
                 </div>
 
                 <nav className="space-y-5">
-                    <NavSection title="Reportes" items={NAV_MAIN} />
+                    <NavSection title="Navegacion" items={NAV_MAIN} />
                     <NavSection title="Configurar" items={NAV_SETTINGS} />
                 </nav>
 
@@ -98,15 +98,15 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                     <SidebarFooterLink label="Novedades" icon="spark" />
                     <SidebarFooterAction label="Cerrar sesion" icon="logOut" onClick={handleLogout} />
 
-                    <div className="mt-3 flex items-center gap-2 rounded-lg border border-[#e4e7ec] bg-[#f9fafb] px-2 py-2">
-                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#172033] text-[10px] font-bold text-white">
+                    <div className="mt-3 flex items-center gap-2 rounded-xl border border-[#c8c0ff] bg-white/62 px-2 py-2 shadow-sm shadow-violet-200/70">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-[#7c3aed] to-[#4f46e5] text-[12px] font-bold text-white">
                             C
                         </div>
                         <div>
-                            <span className="block text-[12px] font-semibold text-[#172033]">
+                            <span className="block text-[12px] font-semibold text-[#101936]">
                                 Admin
                             </span>
-                            <span className="block text-[10px] font-medium text-[#667085]">
+                            <span className="block text-[10px] font-medium text-[#7c70ba]">
                                 Operacion
                             </span>
                         </div>
@@ -139,7 +139,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                     </div>
                 </div>
 
-                <main className="min-h-screen px-4 py-4 sm:px-6 lg:px-7">
+                <main className="min-h-screen px-4 py-5 sm:px-6 lg:px-7">
                     {children}
                 </main>
             </div>
@@ -170,7 +170,7 @@ function NavSection({
 }) {
     return (
         <div>
-            <p className="mb-1.5 px-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#98a2b3]">
+            <p className="mb-1.5 px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#7c70ba]">
                 {title}
             </p>
 
@@ -195,9 +195,9 @@ function NavItem({
     return (
         <Link
             href={href}
-            className="group flex h-8 items-center gap-2 rounded-lg px-2 text-[12px] font-semibold text-[#667085] transition hover:bg-[#eff6ff] hover:text-[#2563eb]"
+            className="group flex h-9 items-center gap-2 rounded-xl px-2 text-[12px] font-semibold text-[#364260] transition hover:bg-white/85 hover:text-[#4f46e5] hover:shadow-sm"
         >
-            <span className="flex h-5 w-5 items-center justify-center rounded-md bg-[#f2f4f7] text-[#667085] transition group-hover:text-[#2563eb]">
+            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/65 text-[#5b4ea6] ring-1 ring-[#c8c0ff] transition group-hover:bg-[#f3f0ff] group-hover:text-[#5b21ff]">
                 <NavIcon name={icon} />
             </span>
             <span>{label}</span>
@@ -209,9 +209,9 @@ function SidebarFooterLink({ label, icon }: { label: string; icon: NavIconName }
     return (
         <button
             type="button"
-            className="flex h-8 w-full items-center gap-2 rounded-lg px-2 text-[12px] font-medium text-[#667085] transition hover:bg-[#f2f4f7] hover:text-[#172033]"
+            className="flex h-8 w-full items-center gap-2 rounded-lg px-2 text-[12px] font-medium text-[#6b7280] transition hover:bg-white/80 hover:text-[#4f46e5]"
         >
-            <span className="flex h-5 w-5 items-center justify-center text-[#98a2b3]">
+            <span className="flex h-5 w-5 items-center justify-center text-[#6d5fb4]">
                 <NavIcon name={icon} />
             </span>
             <span>{label}</span>

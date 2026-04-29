@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useState, type ButtonHTMLAttributes } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { weekRangeKeysMonToSat, addDays, money } from "@/lib/date";
 import {
     closeWeeklyInvestment,
@@ -25,16 +25,18 @@ import type {
     WeeklyInvestmentGroup,
 } from "@/types/accounting";
 import {
+    AppIcon,
     Badge,
     Button,
     Card,
     CardHeader,
     Field,
+    IconButton,
     Input,
+    KpiCard,
     Modal,
     PageHeader,
     PageTab,
-    StatCard,
 } from "@/components/ui";
 
 type AccountingTab = "overview" | "investment";
@@ -419,6 +421,8 @@ export default function AccountingPage() {
         <div className="mx-auto w-full max-w-[1220px]">
             <PageHeader
                 title="Contabilidad"
+                subtitle="Control semanal de ingresos, inversion, suscripciones y resultado real."
+                icon={<AppIcon name="activity" tone="green" size="sm" className="bg-transparent text-white ring-0" />}
                 tabs={
                     <>
                         <PageTab active={activeTab === "overview"} onClick={() => setActiveTab("overview")}>
@@ -565,7 +569,7 @@ export default function AccountingPage() {
 
                     <div className="flex flex-col-reverse gap-2 border-t border-[#eef1f5] pt-4 sm:flex-row sm:justify-end">
                         <IconButton
-                            icon="x"
+                            icon="close"
                             label="Cancelar"
                             onClick={() => setCloseOpen(false)}
                             disabled={savingWeek}
@@ -594,7 +598,7 @@ export default function AccountingPage() {
 
                     <div className="flex flex-col-reverse gap-2 border-t border-[#eef1f5] pt-4 sm:flex-row sm:justify-end">
                         <IconButton
-                            icon="x"
+                            icon="close"
                             label="Cancelar"
                             onClick={() => setReopenOpen(false)}
                             disabled={savingWeek}
@@ -853,9 +857,9 @@ function InvestmentContent({
     return (
         <div className="space-y-4">
             <section className="grid gap-4 md:grid-cols-3">
-                <StatCard label="Inversion total" value={money(totalInvestment)} caption={`${weekStartKey} a ${weekEndKey}`} />
-                <StatCard label="Suscripciones" value={money(subscriptionInvestment)} caption={`${paidSubscriptionRows.length} pagadas`} />
-                <StatCard label="Grupos activos" value={money(assigned)} caption={`${activeGroups.length} activos / ${validGroups.length} guardados`} />
+                <KpiCard label="Inversion total" value={money(totalInvestment)} caption={`${weekStartKey} a ${weekEndKey}`} icon="activity" tone="green" />
+                <KpiCard label="Suscripciones" value={money(subscriptionInvestment)} caption={`${paidSubscriptionRows.length} pagadas`} icon="users" tone="purple" />
+                <KpiCard label="Grupos activos" value={money(assigned)} caption={`${activeGroups.length} activos / ${validGroups.length} guardados`} icon="assign" tone="purple" />
             </section>
 
             <Card className="overflow-hidden">
@@ -885,7 +889,7 @@ function InvestmentContent({
                     </div>
                     <div className="h-2 overflow-hidden rounded-full bg-[#eef1f5]">
                         <div
-                            className="h-full rounded-full bg-[#2563eb]"
+                            className="h-full rounded-full bg-[#7c3aed]"
                             style={{ width: `${assignedPct}%` }}
                         />
                     </div>
@@ -1041,7 +1045,7 @@ function InvestmentContent({
 
                     <div className="flex flex-col-reverse gap-2 border-t border-[#eef1f5] pt-4 sm:flex-row sm:justify-end">
                         <IconButton
-                            icon="x"
+                            icon="close"
                             label="Cancelar"
                             onClick={() => setBudgetOpen(false)}
                             disabled={saving}
@@ -1080,7 +1084,7 @@ function InvestmentContent({
 
                     <div className="flex flex-col-reverse gap-2 border-t border-[#eef1f5] pt-4 sm:flex-row sm:justify-end">
                         <IconButton
-                            icon="x"
+                            icon="close"
                             label="Cancelar"
                             onClick={() => {
                                 setGroupOpen(false);
@@ -1125,7 +1129,7 @@ function InvestmentContent({
 
                     <div className="flex flex-col-reverse gap-2 border-t border-[#eef1f5] pt-4 sm:flex-row sm:justify-end">
                         <IconButton
-                            icon="x"
+                            icon="close"
                             label="Cancelar"
                             onClick={() => setDeleteDraft(null)}
                             disabled={saving}
@@ -1314,31 +1318,6 @@ function Icon({ name }: { name: IconName }) {
             ) : null}
             {name === "x" ? <path {...common} d="M18 6 6 18M6 6l12 12" /> : null}
         </svg>
-    );
-}
-
-function IconButton({
-    icon,
-    label,
-    variant = "secondary",
-    className = "",
-    ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
-    icon: IconName;
-    label: string;
-    variant?: "primary" | "secondary" | "danger" | "ghost";
-}) {
-    return (
-        <Button
-            type="button"
-            variant={variant}
-            aria-label={label}
-            title={label}
-            className={`h-9 w-9 px-0 py-0 ${className}`}
-            {...props}
-        >
-            <Icon name={icon} />
-        </Button>
     );
 }
 
@@ -1613,7 +1592,7 @@ function DashboardContent({
                                     return (
                                         <div key={row.userId} className="flex flex-1 flex-col items-center justify-end gap-2">
                                             <div
-                                                className={row.real >= 0 ? "w-full rounded-t-md bg-[#3b82f6]" : "w-full rounded-t-md bg-[#ef4444]"}
+                                                className={row.real >= 0 ? "w-full rounded-t-md bg-[#7c3aed]" : "w-full rounded-t-md bg-[#ef4444]"}
                                                 style={{ height: `${pct}%` }}
                                             />
                                             <span className="max-w-[70px] truncate text-[10px] font-medium text-[#98a2b3]">
@@ -1626,7 +1605,7 @@ function DashboardContent({
                         </div>
 
                         <div className="mt-4 flex flex-wrap items-center gap-4 text-[11px] font-medium text-[#667085]">
-                            <Legend color="blue" label="Resultado positivo" />
+                            <Legend color="purple" label="Resultado positivo" />
                             <Legend color="red" label="Resultado negativo" />
                             <Legend color="gray" label="Top usuarios" />
                         </div>
@@ -1664,13 +1643,15 @@ function DashboardContent({
             </section>
 
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <StatCard label="Visitados" value={String(summary.visited)} caption="Clientes visitados" />
-                <StatCard label="Rechazados" value={String(summary.rejected)} caption="Clientes rechazados" />
-                <StatCard label="Ventas por visita" value={money(summaryNumber(summary, "grossVisits"))} caption="Modelo por visita" />
-                <StatCard
+                <KpiCard label="Visitados" value={String(summary.visited)} caption="Clientes visitados" icon="check" tone="green" />
+                <KpiCard label="Rechazados" value={String(summary.rejected)} caption="Clientes rechazados" icon="close" tone="red" />
+                <KpiCard label="Ventas por visita" value={money(summaryNumber(summary, "grossVisits"))} caption="Modelo por visita" icon="activity" tone="purple" />
+                <KpiCard
                     label="Suscripciones"
                     value={money(summaryNumber(summary, "grossSubscriptions"))}
                     caption={`${summaryNumber(summary, "subscriptionsPaid")} pagadas`}
+                    icon="users"
+                    tone="purple"
                 />
             </section>
 
@@ -1687,47 +1668,59 @@ function DashboardContent({
                     }
                 />
 
-                <div className="overflow-x-auto border-t border-[#eef1f5]">
+                <div className="border-t border-[#eef1f5]">
+                    <div className="divide-y divide-[#eef1f5] lg:hidden">
+                        {summary.rows.map((row) => (
+                            <AccountingUserMobileCard
+                                key={row.userId}
+                                row={row}
+                                isClosed={isClosed}
+                                onToggleSubscriptionPayment={onToggleSubscriptionPayment}
+                            />
+                        ))}
+                    </div>
+
+                    <div className="hidden overflow-x-auto lg:block">
                     <table className="w-full min-w-[920px] border-collapse">
                         <thead>
-                            <tr className="border-b border-[#eef1f5] text-left text-[11px] font-medium text-[#98a2b3]">
-                                <th className="px-4 py-3">Usuario</th>
-                                <th className="px-4 py-3">Modelo</th>
-                                <th className="px-4 py-3">Visitados</th>
-                                <th className="px-4 py-3">Rechazados</th>
-                                <th className="px-4 py-3 text-right">Bruta</th>
-                                <th className="px-4 py-3 text-right">Costo</th>
-                                <th className="px-4 py-3 text-right">Real</th>
-                                <th className="px-4 py-3 text-right">Pago</th>
+                            <tr className="border-b border-[#eef1f5] bg-[#fcfcff] text-left text-[10px] font-bold uppercase tracking-[0.06em] text-[#8a93ad]">
+                                <th className="px-3 py-2.5">Usuario</th>
+                                <th className="px-3 py-2.5">Modelo</th>
+                                <th className="px-3 py-2.5">Visitados</th>
+                                <th className="px-3 py-2.5">Rechazados</th>
+                                <th className="px-3 py-2.5 text-right">Bruta</th>
+                                <th className="px-3 py-2.5 text-right">Costo</th>
+                                <th className="px-3 py-2.5 text-right">Real</th>
+                                <th className="px-3 py-2.5 text-right">Pago</th>
                             </tr>
                         </thead>
 
                         <tbody>
                             {summary.rows.map((row) => (
                                 <tr key={row.userId} className="border-b border-[#eef1f5] last:border-0 hover:bg-[#f9fafb]">
-                                    <td className="px-4 py-3">
+                                    <td className="px-3 py-2.5">
                                         <div className="text-[12px] font-semibold text-[#172033]">{row.name}</div>
                                         <div className="mt-0.5 text-[11px] font-medium text-[#98a2b3]">{row.email || row.userId}</div>
                                     </td>
 
-                                    <td className="px-4 py-3">
+                                    <td className="px-3 py-2.5">
                                         <ModelBadge mode={row.billingMode} paid={row.subscriptionPaid} />
                                     </td>
 
-                                    <td className="px-4 py-3">
+                                    <td className="px-3 py-2.5">
                                         <Badge tone="green">{row.visited}</Badge>
                                     </td>
 
-                                    <td className="px-4 py-3">
+                                    <td className="px-3 py-2.5">
                                         <Badge tone="red">{row.rejected}</Badge>
                                     </td>
 
-                                    <td className="px-4 py-3 text-right text-[12px] font-semibold text-[#172033]">{money(row.gross)}</td>
-                                    <td className="px-4 py-3 text-right text-[12px] font-semibold text-[#667085]">{money(row.cost)}</td>
-                                    <td className={row.real >= 0 ? "px-4 py-3 text-right text-[12px] font-semibold text-emerald-600" : "px-4 py-3 text-right text-[12px] font-semibold text-red-500"}>
+                                    <td className="px-3 py-2.5 text-right text-[12px] font-semibold text-[#172033]">{money(row.gross)}</td>
+                                    <td className="px-3 py-2.5 text-right text-[12px] font-semibold text-[#667085]">{money(row.cost)}</td>
+                                    <td className={row.real >= 0 ? "px-3 py-2.5 text-right text-[12px] font-semibold text-emerald-600" : "px-3 py-2.5 text-right text-[12px] font-semibold text-red-500"}>
                                         {money(row.real)}
                                     </td>
-                                    <td className="px-4 py-3 text-right">
+                                    <td className="px-3 py-2.5 text-right">
                                         {row.billingMode === "weekly_subscription" ? (
                                             <Button
                                                 onClick={() => onToggleSubscriptionPayment(row)}
@@ -1748,6 +1741,7 @@ function DashboardContent({
                             ))}
                         </tbody>
                     </table>
+                    </div>
                 </div>
             </Card>
         </div>
@@ -1792,19 +1786,82 @@ function Metric({
     );
 }
 
+function AccountingUserMobileCard({
+    row,
+    isClosed,
+    onToggleSubscriptionPayment,
+}: {
+    row: AccountingSummary["rows"][number];
+    isClosed: boolean;
+    onToggleSubscriptionPayment: (row: AccountingSummary["rows"][number]) => void;
+}) {
+    return (
+        <div className="px-4 py-3">
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <div className="truncate text-[13px] font-bold text-[#101936]">{row.name}</div>
+                    <div className="mt-1 truncate text-[11px] font-medium text-[#8a93ad]">
+                        {row.email || row.userId}
+                    </div>
+                </div>
+                <div className={row.real >= 0 ? "text-right text-[13px] font-bold text-emerald-600" : "text-right text-[13px] font-bold text-red-500"}>
+                    {money(row.real)}
+                </div>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+                <ModelBadge mode={row.billingMode} paid={row.subscriptionPaid} />
+                <Badge tone="green">{row.visited} visitas</Badge>
+                <Badge tone="red">{row.rejected} rechazos</Badge>
+            </div>
+
+            <div className="mt-3 grid grid-cols-3 gap-2 rounded-2xl border border-[#eef1f5] bg-[#fbfaff] p-3 text-[11px] font-semibold">
+                <div>
+                    <div className="text-[#98a2b3]">Bruta</div>
+                    <div className="mt-1 text-[#172033]">{money(row.gross)}</div>
+                </div>
+                <div>
+                    <div className="text-[#98a2b3]">Costo</div>
+                    <div className="mt-1 text-[#667085]">{money(row.cost)}</div>
+                </div>
+                <div>
+                    <div className="text-[#98a2b3]">Real</div>
+                    <div className={row.real >= 0 ? "mt-1 text-emerald-600" : "mt-1 text-red-500"}>
+                        {money(row.real)}
+                    </div>
+                </div>
+            </div>
+
+            {row.billingMode === "weekly_subscription" ? (
+                <Button
+                    onClick={() => onToggleSubscriptionPayment(row)}
+                    disabled={isClosed}
+                    className={
+                        row.subscriptionPaid
+                            ? "mt-3 w-full border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                            : "mt-3 w-full"
+                    }
+                >
+                    {row.subscriptionPaid ? "Pagada" : "Marcar pago"}
+                </Button>
+            ) : null}
+        </div>
+    );
+}
+
 function Legend({
     color,
     label,
 }: {
-    color: "blue" | "red" | "gray";
+    color: "purple" | "red" | "gray";
     label: string;
 }) {
     return (
         <span className="inline-flex items-center gap-1.5">
             <span
                 className={
-                    color === "blue"
-                        ? "h-2 w-2 rounded-full bg-[#3b82f6]"
+                    color === "purple"
+                        ? "h-2 w-2 rounded-full bg-[#7c3aed]"
                         : color === "red"
                             ? "h-2 w-2 rounded-full bg-[#ef4444]"
                             : "h-2 w-2 rounded-full bg-[#d1d5db]"

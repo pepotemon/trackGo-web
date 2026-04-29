@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { LeadSectionNav } from "@/features/leads/LeadSectionNav";
 import { useAdminLeadHistory } from "@/features/leads/useAdminLeadHistory";
 import type { LeadHistoryBucket, LeadHistoryFilters, MetaLeadDoc } from "@/types/leads";
-import { Badge, Button, Card, Input, PageHeader, PageTab, StatCard } from "@/components/ui";
+import { ActionTile, ActionTileButton, AppIcon, Badge, Button, Card, Input, KpiCard, Modal, PageHeader, PageTab } from "@/components/ui";
 
 const bucketLabel: Record<LeadHistoryBucket, string> = {
     incomplete: "Incompleto",
@@ -56,6 +57,7 @@ function historyActivityAt(lead: MetaLeadDoc) {
 }
 
 export default function LeadHistoryPage() {
+    const [quickLead, setQuickLead] = useState<MetaLeadDoc | null>(null);
     const {
         filters,
         filteredLeads,
@@ -91,6 +93,8 @@ export default function LeadHistoryPage() {
         <div className="mx-auto w-full max-w-[1220px]">
             <PageHeader
                 title="Historial de leads"
+                subtitle="Consulta leads archivados, incompletos y no aptos."
+                icon={<AppIcon name="history" tone="slate" size="sm" className="bg-transparent text-white ring-0" />}
                 tabs={
                     <>
                         <PageTab
@@ -124,8 +128,15 @@ export default function LeadHistoryPage() {
                         {activeFiltersCount > 0 ? (
                             <Button onClick={resetFilters}>Limpiar filtros</Button>
                         ) : null}
-                        <Button variant="primary" onClick={reloadHistory} disabled={loading}>
-                            {loading ? "Cargando..." : "Actualizar"}
+                        <Button
+                            variant="primary"
+                            onClick={reloadHistory}
+                            disabled={loading}
+                            aria-label="Actualizar historial"
+                            title="Actualizar historial"
+                            className="h-10 w-10 px-0 py-0"
+                        >
+                            <AppIcon name="refresh" tone="purple" size="sm" className="bg-transparent text-white ring-0" />
                         </Button>
                     </>
                 }
@@ -137,10 +148,12 @@ export default function LeadHistoryPage() {
                 </div>
             ) : null}
 
+            <LeadSectionNav />
+
             <section className="mb-4 grid gap-4 md:grid-cols-3">
-                <StatCard label="Historial cargado" value={stats.total} caption="Leads fuera de la cola activa" />
-                <StatCard label="Incompletos" value={stats.incomplete} caption="Sin datos suficientes" />
-                <StatCard label="No aptos" value={stats.notSuitable} caption="Descartados operativos" />
+                <KpiCard label="Historial cargado" value={stats.total} caption="Leads fuera de la cola activa" icon="history" tone="slate" />
+                <KpiCard label="Incompletos" value={stats.incomplete} caption="Sin datos suficientes" icon="alert" tone="orange" />
+                <KpiCard label="No aptos" value={stats.notSuitable} caption="Descartados operativos" icon="close" tone="red" />
             </section>
 
             <Card className="overflow-hidden">
@@ -213,7 +226,7 @@ export default function LeadHistoryPage() {
                     leads={filteredLeads}
                     loading={loading}
                     savingId={savingId}
-                    onReopen={reopenLead}
+                    onQuickActions={setQuickLead}
                 />
 
                 <div className="flex items-center justify-between gap-3 border-t border-[#f0f1f2] px-4 py-3">
@@ -227,6 +240,16 @@ export default function LeadHistoryPage() {
                     ) : null}
                 </div>
             </Card>
+
+            <HistoryQuickActionsModal
+                lead={quickLead}
+                saving={quickLead ? savingId === quickLead.id : false}
+                onClose={() => setQuickLead(null)}
+                onReopen={async (lead) => {
+                    await reopenLead(lead);
+                    setQuickLead(null);
+                }}
+            />
         </div>
     );
 }
@@ -260,12 +283,12 @@ function HistoryTable({
     leads,
     loading,
     savingId,
-    onReopen,
+    onQuickActions,
 }: {
     leads: MetaLeadDoc[];
     loading: boolean;
     savingId: string | null;
-    onReopen: (lead: MetaLeadDoc) => Promise<void>;
+    onQuickActions: (lead: MetaLeadDoc) => void;
 }) {
     return (
         <div className="overflow-x-auto border-t border-[#f0f1f2]">
@@ -276,8 +299,6 @@ function HistoryTable({
                         <th className="px-4 py-3">Tipo</th>
                         <th className="px-4 py-3">Ciudad</th>
                         <th className="px-4 py-3">Motivo</th>
-                        <th className="px-4 py-3">Chat</th>
-                        <th className="px-4 py-3">Accion</th>
                         <th className="px-4 py-3 text-right">Ultima actividad</th>
                     </tr>
                 </thead>
@@ -285,13 +306,13 @@ function HistoryTable({
                 <tbody>
                     {loading ? (
                         <tr>
-                            <td colSpan={7} className="p-8 text-center text-[13px] font-medium text-[#71717a]">
+                            <td colSpan={5} className="p-8 text-center text-[13px] font-medium text-[#71717a]">
                                 Cargando historial...
                             </td>
                         </tr>
                     ) : leads.length === 0 ? (
                         <tr>
-                            <td colSpan={7} className="p-8 text-center text-[13px] font-medium text-[#71717a]">
+                            <td colSpan={5} className="p-8 text-center text-[13px] font-medium text-[#71717a]">
                                 No hay leads historicos con esos filtros.
                             </td>
                         </tr>
@@ -301,7 +322,7 @@ function HistoryTable({
                                 key={lead.id}
                                 lead={lead}
                                 saving={savingId === lead.id}
-                                onReopen={onReopen}
+                                onQuickActions={onQuickActions}
                             />
                         ))
                     )}
@@ -314,16 +335,21 @@ function HistoryTable({
 function HistoryRow({
     lead,
     saving,
-    onReopen,
+    onQuickActions,
 }: {
     lead: MetaLeadDoc;
     saving: boolean;
-    onReopen: (lead: MetaLeadDoc) => Promise<void>;
+    onQuickActions: (lead: MetaLeadDoc) => void;
 }) {
     const bucket = lead.verificationStatus === "not_suitable" ? "not_suitable" : "incomplete";
 
     return (
-        <tr className="border-b border-[#f0f1f2] last:border-0 hover:bg-[#fafafa]">
+        <tr
+            onClick={() => {
+                if (!saving) onQuickActions(lead);
+            }}
+            className="cursor-pointer border-b border-[#f0f1f2] last:border-0 hover:bg-[#f8f7ff]"
+        >
             <td className="px-4 py-3">
                 <div className="min-w-0">
                     <Link
@@ -358,24 +384,46 @@ function HistoryRow({
                 </div>
             </td>
 
-            <td className="px-4 py-3">
-                <Link
-                    href={`/admin/leads/${lead.id}`}
-                    className="inline-flex h-8 items-center rounded-lg border border-[#e5e7eb] bg-white px-3 text-[12px] font-semibold text-[#52525b] shadow-sm transition hover:bg-[#f9fafb]"
-                >
-                    Ver chat
-                </Link>
-            </td>
-
-            <td className="px-4 py-3">
-                <Button onClick={() => onReopen(lead)} disabled={saving}>
-                    {saving ? "Reabriendo..." : "Reabrir"}
-                </Button>
-            </td>
-
             <td className="px-4 py-3 text-right text-[12px] font-semibold text-[#71717a]">
                 {formatDate(historyActivityAt(lead))}
             </td>
         </tr>
+    );
+}
+
+function HistoryQuickActionsModal({
+    lead,
+    saving,
+    onClose,
+    onReopen,
+}: {
+    lead: MetaLeadDoc | null;
+    saving: boolean;
+    onClose: () => void;
+    onReopen: (lead: MetaLeadDoc) => Promise<void>;
+}) {
+    if (!lead) return null;
+
+    return (
+        <Modal
+            open={!!lead}
+            onClose={onClose}
+            title={displayName(lead)}
+            subtitle={lead.business || lead.location.address || lead.phone || "Acciones rapidas"}
+        >
+            <div className="grid gap-3 sm:grid-cols-3">
+                <ActionTile href={`/admin/leads/${lead.id}`} icon="chat" label="Chat" tone="purple" />
+                {lead.location.mapsUrl ? (
+                    <ActionTile href={lead.location.mapsUrl} icon="map" label="Maps" tone="green" external />
+                ) : null}
+                <ActionTileButton
+                    onClick={() => void onReopen(lead)}
+                    disabled={saving}
+                    icon="history"
+                    label={saving ? "Reabriendo" : "Reabrir"}
+                    tone="orange"
+                />
+            </div>
+        </Modal>
     );
 }

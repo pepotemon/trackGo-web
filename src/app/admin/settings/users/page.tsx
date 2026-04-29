@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useState, type ButtonHTMLAttributes } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
     createManagedUserProfile,
     listAdminUsers,
@@ -13,14 +13,15 @@ import {
 } from "@/data/usersRepo";
 import type { UserBillingMode, UserDoc, UserGeoCoverage, UserGeoCoverageType, UserRole } from "@/types/users";
 import {
+    AppIcon,
     Badge,
-    Button,
     Card,
     Field,
+    IconButton,
     Input,
+    KpiCard,
     Modal,
     PageHeader,
-    StatCard,
 } from "@/components/ui";
 
 type EditorTab = "profile" | "coverage" | "role" | "autoAssign" | "billing";
@@ -205,31 +206,6 @@ function Icon({ name }: { name: IconName }) {
     );
 }
 
-function IconButton({
-    icon,
-    label,
-    variant = "secondary",
-    className = "",
-    ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
-    icon: IconName;
-    label: string;
-    variant?: "primary" | "secondary" | "danger" | "ghost";
-}) {
-    return (
-        <Button
-            type="button"
-            variant={variant}
-            aria-label={label}
-            title={label}
-            className={`h-9 w-9 px-0 py-0 ${className}`}
-            {...props}
-        >
-            <Icon name={icon} />
-        </Button>
-    );
-}
-
 export default function UsersPage() {
     const [users, setUsers] = useState<UserDoc[]>([]);
     const [loading, setLoading] = useState(true);
@@ -360,6 +336,8 @@ export default function UsersPage() {
         <div className="mx-auto w-full max-w-[1220px]">
             <PageHeader
                 title="Usuarios"
+                subtitle="Gestiona permisos, cobertura, auto-asignacion y modelos de pago."
+                icon={<AppIcon name="users" tone="blue" size="sm" className="bg-transparent text-white ring-0" />}
                 actions={
                     <>
                         <IconButton icon="refresh" label="Actualizar" onClick={loadUsers} />
@@ -380,10 +358,10 @@ export default function UsersPage() {
             ) : null}
 
             <section className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <StatCard label="Usuarios" value={stats.total} caption="Total registrado" />
-                <StatCard label="Activos" value={stats.active} caption="Usuarios operativos" />
-                <StatCard label="Admins" value={stats.admins} caption="Permisos admin" />
-                <StatCard label="Suscripcion" value={stats.weekly} caption="Modelo semanal" />
+                <KpiCard label="Usuarios" value={stats.total} caption="Total registrado" icon="users" tone="blue" />
+                <KpiCard label="Activos" value={stats.active} caption="Usuarios operativos" icon="check" tone="green" />
+                <KpiCard label="Admins" value={stats.admins} caption="Permisos admin" icon="assign" tone="purple" />
+                <KpiCard label="Suscripcion" value={stats.weekly} caption="Modelo semanal" icon="lead" tone="orange" />
             </section>
 
             <section>
@@ -408,7 +386,7 @@ export default function UsersPage() {
                                 />
 
                                 {activeFiltersCount > 0 ? (
-                                    <IconButton icon="x" label="Limpiar filtros" onClick={resetFilters} />
+                                    <IconButton icon="close" label="Limpiar filtros" onClick={resetFilters} />
                                 ) : null}
                             </div>
                         </div>
@@ -446,31 +424,48 @@ export default function UsersPage() {
                         </div>
                     </div>
 
-                    <div className="overflow-x-auto border-t border-[#eef1f5]">
-                        <table className="w-full min-w-[1040px] border-collapse">
+                    <div className="border-t border-[#eef1f5]">
+                        <div className="divide-y divide-[#eef1f5] lg:hidden">
+                            {loading ? (
+                                <UsersTableState icon="refresh" title="Cargando usuarios" body="Estamos preparando el equipo." />
+                            ) : filteredUsers.length === 0 ? (
+                                <UsersTableState icon="filter" title="Sin resultados" body="No hay usuarios con ese filtro." />
+                            ) : (
+                                filteredUsers.map((user) => (
+                                    <UserMobileCard
+                                        key={user.id}
+                                        user={user}
+                                        selected={selectedUserId === user.id}
+                                        onSelect={() => setSelectedUserId(user.id)}
+                                    />
+                                ))
+                            )}
+                        </div>
+
+                        <div className="hidden overflow-x-auto lg:block">
+                        <table className="w-full min-w-[920px] border-collapse">
                             <thead>
-                                <tr className="border-b border-[#eef1f5] text-left text-[11px] font-medium text-[#667085]">
-                                    <th className="px-4 py-3">Usuario</th>
-                                    <th className="px-4 py-3">Rol</th>
-                                    <th className="px-4 py-3">Estado</th>
-                                    <th className="px-4 py-3">Modelo</th>
-                                    <th className="px-4 py-3">Cobertura</th>
-                                    <th className="px-4 py-3">Auto</th>
-                                    <th className="px-4 py-3 text-right">Accion</th>
+                                <tr className="border-b border-[#eef1f5] bg-[#fcfcff] text-left text-[10px] font-bold uppercase tracking-[0.06em] text-[#8a93ad]">
+                                    <th className="px-3 py-2.5">Usuario</th>
+                                    <th className="px-3 py-2.5">Rol</th>
+                                    <th className="px-3 py-2.5">Estado</th>
+                                    <th className="px-3 py-2.5">Modelo</th>
+                                    <th className="px-3 py-2.5">Cobertura</th>
+                                    <th className="px-3 py-2.5">Auto</th>
                                 </tr>
                             </thead>
 
                             <tbody>
                                 {loading ? (
                                     <tr>
-                                        <td colSpan={7} className="p-8 text-center text-[13px] font-medium text-[#667085]">
-                                            Cargando usuarios...
+                                        <td colSpan={6}>
+                                            <UsersTableState icon="refresh" title="Cargando usuarios" body="Estamos preparando el equipo." />
                                         </td>
                                     </tr>
                                 ) : filteredUsers.length === 0 ? (
                                     <tr>
-                                        <td colSpan={7} className="p-8 text-center text-[13px] font-medium text-[#667085]">
-                                            No hay usuarios con ese filtro.
+                                        <td colSpan={6}>
+                                            <UsersTableState icon="filter" title="Sin resultados" body="No hay usuarios con ese filtro." />
                                         </td>
                                     </tr>
                                 ) : (
@@ -488,9 +483,9 @@ export default function UsersPage() {
                                                         : "cursor-pointer border-b border-[#eef1f5] last:border-0 hover:bg-[#f9fafb]"
                                                 }
                                             >
-                                                <td className="px-4 py-3">
+                                                <td className="px-3 py-2.5">
                                                     <div className="flex items-center gap-3">
-                                                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-black text-[12px] font-semibold text-white">
+                                                        <div className="flex h-8 w-8 items-center justify-center rounded-2xl bg-gradient-to-br from-[#7c3aed] to-[#2563eb] text-[12px] font-semibold text-white shadow-sm">
                                                             {(u.name || u.email || "U").slice(0, 1).toUpperCase()}
                                                         </div>
                                                         <div className="min-w-0">
@@ -504,48 +499,34 @@ export default function UsersPage() {
                                                     </div>
                                                 </td>
 
-                                                <td className="px-4 py-3">
+                                                <td className="px-3 py-2.5">
                                                     <Badge tone={u.role === "admin" ? "blue" : "gray"}>
                                                         {u.role === "admin" ? "Admin" : "Vendedor"}
                                                     </Badge>
                                                 </td>
 
-                                                <td className="px-4 py-3">
+                                                <td className="px-3 py-2.5">
                                                     <Badge tone={u.active ? "green" : "red"}>
                                                         {u.active ? "Activo" : "Inactivo"}
                                                     </Badge>
                                                 </td>
 
-                                                <td className="px-4 py-3">
+                                                <td className="px-3 py-2.5">
                                                     <Badge tone="gray">
                                                         {u.billingMode === "weekly_subscription" ? "Suscripcion" : "Por visita"}
                                                     </Badge>
                                                 </td>
 
-                                                <td className="px-4 py-3">
+                                                <td className="px-3 py-2.5">
                                                     <div className="max-w-[220px] truncate text-[12px] font-semibold text-[#344054]">
                                                         {coverageLabel(u)}
                                                     </div>
                                                 </td>
 
-                                                <td className="px-4 py-3">
+                                                <td className="px-3 py-2.5">
                                                     <Badge tone={autoEnabled ? "green" : "gray"}>
                                                         {autoEnabled ? "Auto ON" : "Auto OFF"}
                                                     </Badge>
-                                                </td>
-
-                                                <td className="px-4 py-3 text-right">
-                                                    <IconButton
-                                                        icon="power"
-                                                        label={u.active ? "Desactivar usuario" : "Activar usuario"}
-                                                        variant={u.active ? "danger" : "secondary"}
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleToggleActive(u);
-                                                        }}
-                                                        disabled={savingId === u.id}
-                                                        className={u.active ? "" : "border-emerald-200 text-emerald-600 hover:bg-emerald-50"}
-                                                    />
                                                 </td>
                                             </tr>
                                         );
@@ -553,6 +534,7 @@ export default function UsersPage() {
                                 )}
                             </tbody>
                         </table>
+                        </div>
                     </div>
                 </Card>
             </section>
@@ -565,6 +547,7 @@ export default function UsersPage() {
                 onSaving={setSavingId}
                 onPatch={patchUserLocal}
                 onError={setErr}
+                onToggleActive={handleToggleActive}
             />
 
             <CreateUserModal
@@ -601,6 +584,84 @@ function FilterSelect({
                 {children}
             </select>
         </label>
+    );
+}
+
+function UsersTableState({
+    icon,
+    title,
+    body,
+}: {
+    icon: "filter" | "refresh";
+    title: string;
+    body: string;
+}) {
+    return (
+        <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
+            <AppIcon name={icon} tone={icon === "refresh" ? "purple" : "slate"} size="lg" />
+            <div className="mt-3 text-[13px] font-bold text-[#101936]">{title}</div>
+            <div className="mt-1 text-[12px] font-medium text-[#66739a]">{body}</div>
+        </div>
+    );
+}
+
+function UserMobileCard({
+    user,
+    selected,
+    onSelect,
+}: {
+    user: UserDoc;
+    selected: boolean;
+    onSelect: () => void;
+}) {
+    const autoEnabled = user.autoAssignEnabled === true;
+
+    return (
+        <button
+            type="button"
+            onClick={onSelect}
+            className={
+                selected
+                    ? "block w-full bg-[#eff6ff] px-4 py-3 text-left"
+                    : "block w-full px-4 py-3 text-left transition hover:bg-[#f8f7ff]"
+            }
+        >
+            <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#7c3aed] to-[#2563eb] text-[13px] font-semibold text-white shadow-sm">
+                        {(user.name || user.email || "U").slice(0, 1).toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                        <div className="truncate text-[13px] font-bold text-[#101936]">
+                            {user.name || "Usuario"}
+                        </div>
+                        <div className="mt-1 truncate text-[11px] font-medium text-[#8a93ad]">
+                            {user.email || user.id}
+                        </div>
+                    </div>
+                </div>
+
+                <Badge tone={user.active ? "green" : "red"}>
+                    {user.active ? "Activo" : "Inactivo"}
+                </Badge>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Badge tone={user.role === "admin" ? "blue" : "gray"}>
+                    {user.role === "admin" ? "Admin" : "Vendedor"}
+                </Badge>
+                <Badge tone="gray">
+                    {user.billingMode === "weekly_subscription" ? "Suscripcion" : "Por visita"}
+                </Badge>
+                <Badge tone={autoEnabled ? "green" : "gray"}>
+                    {autoEnabled ? "Auto ON" : "Auto OFF"}
+                </Badge>
+            </div>
+
+            <div className="mt-3 truncate text-[11px] font-semibold text-[#66739a]">
+                {coverageLabel(user)}
+            </div>
+        </button>
     );
 }
 
@@ -714,8 +775,8 @@ function CreateUserModal({
                     El usuario se crea activo. Luego puedes ajustar cobertura, auto-asignacion y contabilidad desde editar.
                 </div>
 
-                <div className="flex justify-end gap-2 border-t border-[#f0f1f2] pt-4">
-                    <IconButton icon="x" label="Cancelar" onClick={onClose} />
+                <div className="flex flex-col-reverse gap-2 border-t border-[#f0f1f2] pt-4 sm:flex-row sm:justify-end">
+                    <IconButton icon="close" label="Cancelar" onClick={onClose} />
                     <IconButton
                         icon="check"
                         label={saving ? "Creando" : "Crear usuario"}
@@ -737,6 +798,7 @@ function EditUserModal({
     onSaving,
     onPatch,
     onError,
+    onToggleActive,
 }: {
     user: UserDoc | null;
     open: boolean;
@@ -745,6 +807,7 @@ function EditUserModal({
     onSaving: (id: string | null) => void;
     onPatch: (userId: string, patch: Partial<UserDoc>) => Promise<void>;
     onError: (msg: string | null) => void;
+    onToggleActive: (user: UserDoc) => Promise<void>;
 }) {
     const [activeTab, setActiveTab] = useState<EditorTab>("profile");
     const [name, setName] = useState("");
@@ -847,10 +910,10 @@ function EditUserModal({
             open={open}
             onClose={onClose}
             title={`Editar ${user.name || "usuario"}`}
-            subtitle="Modifica perfil, rol, auto-asignaciÃ³n y contabilidad."
+            subtitle="Modifica perfil, rol, auto-asignacion y contabilidad."
         >
             <div className="space-y-4">
-                <div className="flex flex-wrap gap-2">
+                <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
                     <MiniTab icon="user" active={activeTab === "profile"} onClick={() => setActiveTab("profile")}>
                         Perfil
                     </MiniTab>
@@ -942,10 +1005,10 @@ function EditUserModal({
                 ) : null}
 
                 {activeTab === "autoAssign" ? (
-                    <EditorBlock title="Auto-asignaciÃ³n">
+                    <EditorBlock title="Auto-asignacion">
                         <label className="flex items-center justify-between rounded-lg border border-[#e5e7eb] bg-white px-3 py-2">
                             <span className="text-[12px] font-semibold text-[#52525b]">
-                                Recibir leads automÃ¡ticamente
+                                Recibir leads automaticamente
                             </span>
                             <input
                                 type="checkbox"
@@ -955,11 +1018,11 @@ function EditUserModal({
                         </label>
 
                         {autoAssignEnabled ? (
-                            <Field label="LÃ­mite diario">
+                            <Field label="Limite diario">
                                 <Input
                                     value={autoAssignDailyLimit}
                                     onChange={(e) => setAutoAssignDailyLimit(onlyNumberLike(e.target.value))}
-                                    placeholder="VacÃ­o = sin lÃ­mite"
+                                    placeholder="Vacio = sin limite"
                                 />
                             </Field>
                         ) : null}
@@ -970,7 +1033,7 @@ function EditUserModal({
                     <EditorBlock title="Contabilidad">
                         <div className="grid grid-cols-2 gap-2">
                             <Choice active={billingMode === "per_visit"} onClick={() => setBillingMode("per_visit")} label="Por visita" />
-                            <Choice active={billingMode === "weekly_subscription"} onClick={() => setBillingMode("weekly_subscription")} label="SuscripciÃ³n" />
+                            <Choice active={billingMode === "weekly_subscription"} onClick={() => setBillingMode("weekly_subscription")} label="Suscripcion" />
                         </div>
 
                         {billingMode === "per_visit" ? (
@@ -989,7 +1052,7 @@ function EditUserModal({
 
                                 <label className="col-span-2 flex items-center justify-between rounded-lg border border-[#e5e7eb] bg-white px-3 py-2">
                                     <span className="text-[12px] font-semibold text-[#52525b]">
-                                        SuscripciÃ³n activa
+                                        Suscripcion activa
                                     </span>
                                     <input type="checkbox" checked={weeklyActive} onChange={(e) => setWeeklyActive(e.target.checked)} />
                                 </label>
@@ -1002,8 +1065,16 @@ function EditUserModal({
                     </EditorBlock>
                 ) : null}
 
-                <div className="flex justify-end gap-2 border-t border-[#f0f1f2] pt-4">
-                    <IconButton icon="x" label="Cancelar" onClick={onClose} />
+                <div className="flex flex-col-reverse gap-2 border-t border-[#f0f1f2] pt-4 sm:flex-row sm:justify-end">
+                    <IconButton
+                        icon="power"
+                        label={user.active ? "Desactivar usuario" : "Activar usuario"}
+                        variant={user.active ? "danger" : "secondary"}
+                        onClick={() => void onToggleActive(user)}
+                        disabled={saving}
+                        className={user.active ? "" : "border-emerald-200 text-emerald-600 hover:bg-emerald-50"}
+                    />
+                    <IconButton icon="close" label="Cancelar" onClick={onClose} />
                     <IconButton
                         icon="check"
                         label={saving ? "Guardando" : "Guardar cambios"}
@@ -1134,7 +1205,7 @@ function EditorBlock({
     children: React.ReactNode;
 }) {
     return (
-        <div className="space-y-3 rounded-xl border border-[#e5e7eb] bg-[#fafafa] p-3">
+        <div className="space-y-3 rounded-2xl border border-[#e4e7ec] bg-gradient-to-b from-white to-[#fbfaff] p-3 shadow-sm">
             <p className="text-[12px] font-semibold text-[#171717]">{title}</p>
             {children}
         </div>
@@ -1182,8 +1253,8 @@ function MiniTab({
             onClick={onClick}
             className={
                 active
-                    ? "inline-flex items-center gap-1.5 rounded-lg bg-black px-3 py-1.5 text-[11px] font-semibold text-white"
-                    : "inline-flex items-center gap-1.5 rounded-lg border border-[#e5e7eb] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#71717a] hover:bg-[#f9fafb]"
+                    ? "inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-br from-[#7c3aed] to-[#2563eb] px-3 py-2 text-[11px] font-semibold text-white shadow-sm"
+                    : "inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-[#e5e7eb] bg-white px-3 py-2 text-[11px] font-semibold text-[#71717a] hover:bg-[#f8f7ff] hover:text-[#4f46e5]"
             }
         >
             <Icon name={icon} />

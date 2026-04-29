@@ -6,11 +6,12 @@ import {
     buildCoverageMatches,
     userCoverageLabel,
 } from "@/features/leads/coverageMatching";
+import { LeadSectionNav } from "@/features/leads/LeadSectionNav";
 import { LeadEditModal } from "@/features/leads/LeadEditModal";
 import { useAdminLeadQueue } from "@/features/leads/useAdminLeadQueue";
 import type { LeadFilters, LeadReviewStatus, MetaLeadDoc } from "@/types/leads";
 import type { UserDoc } from "@/types/users";
-import { Badge, Button, Card, Input, Modal, PageHeader, StatCard } from "@/components/ui";
+import { ActionTile, ActionTileButton, AppIcon, Badge, Button, Card, Input, KpiCard, Modal, PageHeader } from "@/components/ui";
 
 const STATUS_OPTIONS: { value: LeadReviewStatus; label: string }[] = [
     { value: "pending_review", label: "Por revisar" },
@@ -81,6 +82,7 @@ function hasNewInbound(lead: MetaLeadDoc) {
 export default function AdminLeadsPage() {
     const [coverageOpen, setCoverageOpen] = useState(false);
     const [editingLead, setEditingLead] = useState<MetaLeadDoc | null>(null);
+    const [quickLead, setQuickLead] = useState<MetaLeadDoc | null>(null);
     const {
         users,
         filters,
@@ -117,16 +119,26 @@ export default function AdminLeadsPage() {
         <div className="mx-auto w-full max-w-[1220px]">
             <PageHeader
                 title="Leads"
+                subtitle="Gestiona, valida y asigna leads de forma eficiente."
+                icon={<AppIcon name="lead" tone="purple" size="sm" className="bg-transparent text-white ring-0" />}
                 actions={
                     <>
                         <Button onClick={() => setCoverageOpen(true)} disabled={loading || !filteredLeads.length}>
+                            <AppIcon name="assign" tone="purple" size="sm" className="h-5 w-5 rounded-md bg-transparent text-current ring-0" />
                             Asignar por cobertura
                         </Button>
                         {activeFiltersCount > 0 ? (
                             <Button onClick={resetFilters}>Limpiar filtros</Button>
                         ) : null}
-                        <Button variant="primary" onClick={reloadUsers} disabled={loading}>
-                            {loading ? "Cargando..." : "Actualizar usuarios"}
+                        <Button
+                            variant="primary"
+                            onClick={reloadUsers}
+                            disabled={loading}
+                            aria-label="Actualizar usuarios"
+                            title="Actualizar usuarios"
+                            className="h-10 w-10 px-0 py-0"
+                        >
+                            <AppIcon name="refresh" tone="purple" size="sm" className="bg-transparent text-white ring-0" />
                         </Button>
                     </>
                 }
@@ -138,28 +150,34 @@ export default function AdminLeadsPage() {
                 </div>
             ) : null}
 
+            <LeadSectionNav />
+
             <section className="mb-4 grid gap-3 md:grid-cols-2">
                 <LeadAccessCard
                     href="/admin/leads/history"
                     title="Historial"
                     body="Leads incompletos o descartados fuera de la cola activa."
+                    icon="history"
+                    tone="slate"
                 />
                 <LeadAccessCard
                     href="/admin/leads/assignments"
                     title="Asignaciones"
                     body="Auditoria de auto-asignacion y distribucion de trabajo."
+                    icon="assign"
+                    tone="green"
                 />
             </section>
 
             <section className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <StatCard label="Cola activa" value={stats.total} caption="Leads Meta sin asignar" />
-                <StatCard label="Por revisar" value={stats.pendingReview} caption="Listos para validar" />
-                <StatCard label="Incompletos" value={stats.incomplete} caption="Falta negocio o maps" />
-                <StatCard label="No aptos" value={stats.notSuitable} caption="Descartados operativos" />
+                <KpiCard label="Cola activa" value={stats.total} caption="Leads Meta sin asignar" icon="users" tone="blue" />
+                <KpiCard label="Por revisar" value={stats.pendingReview} caption="Listos para validar" icon="lead" tone="purple" />
+                <KpiCard label="Incompletos" value={stats.incomplete} caption="Falta negocio o maps" icon="alert" tone="orange" />
+                <KpiCard label="No aptos" value={stats.notSuitable} caption="Descartados operativos" icon="close" tone="red" />
             </section>
 
             <Card className="overflow-hidden">
-                <div className="flex flex-col gap-4 px-4 py-4">
+                <div className="flex flex-col gap-3 bg-gradient-to-b from-white to-[#fbfaff] px-4 py-4">
                     <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                         <div>
                             <h2 className="text-[14px] font-semibold text-[#171717]">
@@ -174,11 +192,11 @@ export default function AdminLeadsPage() {
                             value={filters.search}
                             onChange={(e) => patchFilters({ search: e.target.value })}
                             placeholder="Buscar lead, telefono, negocio, ciudad..."
-                            className="xl:w-[340px]"
+                            className="xl:w-[360px]"
                         />
                     </div>
 
-                    <div className="grid gap-2 md:grid-cols-3">
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                         <FilterSelect
                             label="Estado"
                             value={filters.status}
@@ -223,15 +241,15 @@ export default function AdminLeadsPage() {
                     leads={filteredLeads}
                     loading={loading}
                     savingId={savingId}
-                    onEdit={setEditingLead}
+                    onQuickActions={setQuickLead}
                 />
 
-                <div className="flex items-center justify-between gap-3 border-t border-[#f0f1f2] px-4 py-3">
+                <div className="flex flex-col gap-3 border-t border-[#f0f1f2] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-[12px] font-medium text-[#9ca3af]">
                         {filteredLeads.length} leads cargados en esta vista
                     </p>
                     {hasMore ? (
-                        <Button onClick={loadMore} disabled={loadingMore}>
+                        <Button onClick={loadMore} disabled={loadingMore} className="w-full sm:w-auto">
                             {loadingMore ? "Cargando..." : "Cargar mas"}
                         </Button>
                     ) : null}
@@ -255,6 +273,15 @@ export default function AdminLeadsPage() {
                 users={users}
                 onAssign={assignLead}
             />
+
+            <LeadQuickActionsModal
+                lead={quickLead}
+                onClose={() => setQuickLead(null)}
+                onEdit={(lead) => {
+                    setQuickLead(null);
+                    setEditingLead(lead);
+                }}
+            />
         </div>
     );
 }
@@ -263,18 +290,26 @@ function LeadAccessCard({
     href,
     title,
     body,
+    icon,
+    tone,
 }: {
     href: string;
     title: string;
     body: string;
+    icon: "history" | "assign";
+    tone: "slate" | "green";
 }) {
     return (
         <Link
             href={href}
-            className="rounded-lg border border-[#e5e7eb] bg-white px-4 py-3 shadow-sm transition hover:border-[#bfdbfe] hover:bg-[#eff6ff]"
+            className="group flex items-center gap-4 rounded-2xl border border-[#e7e8f0] bg-white px-4 py-4 shadow-[0_16px_42px_rgba(16,25,54,0.06)] transition hover:border-[#c4b5fd] hover:bg-[#fbfaff]"
         >
-            <div className="text-[13px] font-semibold text-[#171717]">{title}</div>
-            <div className="mt-1 text-[12px] font-medium text-[#71717a]">{body}</div>
+            <AppIcon name={icon} tone={tone} size="lg" />
+            <div className="min-w-0">
+                <div className="text-[14px] font-bold text-[#101936]">{title}</div>
+                <div className="mt-1 max-w-[360px] text-[12px] font-medium leading-snug text-[#66739a]">{body}</div>
+            </div>
+            <span className="ml-auto text-[18px] font-bold text-[#a78bfa] transition group-hover:translate-x-0.5">›</span>
         </Link>
     );
 }
@@ -308,39 +343,55 @@ function LeadsTable({
     leads,
     loading,
     savingId,
-    onEdit,
+    onQuickActions,
 }: {
     leads: MetaLeadDoc[];
     loading: boolean;
     savingId: string | null;
-    onEdit: (lead: MetaLeadDoc) => void;
+    onQuickActions: (lead: MetaLeadDoc) => void;
 }) {
     return (
-        <div className="overflow-x-auto border-t border-[#f0f1f2]">
-            <table className="w-full min-w-[1180px] border-collapse">
+        <div className="border-t border-[#f0f1f2]">
+            <div className="divide-y divide-[#f0f1f2] lg:hidden">
+                {loading ? (
+                    <TableState icon="refresh" title="Cargando leads" body="Estamos preparando la cola operativa." />
+                ) : leads.length === 0 ? (
+                    <TableState icon="filter" title="Sin resultados" body="No hay leads con esos filtros." />
+                ) : (
+                    leads.map((lead) => (
+                        <LeadMobileCard
+                            key={lead.id}
+                            lead={lead}
+                            saving={savingId === lead.id}
+                            onQuickActions={onQuickActions}
+                        />
+                    ))
+                )}
+            </div>
+
+            <div className="hidden overflow-x-auto lg:block">
+            <table className="w-full min-w-[960px] border-collapse">
                 <thead>
-                    <tr className="border-b border-[#f0f1f2] text-left text-[11px] font-medium text-[#9ca3af]">
-                        <th className="px-4 py-3">Lead</th>
-                        <th className="px-4 py-3">Estado</th>
-                        <th className="px-4 py-3">Ciudad</th>
-                        <th className="px-4 py-3">Mapa</th>
-                        <th className="px-4 py-3">Ultimo mensaje</th>
-                        <th className="px-4 py-3">Accion</th>
-                        <th className="px-4 py-3 text-right">Actividad</th>
+                    <tr className="border-b border-[#f0f1f2] bg-[#fcfcff] text-left text-[10px] font-bold uppercase tracking-[0.06em] text-[#8a93ad]">
+                        <th className="px-3 py-2.5">Lead</th>
+                        <th className="px-3 py-2.5">Estado</th>
+                        <th className="px-3 py-2.5">Ciudad</th>
+                        <th className="px-3 py-2.5">Ultimo mensaje</th>
+                        <th className="px-3 py-2.5 text-right">Actividad</th>
                     </tr>
                 </thead>
 
                 <tbody>
                     {loading ? (
                         <tr>
-                            <td colSpan={7} className="p-8 text-center text-[13px] font-medium text-[#71717a]">
-                                Cargando leads...
+                            <td colSpan={5}>
+                                <TableState icon="refresh" title="Cargando leads" body="Estamos preparando la cola operativa." />
                             </td>
                         </tr>
                     ) : leads.length === 0 ? (
                         <tr>
-                            <td colSpan={7} className="p-8 text-center text-[13px] font-medium text-[#71717a]">
-                                No hay leads con esos filtros.
+                            <td colSpan={5}>
+                                <TableState icon="filter" title="Sin resultados" body="No hay leads con esos filtros." />
                             </td>
                         </tr>
                     ) : (
@@ -349,36 +400,88 @@ function LeadsTable({
                                 key={lead.id}
                                 lead={lead}
                                 saving={savingId === lead.id}
-                                onEdit={onEdit}
+                                onQuickActions={onQuickActions}
                             />
                         ))
                     )}
                 </tbody>
             </table>
+            </div>
         </div>
+    );
+}
+
+function LeadMobileCard({
+    lead,
+    saving,
+    onQuickActions,
+}: {
+    lead: MetaLeadDoc;
+    saving: boolean;
+    onQuickActions: (lead: MetaLeadDoc) => void;
+}) {
+    return (
+        <button
+            type="button"
+            onClick={() => {
+                if (!saving) onQuickActions(lead);
+            }}
+            className="block w-full px-4 py-3 text-left transition hover:bg-[#f8f7ff] disabled:opacity-60"
+            disabled={saving}
+        >
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                        <span className="truncate text-[13px] font-bold text-[#101936]">
+                            {displayName(lead)}
+                        </span>
+                        {hasNewInbound(lead) ? <Badge tone="green">NEW</Badge> : null}
+                    </div>
+                    <div className="mt-1 truncate text-[11px] font-medium text-[#8a93ad]">
+                        {[lead.phone, lead.business].filter(Boolean).join(" - ") || "Sin datos de contacto"}
+                    </div>
+                </div>
+                <Badge tone={statusTone[lead.verificationStatus]}>
+                    {statusLabel[lead.verificationStatus]}
+                </Badge>
+            </div>
+
+            <div className="mt-3 grid gap-2 text-[11px] font-medium text-[#66739a]">
+                <div className="flex items-center justify-between gap-3">
+                    <span className="truncate">{cityLabel(lead)}</span>
+                    {lead.location.outOfCoverage ? <Badge tone="yellow">Fuera</Badge> : null}
+                </div>
+                <div className="truncate">{lead.lastInboundText || "Sin mensaje reciente"}</div>
+                <div className="text-[#9ca3af]">
+                    {formatDate(lead.lastInboundMessageAt || lead.updatedAt || lead.createdAt)}
+                </div>
+            </div>
+        </button>
     );
 }
 
 function LeadRow({
     lead,
     saving,
-    onEdit,
+    onQuickActions,
 }: {
     lead: MetaLeadDoc;
     saving: boolean;
-    onEdit: (lead: MetaLeadDoc) => void;
+    onQuickActions: (lead: MetaLeadDoc) => void;
 }) {
     return (
-        <tr className="border-b border-[#f0f1f2] last:border-0 hover:bg-[#fafafa]">
-            <td className="px-4 py-3">
+        <tr
+            onClick={() => {
+                if (!saving) onQuickActions(lead);
+            }}
+            className="cursor-pointer border-b border-[#f0f1f2] last:border-0 hover:bg-[#f8f7ff]"
+        >
+            <td className="px-3 py-2.5">
                 <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                        <Link
-                            href={`/admin/leads/${lead.id}`}
-                            className="truncate text-[12px] font-semibold text-[#171717] hover:underline"
-                        >
+                        <span className="truncate text-[12px] font-semibold text-[#171717]">
                             {displayName(lead)}
-                        </Link>
+                        </span>
                         {hasNewInbound(lead) ? <Badge tone="green">NEW</Badge> : null}
                     </div>
                     <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-1 text-[11px] font-medium text-[#9ca3af]">
@@ -388,7 +491,7 @@ function LeadRow({
                 </div>
             </td>
 
-            <td className="px-4 py-3">
+            <td className="px-3 py-2.5">
                 <div className="flex items-center gap-2">
                     <Badge tone={statusTone[lead.verificationStatus]}>
                         {statusLabel[lead.verificationStatus]}
@@ -399,9 +502,9 @@ function LeadRow({
                 </div>
             </td>
 
-            <td className="px-4 py-3">
+            <td className="px-3 py-2.5">
                 <div className="flex items-center gap-2">
-                    <span className="text-[12px] font-semibold text-[#171717]">
+                    <span className="max-w-[190px] truncate text-[12px] font-semibold text-[#171717]">
                         {cityLabel(lead)}
                     </span>
                     {lead.location.outOfCoverage ? <Badge tone="yellow">Fuera</Badge> : null}
@@ -411,48 +514,68 @@ function LeadRow({
                 </div>
             </td>
 
-            <td className="px-4 py-3">
-                {lead.location.mapsUrl ? (
-                    <a
-                        href={lead.location.mapsUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        title="Google Maps"
-                        aria-label="Abrir en Google Maps"
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#e5e7eb] bg-white text-[#52525b] shadow-sm transition hover:bg-[#f9fafb]"
-                    >
-                        <MapIcon />
-                    </a>
-                ) : (
-                    <Badge tone="gray">Sin mapa</Badge>
-                )}
-            </td>
-
-            <td className="px-4 py-3">
-                <div className="max-w-[220px] truncate text-[12px] font-medium text-[#52525b]">
+            <td className="px-3 py-2.5">
+                <div className="max-w-[250px] truncate text-[12px] font-medium text-[#52525b]">
                     {lead.lastInboundText || "Sin mensaje reciente"}
                 </div>
             </td>
 
-            <td className="px-4 py-3">
-                <Button onClick={() => onEdit(lead)} disabled={saving}>
-                    Editar
-                </Button>
-            </td>
-
-            <td className="px-4 py-3 text-right text-[12px] font-semibold text-[#71717a]">
+            <td className="px-3 py-2.5 text-right text-[12px] font-semibold text-[#71717a]">
                 {formatDate(lead.lastInboundMessageAt || lead.updatedAt || lead.createdAt)}
             </td>
         </tr>
     );
 }
 
-function MapIcon() {
+function TableState({
+    icon,
+    title,
+    body,
+}: {
+    icon: "filter" | "refresh";
+    title: string;
+    body: string;
+}) {
     return (
-        <span aria-hidden className="relative block h-4 w-4">
-            <span className="absolute left-[5px] top-[1px] h-3 w-3 rotate-45 rounded-[3px] border border-current" />
-            <span className="absolute left-[8px] top-[4px] h-1.5 w-1.5 rounded-full bg-current" />
-        </span>
+        <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
+            <AppIcon name={icon} tone={icon === "refresh" ? "purple" : "slate"} size="lg" />
+            <div className="mt-3 text-[13px] font-bold text-[#101936]">{title}</div>
+            <div className="mt-1 text-[12px] font-medium text-[#66739a]">{body}</div>
+        </div>
+    );
+}
+
+function LeadQuickActionsModal({
+    lead,
+    onClose,
+    onEdit,
+}: {
+    lead: MetaLeadDoc | null;
+    onClose: () => void;
+    onEdit: (lead: MetaLeadDoc) => void;
+}) {
+    if (!lead) return null;
+
+    return (
+        <Modal
+            open={!!lead}
+            onClose={onClose}
+            title={displayName(lead)}
+            subtitle={lead.business || lead.location.address || lead.phone || "Acciones rapidas"}
+        >
+            <div className="grid gap-3 sm:grid-cols-3">
+                <ActionTile href={`/admin/leads/${lead.id}`} icon="chat" label="Chat" tone="purple" />
+                {lead.location.mapsUrl ? (
+                    <ActionTile href={lead.location.mapsUrl} icon="map" label="Maps" tone="green" external />
+                ) : null}
+                <ActionTileButton
+                    onClick={() => onEdit(lead)}
+                    icon="edit"
+                    label="Editar"
+                    tone="orange"
+                />
+            </div>
+        </Modal>
     );
 }
 
