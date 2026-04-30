@@ -62,7 +62,7 @@ const rejectReasonLabel: Record<string, string> = {
 
 function selectClassName(extra = "") {
     return [
-        "h-10 rounded-[15px] border border-white/[0.08] bg-[#0F172A] px-3 text-[13px] font-bold text-[#F9FAFB] outline-none transition focus:border-blue-400/35 focus:ring-2 focus:ring-blue-400/10 sm:h-9 sm:rounded-lg sm:text-[12px] xl:border-[#e5e7eb] xl:bg-white xl:font-semibold xl:text-[#52525b] xl:focus:border-[#7c3aed] xl:focus:ring-violet-100",
+        "h-10 rounded-[15px] border border-white/[0.08] bg-[#0F172A] px-3 text-[13px] font-bold text-[#101936] outline-none transition focus:border-blue-400/35 focus:ring-2 focus:ring-blue-400/10 sm:h-9 sm:rounded-lg sm:text-[12px] xl:border-[#e5e7eb] xl:bg-white xl:font-semibold xl:text-[#52525b] xl:focus:border-[#7c3aed] xl:focus:ring-violet-100",
         extra,
     ].join(" ");
 }
@@ -458,7 +458,7 @@ export default function ActivityPage() {
                                 <h2 className="text-[14px] font-semibold text-[#171717]">
                                     Auditoría {viewMode === "day" ? "diaria" : "semanal"}
                                 </h2>
-                                <p className="mt-0.5 text-[12px] font-medium text-[#9ca3af]">
+                                <p className="mt-0.5 text-[12px] font-medium text-[#66739A]">
                                     {filteredRows.length} visibles de {events.length} cargados
                                 </p>
                             </div>
@@ -536,7 +536,7 @@ export default function ActivityPage() {
                     <ActivityTable rows={filteredRows} loading={loading} onQuickActions={setQuickRow} />
 
                     <div className="flex items-center justify-between gap-3 border-t border-[#f0f1f2] px-4 py-3">
-                        <p className="text-[12px] font-medium text-[#9ca3af]">
+                        <p className="text-[12px] font-medium text-[#66739A]">
                             Consulta paginada en bloques de {PAGE_SIZE}
                         </p>
                         {hasMore ? (
@@ -651,68 +651,62 @@ function MobileActivityView({
     const pct = stats.total <= 0 ? 0 : Math.round((done / Math.max(1, stats.total)) * 100);
 
     return (
-        <div className="-mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] max-w-[100vw] overflow-x-hidden bg-[#0B1220] bg-[linear-gradient(rgba(3,10,20,0.62),rgba(3,10,20,0.62)),url('/brand/trackgo-bg-map.png')] bg-cover bg-center px-3 pb-4 pt-2 text-[#F9FAFB]">
-            <div className="mb-2 flex items-center gap-2">
+        <div className="-mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] max-w-[100vw] overflow-x-hidden 
+        bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.16),transparent_34%),linear-gradient(180deg,#FBFAFF_0%,#F6F3FF_48%,#FFFFFF_100%)]
+        px-3 pb-4 pt-2 text-[#101936]">
+
+            {/* HEADER */}
+            <div className="mb-3 flex items-center gap-2">
                 <div className="min-w-0 flex-1">
-                    <h1 className="truncate text-[19px] font-black text-white">Actividad</h1>
-                    <p className="mt-0.5 truncate text-[11px] font-extrabold text-[#9CA3AF]">
-                        <span className="font-black text-white">{done}</span> / {stats.total} completados
+                    <h1 className="truncate text-[20px] font-black">Actividad</h1>
+                    <p className="mt-0.5 text-[11px] font-semibold text-[#66739A]">
+                        <span className="font-black text-[#7C3AED]">{done}</span> / {stats.total} completados
                     </p>
                 </div>
 
+                {/* ingresos */}
                 <button
-                    type="button"
                     onClick={onOpenEarnings}
-                    className="inline-flex h-9 max-w-[130px] items-center gap-1.5 rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 text-[11px] font-black text-[#A7F3D0]"
+                    className="inline-flex h-9 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 text-[11px] font-bold text-emerald-600"
                 >
-                    <span>R$</span>
-                    <span className="truncate">{Number(amountTotal || 0).toFixed(2)}</span>
+                    R$ {Number(amountTotal || 0).toFixed(2)}
                 </button>
 
+                {/* refresh */}
                 <button
-                    type="button"
                     onClick={onRefresh}
-                    disabled={loading}
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-[#1F2937] bg-[#0F172A] text-white disabled:opacity-50"
+                    className="flex h-10 w-10 items-center justify-center rounded-[12px] border border-[#E8E7FB] bg-white"
                 >
-                    <AppIcon name="refresh" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-white ring-0" />
+                    <AppIcon name="refresh" tone="purple" size="sm" />
                 </button>
             </div>
 
-            <div className="mb-2 grid grid-cols-2 gap-2 rounded-[16px] border border-white/[0.08] bg-[#0F172A]/90 p-1">
-                <button
-                    type="button"
-                    onClick={() => onChangeViewMode("day")}
-                    className={[
-                        "h-9 rounded-[13px] text-[12px] font-black transition",
-                        viewMode === "day"
-                            ? "bg-blue-500 text-white shadow-[0_10px_25px_rgba(37,99,235,0.22)]"
-                            : "text-[#9CA3AF]",
-                    ].join(" ")}
-                >
-                    Día
-                </button>
-
-                <button
-                    type="button"
-                    onClick={() => onChangeViewMode("week")}
-                    className={[
-                        "h-9 rounded-[13px] text-[12px] font-black transition",
-                        viewMode === "week"
-                            ? "bg-blue-500 text-white shadow-[0_10px_25px_rgba(37,99,235,0.22)]"
-                            : "text-[#9CA3AF]",
-                    ].join(" ")}
-                >
-                    Semana
-                </button>
+            {/* SWITCH */}
+            <div className="mb-3 grid grid-cols-2 gap-2 rounded-xl border border-[#E8E7FB] bg-white p-1">
+                {(["day", "week"] as ActivityViewMode[]).map((mode) => (
+                    <button
+                        key={mode}
+                        type="button"
+                        onClick={() => onChangeViewMode(mode)}
+                        className={[
+                            "h-9 rounded-[13px] text-[12px] font-black transition",
+                            viewMode === mode
+                                ? "bg-blue-500 text-white shadow-[0_10px_25px_rgba(37,99,235,0.22)]"
+                                : "text-[#66739A]",
+                        ].join(" ")}
+                    >
+                        {mode === "day" ? "Día" : "Semana"}
+                    </button>
+                ))}
             </div>
 
-            <div className="mb-2 grid grid-cols-4 gap-1.5">
+            {/* STATS */}
+            <div className="mb-3 grid grid-cols-4 gap-2">
                 <MobileStatButton
                     label="Visitados"
                     value={stats.visited}
                     icon="check"
-                    color="text-[#86EFAC]"
+                    color="text-green-600"
                     onClick={() => onOpenList("visited")}
                     disabled={stats.visited <= 0}
                 />
@@ -720,7 +714,7 @@ function MobileActivityView({
                     label="Rechazados"
                     value={stats.rejected}
                     icon="close"
-                    color="text-[#FCA5A5]"
+                    color="text-red-500"
                     onClick={() => onOpenList("rejected")}
                     disabled={stats.rejected <= 0}
                 />
@@ -728,7 +722,7 @@ function MobileActivityView({
                     label="Pendientes"
                     value={stats.pending}
                     icon="alert"
-                    color="text-[#FDE68A]"
+                    color="text-yellow-500"
                     onClick={() => onOpenList("pending")}
                     disabled={stats.pending <= 0}
                 />
@@ -736,140 +730,104 @@ function MobileActivityView({
                     label="Asignados"
                     value={stats.users}
                     icon="assign"
-                    color="text-[#CBD5E1]"
+                    color="text-[#66739A]"
                 />
             </div>
 
-            <div className="mb-2 flex h-[40px] items-center gap-2 rounded-[13px] border border-[#1F2937] bg-[#0F172A] px-3">
-                <AppIcon name="search" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#9CA3AF] ring-0" />
+            {/* SEARCH */}
+            <div className="mb-3 flex h-[42px] items-center gap-2 rounded-xl border border-[#E8E7FB] bg-white px-3">
+                <AppIcon name="search" tone="slate" size="sm" />
                 <input
                     value={filters.search}
-                    onChange={(event) => onPatchFilters({ search: event.target.value })}
+                    onChange={(e) => onPatchFilters({ search: e.target.value })}
                     placeholder="Buscar..."
-                    className="min-w-0 flex-1 bg-transparent text-[13px] font-bold text-white outline-none placeholder:text-[#9CA3AF]"
+                    className="flex-1 bg-transparent text-[13px] font-medium outline-none"
                 />
-                {filters.search ? (
-                    <button
-                        type="button"
-                        onClick={() => onPatchFilters({ search: "" })}
-                        className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-white/[0.06] text-white"
-                    >
-                        ×
-                    </button>
-                ) : null}
             </div>
 
-            <div className="mb-2 rounded-[14px] border border-[#1F2937] bg-[#0F172A]/90 p-2.5">
-                <div className="flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 items-center gap-2">
-                        <AppIcon name="activity" tone="blue" size="sm" className="h-5 w-5 bg-transparent text-[#93C5FD] ring-0" />
-                        <p className="truncate text-[12px] font-black text-[#CBD5E1]">
-                            {viewMode === "day" ? "Día" : "Semana"} · {filters.startKey} → {filters.endKey}
-                        </p>
-                    </div>
+            {/* FILTROS HEADER */}
+            <div className="mb-3 rounded-xl border border-[#E8E7FB] bg-white p-3">
+                <div className="flex items-center justify-between">
+                    <p className="text-[12px] font-semibold text-[#66739A]">
+                        {filters.startKey} → {filters.endKey}
+                    </p>
 
                     <button
-                        type="button"
                         onClick={onToggleFilters}
-                        className="rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-[11px] font-black text-[#DDEAFE]"
+                        className="text-[11px] font-bold text-[#7C3AED]"
                     >
                         {filtersOpen ? "Ocultar" : "Filtros"}
                     </button>
                 </div>
 
-                <div className="mt-2 h-2 overflow-hidden rounded-full border border-white/[0.06] bg-white/[0.04]">
-                    <div className="h-full rounded-full bg-emerald-400/55" style={{ width: `${pct}%` }} />
+                {/* PROGRESS */}
+                <div className="mt-2 h-2 rounded-full bg-[#EEF2FF]">
+                    <div
+                        className="h-full rounded-full bg-[#7C3AED]"
+                        style={{ width: `${pct}%` }}
+                    />
                 </div>
 
-                <p className="mt-2 truncate text-[10px] font-bold text-[#64748B]">
-                    Pendientes = acumulado hasta la fecha final.
-                </p>
-
-                {filtersOpen ? (
+                {/* FILTROS */}
+                {filtersOpen && (
                     <div className="mt-3 grid gap-2">
-                        <div className="grid grid-cols-2 gap-2">
-                            <MobileField label="Desde">
-                                <input
-                                    type="date"
-                                    value={filters.startKey}
-                                    onChange={(event) => onPatchFilters({ startKey: event.target.value })}
-                                    className="h-10 min-w-0 rounded-[13px] border border-[#1F2937] bg-[#111827] px-3 text-[12px] font-black text-white outline-none"
-                                />
-                            </MobileField>
+                        <input
+                            type="date"
+                            value={filters.startKey}
+                            onChange={(e) => onPatchFilters({ startKey: e.target.value })}
+                            className="h-10 rounded-lg border border-[#E8E7FB] px-3"
+                        />
 
-                            <MobileField label="Hasta">
-                                <input
-                                    type="date"
-                                    value={filters.endKey}
-                                    onChange={(event) => onPatchFilters({ endKey: event.target.value })}
-                                    className="h-10 min-w-0 rounded-[13px] border border-[#1F2937] bg-[#111827] px-3 text-[12px] font-black text-white outline-none"
-                                />
-                            </MobileField>
-                        </div>
+                        <input
+                            type="date"
+                            value={filters.endKey}
+                            onChange={(e) => onPatchFilters({ endKey: e.target.value })}
+                            className="h-10 rounded-lg border border-[#E8E7FB] px-3"
+                        />
 
-                        <MobileField label="Usuario">
-                            <select
-                                value={filters.userId}
-                                onChange={(event) => onPatchFilters({ userId: event.target.value })}
-                                className="h-10 rounded-[13px] border border-[#1F2937] bg-[#111827] px-3 text-[12px] font-black text-white outline-none"
-                            >
-                                <option value="all">Todos</option>
-                                {users.map((user) => (
-                                    <option key={user.id} value={user.id}>
-                                        {user.name || user.email || "Usuario"}
-                                    </option>
-                                ))}
-                            </select>
-                        </MobileField>
-
-                        <MobileField label="Estado">
-                            <select
-                                value={filters.type}
-                                onChange={(event) => onPatchFilters({ type: event.target.value as ActivityEventType })}
-                                className="h-10 rounded-[13px] border border-[#1F2937] bg-[#111827] px-3 text-[12px] font-black text-white outline-none"
-                            >
-                                <option value="all">Todos</option>
-                                <option value="visited">Visitados</option>
-                                <option value="rejected">Rechazados</option>
-                                <option value="pending">Pendientes</option>
-                            </select>
-                        </MobileField>
+                        <select
+                            value={filters.userId}
+                            onChange={(e) => onPatchFilters({ userId: e.target.value })}
+                            className="h-10 rounded-lg border border-[#E8E7FB] px-3"
+                        >
+                            <option value="all">Todos</option>
+                            {users.map((u) => (
+                                <option key={u.id} value={u.id}>
+                                    {u.name}
+                                </option>
+                            ))}
+                        </select>
 
                         <div className="grid grid-cols-2 gap-2">
-                            {activeFiltersCount > 0 ? (
-                                <Button onClick={onResetFilters}>Limpiar</Button>
-                            ) : (
-                                <div />
-                            )}
-                            <Button variant="primary" onClick={onApplyRange} disabled={loading}>
+                            <Button onClick={onResetFilters}>Limpiar</Button>
+                            <Button variant="primary" onClick={onApplyRange}>
                                 Aplicar
                             </Button>
                         </div>
                     </div>
-                ) : null}
+                )}
             </div>
 
-            <div className="grid min-w-0 gap-1.5 overflow-x-hidden">
+            {/* LISTA */}
+            <div className="grid gap-2">
                 {loading ? (
-                    <ActivityTableState icon="refresh" title="Cargando actividad" body="Estamos consultando eventos y pendientes." />
+                    <ActivityTableState icon="refresh" title="Cargando" body="..." />
                 ) : rows.length === 0 ? (
-                    <ActivityTableState icon="filter" title="Sin resultados" body="No hay actividad con esos filtros." />
+                    <ActivityTableState icon="filter" title="Sin resultados" body="..." />
                 ) : (
                     rows.map((row) => (
-                        <ActivityMobileCard key={row.id} row={row} onQuickActions={onOpenRow} compact />
+                        <ActivityMobileCard key={row.id} row={row} onQuickActions={onOpenRow} />
                     ))
                 )}
 
-                {hasMore ? (
+                {hasMore && (
                     <button
-                        type="button"
                         onClick={onLoadMore}
-                        disabled={loadingMore}
-                        className="mt-1 min-h-12 rounded-[16px] border border-white/[0.08] bg-[#0F172A] px-4 text-[13px] font-black text-white disabled:opacity-60"
+                        className="mt-2 h-12 rounded-xl border border-[#E8E7FB] bg-white font-bold"
                     >
                         {loadingMore ? "Cargando..." : "Cargar más"}
                     </button>
-                ) : null}
+                )}
             </div>
         </div>
     );
@@ -901,7 +859,7 @@ function MobileStatButton({
                 <AppIcon name={icon} tone="slate" size="sm" className={`h-4 w-4 bg-transparent ring-0 ${color}`} />
                 <span className="text-[12px] font-black text-white">{value}</span>
             </div>
-            <div className="mt-1 truncate text-center text-[9px] font-black text-[#9CA3AF]">{label}</div>
+            <div className="mt-1 truncate text-center text-[9px] font-black text-[#66739A]">{label}</div>
         </button>
     );
 }
@@ -915,7 +873,7 @@ function MobileField({
 }) {
     return (
         <label className="grid gap-1">
-            <span className="text-[11px] font-black text-[#9CA3AF]">{label}</span>
+            <span className="text-[11px] font-black text-[#66739A]">{label}</span>
             {children}
         </label>
     );
@@ -984,16 +942,16 @@ function ActivityMobileCard({
             type="button"
             onClick={() => onQuickActions(row)}
             className={[
-                "block w-full max-w-full overflow-hidden rounded-[15px] border border-[#1F2937] bg-[#111827] text-left transition active:bg-[#0F172A]",
+                "block w-full max-w-full overflow-hidden rounded-[15px] border border-[#E8E7FB] bg-white text-left transition active:bg-[#0F172A]",
                 compact ? "px-2.5 py-2.5" : "px-3 py-3",
             ].join(" ")}
         >
             <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13px] font-black text-[#F9FAFB]">
+                    <div className="truncate text-[13px] font-black text-[#101936]">
                         {eventTitle(row)}
                     </div>
-                    <div className="mt-0.5 truncate text-[11px] font-extrabold text-[#9CA3AF]">
+                    <div className="mt-0.5 truncate text-[11px] font-extrabold text-[#66739A]">
                         {eventSubtitle(row)}
                     </div>
                 </div>
@@ -1011,7 +969,7 @@ function ActivityMobileCard({
                     </div>
                 </div>
 
-                <div className="text-right text-[10px] font-black text-[#9CA3AF]">
+                <div className="text-right text-[10px] font-black text-[#66739A]">
                     {formatDate(row.createdAt)}
                 </div>
             </div>
@@ -1047,7 +1005,7 @@ function ActivityRow({
                     <div className="truncate text-[12px] font-semibold text-[#171717]">
                         {eventTitle(row)}
                     </div>
-                    <div className="mt-0.5 truncate text-[11px] font-medium text-[#9ca3af]">
+                    <div className="mt-0.5 truncate text-[11px] font-medium text-[#66739A]">
                         {eventSubtitle(row)}
                     </div>
                 </div>
@@ -1070,7 +1028,7 @@ function ActivityRow({
                     <div className="truncate text-[12px] font-semibold text-[#52525b]">
                         {row.userName}
                     </div>
-                    <div className="mt-0.5 truncate text-[11px] font-medium text-[#9ca3af]">
+                    <div className="mt-0.5 truncate text-[11px] font-medium text-[#66739A]">
                         {row.billingMode === "weekly_subscription" ? "Suscripción" : "Por visita"}
                     </div>
                 </div>
@@ -1078,7 +1036,7 @@ function ActivityRow({
 
             <td className="px-3 py-2.5">
                 <div className="text-[12px] font-semibold text-[#52525b]">{row.dayKey}</div>
-                <div className="mt-0.5 text-[11px] font-medium text-[#9ca3af]">
+                <div className="mt-0.5 text-[11px] font-medium text-[#66739A]">
                     {formatDate(row.createdAt)}
                 </div>
             </td>
@@ -1098,10 +1056,10 @@ function ActivityTableState({
     return (
         <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
             <AppIcon name={icon} tone={icon === "refresh" ? "purple" : "slate"} size="lg" />
-            <div className="mt-3 text-[13px] font-black text-[#F9FAFB] xl:font-bold xl:text-[#101936]">
+            <div className="mt-3 text-[13px] font-black text-[#101936] xl:font-bold xl:text-[#101936]">
                 {title}
             </div>
-            <div className="mt-1 text-[12px] font-bold text-[#9CA3AF] xl:font-medium xl:text-[#66739a]">
+            <div className="mt-1 text-[12px] font-bold text-[#66739] xl:font-medium xl:text-[#66739a]">
                 {body}
             </div>
         </div>
@@ -1211,7 +1169,7 @@ function ActivityListModal({
                                         <div className="truncate text-[13px] font-bold text-[#171717]">
                                             {eventTitle(row)}
                                         </div>
-                                        <div className="mt-0.5 truncate text-[11px] font-semibold text-[#9ca3af]">
+                                        <div className="mt-0.5 truncate text-[11px] font-semibold text-[#66739A]">
                                             {eventSubtitle(row)}
                                         </div>
                                         <div className="mt-1 truncate text-[11px] font-semibold text-[#71717a]">
@@ -1263,7 +1221,7 @@ function EarningsModal({
                                 <div className="truncate text-[13px] font-bold text-[#171717]">
                                     {row.name}
                                 </div>
-                                <div className="mt-0.5 truncate text-[11px] font-semibold text-[#9ca3af]">
+                                <div className="mt-0.5 truncate text-[11px] font-semibold text-[#66739A]">
                                     {row.visited} visita(s) · {money(row.rate)}/visita
                                 </div>
                             </div>
