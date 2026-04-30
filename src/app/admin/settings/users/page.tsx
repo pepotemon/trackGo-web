@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
     createManagedUserProfile,
     listAdminUsers,
@@ -10,7 +10,13 @@ import {
     updateUserProfile,
     updateUserRole,
 } from "@/data/usersRepo";
-import type { UserBillingMode, UserDoc, UserGeoCoverage, UserGeoCoverageType, UserRole } from "@/types/users";
+import type {
+    UserBillingMode,
+    UserDoc,
+    UserGeoCoverage,
+    UserGeoCoverageType,
+    UserRole,
+} from "@/types/users";
 import {
     AppIcon,
     Badge,
@@ -87,11 +93,19 @@ function coverageLabel(user: UserDoc) {
     const active = items.filter((item) => item.active !== false);
     const visible = (active.length ? active : items)
         .slice(0, 2)
-        .map((item) => item.displayLabel || item.cityLabel || item.stateLabel || item.countryLabel)
+        .map(
+            (item) =>
+                item.displayLabel ||
+                item.cityLabel ||
+                item.stateLabel ||
+                item.countryLabel
+        )
         .filter(Boolean);
 
     if (!visible.length) return "Sin cobertura";
-    return items.length > 2 ? `${visible.join(" - ")} +${items.length - 2}` : visible.join(" - ");
+    return items.length > 2
+        ? `${visible.join(" - ")} +${items.length - 2}`
+        : visible.join(" - ");
 }
 
 function buildCoverageItem(input: {
@@ -118,10 +132,16 @@ function buildCoverageItem(input: {
             : type === "state"
                 ? `${stateLabel}, ${countryLabel}`
                 : `${cityLabel}, ${stateLabel}`;
+
     const now = Date.now();
 
     return {
-        id: [type, countryNormalized || "all", stateNormalized || "all", cityNormalized || "all"].join("__"),
+        id: [
+            type,
+            countryNormalized || "all",
+            stateNormalized || "all",
+            cityNormalized || "all",
+        ].join("__"),
         type,
         countryLabel,
         countryNormalized,
@@ -185,7 +205,9 @@ function Icon({ name }: { name: IconName }) {
                     <path {...common} d="M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />
                 </>
             ) : null}
-            {name === "shield" ? <path {...common} d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" /> : null}
+            {name === "shield" ? (
+                <path {...common} d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+            ) : null}
             {name === "bot" ? (
                 <>
                     <path {...common} d="M12 8V4" />
@@ -213,6 +235,7 @@ export default function UsersPage() {
     const [err, setErr] = useState<string | null>(null);
     const [search, setSearch] = useState("");
     const [createOpen, setCreateOpen] = useState(false);
+    const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
     const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
     const [autoFilter, setAutoFilter] = useState<AutoFilter>("all");
@@ -233,9 +256,7 @@ export default function UsersPage() {
             if (autoFilter === "on" && !autoEnabled) return false;
             if (autoFilter === "off" && autoEnabled) return false;
 
-            if (billingFilter !== "all" && u.billingMode !== billingFilter) {
-                return false;
-            }
+            if (billingFilter !== "all" && u.billingMode !== billingFilter) return false;
 
             if (!q) return true;
 
@@ -284,8 +305,7 @@ export default function UsersPage() {
             total: users.length,
             active: users.filter((u) => u.active).length,
             admins: users.filter((u) => u.role === "admin").length,
-            weekly: users.filter((u) => u.billingMode === "weekly_subscription")
-                .length,
+            weekly: users.filter((u) => u.billingMode === "weekly_subscription").length,
         };
     }, [users]);
 
@@ -299,9 +319,7 @@ export default function UsersPage() {
     }, [roleFilter, autoFilter, billingFilter, search]);
 
     async function patchUserLocal(userId: string, patch: Partial<UserDoc>) {
-        setUsers((prev) =>
-            prev.map((u) => (u.id === userId ? { ...u, ...patch } : u))
-        );
+        setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, ...patch } : u)));
     }
 
     async function handleCreated(user: UserDoc) {
@@ -319,64 +337,102 @@ export default function UsersPage() {
 
     return (
         <div className="mx-auto w-full max-w-[1220px]">
-            <PageHeader
-                title="Usuarios"
-                subtitle="Gestiona permisos, cobertura, auto-asignacion y modelos de pago."
-                icon={<AppIcon name="users" tone="blue" size="sm" className="bg-transparent text-white ring-0" />}
-                actions={
-                    <div className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:flex sm:flex-wrap sm:justify-end">
-                        <IconButton icon="refresh" label="Actualizar" variant="primary" onClick={loadUsers} />
-                        <IconButton
-                            icon="plus"
-                            label="Crear usuario"
-                            variant="primary"
-                            onClick={() => setCreateOpen(true)}
+            <div className="xl:hidden">
+                <MobileUsersView
+                    users={filteredUsers}
+                    stats={stats}
+                    search={search}
+                    loading={loading}
+                    selectedUserId={selectedUserId}
+                    roleFilter={roleFilter}
+                    autoFilter={autoFilter}
+                    billingFilter={billingFilter}
+                    filtersOpen={mobileFiltersOpen}
+                    activeFiltersCount={activeFiltersCount}
+                    onSearch={setSearch}
+                    onSelectUser={setSelectedUserId}
+                    onRefresh={loadUsers}
+                    onCreate={() => setCreateOpen(true)}
+                    onToggleFilters={() => setMobileFiltersOpen((value) => !value)}
+                    onResetFilters={resetFilters}
+                    onRoleFilter={(value) => setRoleFilter(value)}
+                    onAutoFilter={(value) => setAutoFilter(value)}
+                    onBillingFilter={(value) => setBillingFilter(value)}
+                />
+            </div>
+
+            <div className="hidden xl:block">
+                <PageHeader
+                    title="Usuarios"
+                    subtitle="Gestiona permisos, cobertura, auto-asignación y modelos de pago."
+                    icon={
+                        <AppIcon
+                            name="users"
+                            tone="blue"
+                            size="sm"
+                            className="bg-transparent text-white ring-0"
                         />
+                    }
+                    actions={
+                        <div className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:flex sm:flex-wrap sm:justify-end">
+                            <IconButton
+                                icon="refresh"
+                                label="Actualizar"
+                                variant="primary"
+                                onClick={loadUsers}
+                            />
+                            <IconButton
+                                icon="plus"
+                                label="Crear usuario"
+                                variant="primary"
+                                onClick={() => setCreateOpen(true)}
+                            />
+                        </div>
+                    }
+                />
+
+                {err ? (
+                    <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] font-semibold text-red-600">
+                        {err}
                     </div>
-                }
-            />
+                ) : null}
 
-            {err ? (
-                <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] font-semibold text-red-600">
-                    {err}
-                </div>
-            ) : null}
+                <section className="mb-4 grid grid-cols-4 gap-4">
+                    <KpiCard label="Usuarios" value={stats.total} caption="Total registrado" icon="users" tone="blue" />
+                    <KpiCard label="Activos" value={stats.active} caption="Usuarios operativos" icon="check" tone="green" />
+                    <KpiCard label="Admins" value={stats.admins} caption="Permisos admin" icon="assign" tone="purple" />
+                    <KpiCard label="Suscripción" value={stats.weekly} caption="Modelo semanal" icon="lead" tone="orange" />
+                </section>
 
-            <section className="mb-3 grid grid-cols-2 gap-2 md:gap-4 xl:mb-4 xl:grid-cols-4">
-                <KpiCard label="Usuarios" value={stats.total} caption="Total registrado" icon="users" tone="blue" />
-                <KpiCard label="Activos" value={stats.active} caption="Usuarios operativos" icon="check" tone="green" />
-                <KpiCard label="Admins" value={stats.admins} caption="Permisos admin" icon="assign" tone="purple" />
-                <KpiCard label="Suscripcion" value={stats.weekly} caption="Modelo semanal" icon="lead" tone="orange" />
-            </section>
-
-            <section>
                 <Card className="overflow-hidden">
-                    <div className="flex flex-col gap-3 bg-[#111827] px-3 py-3 xl:bg-white xl:px-4 xl:py-4">
-                        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                            <div className="hidden xl:block">
-                                <h2 className="text-[14px] font-semibold text-[#172033]">
-                                    Equipo
-                                </h2>
+                    <div className="flex flex-col gap-3 bg-gradient-to-b from-white to-[#fbfaff] px-4 py-4">
+                        <div className="flex flex-row items-center justify-between gap-3">
+                            <div>
+                                <h2 className="text-[14px] font-semibold text-[#172033]">Equipo</h2>
                                 <p className="mt-0.5 text-[12px] font-medium text-[#667085]">
-                                    Busca, filtra y selecciona un usuario para editarlo.
+                                    {filteredUsers.length} visibles de {users.length} usuarios
                                 </p>
                             </div>
 
-                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                            <div className="flex items-center gap-2">
                                 <Input
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
                                     placeholder="Buscar usuario..."
-                                    className="sm:w-[280px]"
+                                    className="w-[320px]"
                                 />
 
                                 {activeFiltersCount > 0 ? (
-                                    <IconButton icon="close" label="Limpiar filtros" onClick={resetFilters} />
+                                    <IconButton
+                                        icon="close"
+                                        label="Limpiar filtros"
+                                        onClick={resetFilters}
+                                    />
                                 ) : null}
                             </div>
                         </div>
 
-                        <div className="grid gap-2 md:grid-cols-3">
+                        <div className="grid grid-cols-3 gap-2">
                             <FilterSelect
                                 label="Rol"
                                 value={roleFilter}
@@ -388,7 +444,7 @@ export default function UsersPage() {
                             </FilterSelect>
 
                             <FilterSelect
-                                label="Auto-asignacion"
+                                label="Auto-asignación"
                                 value={autoFilter}
                                 onChange={(value) => setAutoFilter(value as AutoFilter)}
                             >
@@ -404,125 +460,19 @@ export default function UsersPage() {
                             >
                                 <option value="all">Todos los modelos</option>
                                 <option value="per_visit">Por visita</option>
-                                <option value="weekly_subscription">Suscripcion</option>
+                                <option value="weekly_subscription">Suscripción</option>
                             </FilterSelect>
                         </div>
                     </div>
 
-                    <div className="border-t border-white/[0.08] xl:border-[#eef1f5]">
-                        <div className="divide-y divide-white/[0.08] lg:hidden">
-                            {loading ? (
-                                <UsersTableState icon="refresh" title="Cargando usuarios" body="Estamos preparando el equipo." />
-                            ) : filteredUsers.length === 0 ? (
-                                <UsersTableState icon="filter" title="Sin resultados" body="No hay usuarios con ese filtro." />
-                            ) : (
-                                filteredUsers.map((user) => (
-                                    <UserMobileCard
-                                        key={user.id}
-                                        user={user}
-                                        selected={selectedUserId === user.id}
-                                        onSelect={() => setSelectedUserId(user.id)}
-                                    />
-                                ))
-                            )}
-                        </div>
-
-                        <div className="hidden overflow-x-auto lg:block">
-                        <table className="w-full min-w-[920px] border-collapse">
-                            <thead>
-                                <tr className="border-b border-[#eef1f5] bg-[#fcfcff] text-left text-[10px] font-bold uppercase tracking-[0.06em] text-[#8a93ad]">
-                                    <th className="px-3 py-2.5">Usuario</th>
-                                    <th className="px-3 py-2.5">Rol</th>
-                                    <th className="px-3 py-2.5">Estado</th>
-                                    <th className="px-3 py-2.5">Modelo</th>
-                                    <th className="px-3 py-2.5">Cobertura</th>
-                                    <th className="px-3 py-2.5">Auto</th>
-                                </tr>
-                            </thead>
-
-                            <tbody>
-                                {loading ? (
-                                    <tr>
-                                        <td colSpan={6}>
-                                            <UsersTableState icon="refresh" title="Cargando usuarios" body="Estamos preparando el equipo." />
-                                        </td>
-                                    </tr>
-                                ) : filteredUsers.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={6}>
-                                            <UsersTableState icon="filter" title="Sin resultados" body="No hay usuarios con ese filtro." />
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    filteredUsers.map((u) => {
-                                        const selected = selectedUserId === u.id;
-                                        const autoEnabled = u.autoAssignEnabled === true;
-
-                                        return (
-                                            <tr
-                                                key={u.id}
-                                                onClick={() => setSelectedUserId(u.id)}
-                                                className={
-                                                    selected
-                                                        ? "cursor-pointer border-b border-[#eef1f5] bg-[#eff6ff] last:border-0"
-                                                        : "cursor-pointer border-b border-[#eef1f5] last:border-0 hover:bg-[#f9fafb]"
-                                                }
-                                            >
-                                                <td className="px-3 py-2.5">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="flex h-8 w-8 items-center justify-center rounded-2xl bg-gradient-to-br from-[#7c3aed] to-[#2563eb] text-[12px] font-semibold text-white shadow-sm">
-                                                            {(u.name || u.email || "U").slice(0, 1).toUpperCase()}
-                                                        </div>
-                                                        <div className="min-w-0">
-                                                            <div className="truncate text-[12px] font-semibold text-[#172033]">
-                                                                {u.name || "Usuario"}
-                                                            </div>
-                                                            <div className="mt-0.5 truncate text-[11px] font-medium text-[#98a2b3]">
-                                                                {u.email || "Sin correo registrado"}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </td>
-
-                                                <td className="px-3 py-2.5">
-                                                    <Badge tone={u.role === "admin" ? "blue" : "gray"}>
-                                                        {u.role === "admin" ? "Admin" : "Vendedor"}
-                                                    </Badge>
-                                                </td>
-
-                                                <td className="px-3 py-2.5">
-                                                    <Badge tone={u.active ? "green" : "red"}>
-                                                        {u.active ? "Activo" : "Inactivo"}
-                                                    </Badge>
-                                                </td>
-
-                                                <td className="px-3 py-2.5">
-                                                    <Badge tone="gray">
-                                                        {u.billingMode === "weekly_subscription" ? "Suscripcion" : "Por visita"}
-                                                    </Badge>
-                                                </td>
-
-                                                <td className="px-3 py-2.5">
-                                                    <div className="max-w-[220px] truncate text-[12px] font-semibold text-[#344054]">
-                                                        {coverageLabel(u)}
-                                                    </div>
-                                                </td>
-
-                                                <td className="px-3 py-2.5">
-                                                    <Badge tone={autoEnabled ? "green" : "gray"}>
-                                                        {autoEnabled ? "Auto ON" : "Auto OFF"}
-                                                    </Badge>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })
-                                )}
-                            </tbody>
-                        </table>
-                        </div>
-                    </div>
+                    <UsersTable
+                        users={filteredUsers}
+                        loading={loading}
+                        selectedUserId={selectedUserId}
+                        onSelectUser={setSelectedUserId}
+                    />
                 </Card>
-            </section>
+            </div>
 
             <EditUserModal
                 user={selectedUser}
@@ -544,6 +494,384 @@ export default function UsersPage() {
     );
 }
 
+function MobileUsersView({
+    users,
+    stats,
+    search,
+    loading,
+    selectedUserId,
+    roleFilter,
+    autoFilter,
+    billingFilter,
+    filtersOpen,
+    activeFiltersCount,
+    onSearch,
+    onSelectUser,
+    onRefresh,
+    onCreate,
+    onToggleFilters,
+    onResetFilters,
+    onRoleFilter,
+    onAutoFilter,
+    onBillingFilter,
+}: {
+    users: UserDoc[];
+    stats: { total: number; active: number; admins: number; weekly: number };
+    search: string;
+    loading: boolean;
+    selectedUserId: string | null;
+    roleFilter: RoleFilter;
+    autoFilter: AutoFilter;
+    billingFilter: BillingFilter;
+    filtersOpen: boolean;
+    activeFiltersCount: number;
+    onSearch: (value: string) => void;
+    onSelectUser: (id: string) => void;
+    onRefresh: () => void;
+    onCreate: () => void;
+    onToggleFilters: () => void;
+    onResetFilters: () => void;
+    onRoleFilter: (value: RoleFilter) => void;
+    onAutoFilter: (value: AutoFilter) => void;
+    onBillingFilter: (value: BillingFilter) => void;
+}) {
+    return (
+        <div className="-mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] max-w-[100vw] overflow-x-hidden bg-[#0B1220] bg-[linear-gradient(rgba(3,10,20,0.62),rgba(3,10,20,0.62)),url('/brand/trackgo-bg-map.png')] bg-cover bg-center px-3 pb-4 pt-2 text-[#F9FAFB]">
+            <div className="mb-2 flex items-center gap-2">
+                <div className="min-w-0 flex-1">
+                    <h1 className="truncate text-[19px] font-black text-white">Usuarios</h1>
+                    <p className="mt-0.5 truncate text-[11px] font-extrabold text-[#9CA3AF]">
+                        <span className="font-black text-white">{stats.active}</span> activos ·{" "}
+                        <span className="font-black text-white">{stats.total}</span> total
+                    </p>
+                </div>
+
+                <button
+                    type="button"
+                    onClick={onCreate}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-violet-400/25 bg-violet-500/10 text-white"
+                    aria-label="Crear usuario"
+                    title="Crear usuario"
+                >
+                    <AppIcon
+                        name="plus"
+                        tone="purple"
+                        size="sm"
+                        className="h-5 w-5 bg-transparent text-white ring-0"
+                    />
+                </button>
+
+                <button
+                    type="button"
+                    onClick={onRefresh}
+                    disabled={loading}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-[#1F2937] bg-[#0F172A] text-white disabled:opacity-50"
+                    aria-label="Actualizar"
+                    title="Actualizar"
+                >
+                    <AppIcon
+                        name="refresh"
+                        tone="slate"
+                        size="sm"
+                        className="h-5 w-5 bg-transparent text-white ring-0"
+                    />
+                </button>
+            </div>
+
+            <div className="mb-2 grid grid-cols-4 gap-1.5">
+                <MobileStat label="Usuarios" value={stats.total} icon="users" color="text-[#93C5FD]" />
+                <MobileStat label="Activos" value={stats.active} icon="check" color="text-[#86EFAC]" />
+                <MobileStat label="Admins" value={stats.admins} icon="assign" color="text-[#C4B5FD]" />
+                <MobileStat label="Subs." value={stats.weekly} icon="lead" color="text-[#FDE68A]" />
+            </div>
+
+            <div className="mb-2 flex h-[40px] items-center gap-2 rounded-[13px] border border-[#1F2937] bg-[#0F172A] px-3">
+                <AppIcon
+                    name="search"
+                    tone="slate"
+                    size="sm"
+                    className="h-5 w-5 bg-transparent text-[#9CA3AF] ring-0"
+                />
+                <input
+                    value={search}
+                    onChange={(event) => onSearch(event.target.value)}
+                    placeholder="Buscar usuario..."
+                    className="min-w-0 flex-1 bg-transparent text-[13px] font-bold text-white outline-none placeholder:text-[#9CA3AF]"
+                />
+                {search ? (
+                    <button
+                        type="button"
+                        onClick={() => onSearch("")}
+                        className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-white/[0.06] text-white"
+                    >
+                        ×
+                    </button>
+                ) : null}
+            </div>
+
+            <div className="mb-2 rounded-[14px] border border-[#1F2937] bg-[#0F172A]/90 p-2.5">
+                <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                        <AppIcon
+                            name="filter"
+                            tone="blue"
+                            size="sm"
+                            className="h-5 w-5 bg-transparent text-[#93C5FD] ring-0"
+                        />
+                        <p className="truncate text-[12px] font-black text-[#CBD5E1]">
+                            Filtros del equipo
+                            {activeFiltersCount > 0 ? ` · ${activeFiltersCount}` : ""}
+                        </p>
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={onToggleFilters}
+                        className="rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-[11px] font-black text-[#DDEAFE]"
+                    >
+                        {filtersOpen ? "Ocultar" : "Filtros"}
+                    </button>
+                </div>
+
+                {filtersOpen ? (
+                    <div className="mt-3 grid gap-2">
+                        <MobileField label="Rol">
+                            <select
+                                value={roleFilter}
+                                onChange={(event) => onRoleFilter(event.target.value as RoleFilter)}
+                                className="h-10 rounded-[13px] border border-[#1F2937] bg-[#111827] px-3 text-[12px] font-black text-white outline-none"
+                            >
+                                <option value="all">Todos los roles</option>
+                                <option value="admin">Admins</option>
+                                <option value="user">Vendedores</option>
+                            </select>
+                        </MobileField>
+
+                        <MobileField label="Auto-asignación">
+                            <select
+                                value={autoFilter}
+                                onChange={(event) => onAutoFilter(event.target.value as AutoFilter)}
+                                className="h-10 rounded-[13px] border border-[#1F2937] bg-[#111827] px-3 text-[12px] font-black text-white outline-none"
+                            >
+                                <option value="all">Todos</option>
+                                <option value="on">Auto ON</option>
+                                <option value="off">Auto OFF</option>
+                            </select>
+                        </MobileField>
+
+                        <MobileField label="Modelo de cobro">
+                            <select
+                                value={billingFilter}
+                                onChange={(event) =>
+                                    onBillingFilter(event.target.value as BillingFilter)
+                                }
+                                className="h-10 rounded-[13px] border border-[#1F2937] bg-[#111827] px-3 text-[12px] font-black text-white outline-none"
+                            >
+                                <option value="all">Todos los modelos</option>
+                                <option value="per_visit">Por visita</option>
+                                <option value="weekly_subscription">Suscripción</option>
+                            </select>
+                        </MobileField>
+
+                        {activeFiltersCount > 0 ? (
+                            <button
+                                type="button"
+                                onClick={onResetFilters}
+                                className="min-h-10 rounded-[13px] border border-white/[0.08] bg-white/[0.04] px-3 text-[12px] font-black text-white"
+                            >
+                                Limpiar filtros
+                            </button>
+                        ) : null}
+                    </div>
+                ) : null}
+            </div>
+
+            <div className="grid min-w-0 gap-1.5 overflow-x-hidden">
+                {loading ? (
+                    <UsersTableState
+                        icon="refresh"
+                        title="Cargando usuarios"
+                        body="Estamos preparando el equipo."
+                    />
+                ) : users.length === 0 ? (
+                    <UsersTableState
+                        icon="filter"
+                        title="Sin resultados"
+                        body="No hay usuarios con ese filtro."
+                    />
+                ) : (
+                    users.map((user) => (
+                        <UserMobileCard
+                            key={user.id}
+                            user={user}
+                            selected={selectedUserId === user.id}
+                            onSelect={() => onSelectUser(user.id)}
+                        />
+                    ))
+                )}
+            </div>
+        </div>
+    );
+}
+
+function MobileStat({
+    label,
+    value,
+    icon,
+    color,
+}: {
+    label: string;
+    value: number;
+    icon: Parameters<typeof AppIcon>[0]["name"];
+    color: string;
+}) {
+    return (
+        <div className="min-w-0 rounded-[13px] border border-white/[0.08] bg-white/[0.035] px-1.5 py-2">
+            <div className="flex items-center justify-center gap-1">
+                <AppIcon
+                    name={icon}
+                    tone="slate"
+                    size="sm"
+                    className={`h-4 w-4 bg-transparent ring-0 ${color}`}
+                />
+                <span className="text-[12px] font-black text-white">{value}</span>
+            </div>
+            <div className="mt-1 truncate text-center text-[9px] font-black text-[#9CA3AF]">
+                {label}
+            </div>
+        </div>
+    );
+}
+
+function MobileField({ label, children }: { label: string; children: ReactNode }) {
+    return (
+        <label className="grid gap-1">
+            <span className="text-[11px] font-black text-[#9CA3AF]">{label}</span>
+            {children}
+        </label>
+    );
+}
+
+function UsersTable({
+    users,
+    loading,
+    selectedUserId,
+    onSelectUser,
+}: {
+    users: UserDoc[];
+    loading: boolean;
+    selectedUserId: string | null;
+    onSelectUser: (id: string) => void;
+}) {
+    return (
+        <div className="border-t border-[#eef1f5]">
+            <div className="hidden overflow-x-auto lg:block">
+                <table className="w-full min-w-[920px] border-collapse">
+                    <thead>
+                        <tr className="border-b border-[#eef1f5] bg-[#fcfcff] text-left text-[10px] font-bold uppercase tracking-[0.06em] text-[#8a93ad]">
+                            <th className="px-3 py-2.5">Usuario</th>
+                            <th className="px-3 py-2.5">Rol</th>
+                            <th className="px-3 py-2.5">Estado</th>
+                            <th className="px-3 py-2.5">Modelo</th>
+                            <th className="px-3 py-2.5">Cobertura</th>
+                            <th className="px-3 py-2.5">Auto</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {loading ? (
+                            <tr>
+                                <td colSpan={6}>
+                                    <UsersTableState
+                                        icon="refresh"
+                                        title="Cargando usuarios"
+                                        body="Estamos preparando el equipo."
+                                    />
+                                </td>
+                            </tr>
+                        ) : users.length === 0 ? (
+                            <tr>
+                                <td colSpan={6}>
+                                    <UsersTableState
+                                        icon="filter"
+                                        title="Sin resultados"
+                                        body="No hay usuarios con ese filtro."
+                                    />
+                                </td>
+                            </tr>
+                        ) : (
+                            users.map((u) => {
+                                const selected = selectedUserId === u.id;
+                                const autoEnabled = u.autoAssignEnabled === true;
+
+                                return (
+                                    <tr
+                                        key={u.id}
+                                        onClick={() => onSelectUser(u.id)}
+                                        className={
+                                            selected
+                                                ? "cursor-pointer border-b border-[#eef1f5] bg-[#eff6ff] last:border-0"
+                                                : "cursor-pointer border-b border-[#eef1f5] last:border-0 hover:bg-[#f9fafb]"
+                                        }
+                                    >
+                                        <td className="px-3 py-2.5">
+                                            <div className="flex items-center gap-3">
+                                                <div className="flex h-8 w-8 items-center justify-center rounded-2xl bg-gradient-to-br from-[#7c3aed] to-[#2563eb] text-[12px] font-semibold text-white shadow-sm">
+                                                    {(u.name || u.email || "U").slice(0, 1).toUpperCase()}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <div className="truncate text-[12px] font-semibold text-[#172033]">
+                                                        {u.name || "Usuario"}
+                                                    </div>
+                                                    <div className="mt-0.5 truncate text-[11px] font-medium text-[#98a2b3]">
+                                                        {u.email || "Sin correo registrado"}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+
+                                        <td className="px-3 py-2.5">
+                                            <Badge tone={u.role === "admin" ? "blue" : "gray"}>
+                                                {u.role === "admin" ? "Admin" : "Vendedor"}
+                                            </Badge>
+                                        </td>
+
+                                        <td className="px-3 py-2.5">
+                                            <Badge tone={u.active ? "green" : "red"}>
+                                                {u.active ? "Activo" : "Inactivo"}
+                                            </Badge>
+                                        </td>
+
+                                        <td className="px-3 py-2.5">
+                                            <Badge tone="gray">
+                                                {u.billingMode === "weekly_subscription"
+                                                    ? "Suscripción"
+                                                    : "Por visita"}
+                                            </Badge>
+                                        </td>
+
+                                        <td className="px-3 py-2.5">
+                                            <div className="max-w-[220px] truncate text-[12px] font-semibold text-[#344054]">
+                                                {coverageLabel(u)}
+                                            </div>
+                                        </td>
+
+                                        <td className="px-3 py-2.5">
+                                            <Badge tone={autoEnabled ? "green" : "gray"}>
+                                                {autoEnabled ? "Auto ON" : "Auto OFF"}
+                                            </Badge>
+                                        </td>
+                                    </tr>
+                                );
+                            })
+                        )}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+}
+
 function FilterSelect({
     label,
     value,
@@ -552,12 +880,12 @@ function FilterSelect({
 }: {
     label: string;
     value: string;
-    children: React.ReactNode;
+    children: ReactNode;
     onChange: (value: string) => void;
 }) {
     return (
         <label className="block">
-            <span className="mb-1 block text-[10px] font-black uppercase tracking-[0.07em] text-[#9CA3AF] xl:font-semibold xl:text-[#667085]">
+            <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.07em] text-[#667085]">
                 {label}
             </span>
             <select
@@ -582,9 +910,17 @@ function UsersTableState({
 }) {
     return (
         <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
-            <AppIcon name={icon} tone={icon === "refresh" ? "purple" : "slate"} size="lg" />
-            <div className="mt-3 text-[13px] font-black text-[#F9FAFB] xl:font-bold xl:text-[#101936]">{title}</div>
-            <div className="mt-1 text-[12px] font-bold text-[#9CA3AF] xl:font-medium xl:text-[#66739a]">{body}</div>
+            <AppIcon
+                name={icon}
+                tone={icon === "refresh" ? "purple" : "slate"}
+                size="lg"
+            />
+            <div className="mt-3 text-[13px] font-black text-[#F9FAFB] xl:font-bold xl:text-[#101936]">
+                {title}
+            </div>
+            <div className="mt-1 text-[12px] font-bold text-[#9CA3AF] xl:font-medium xl:text-[#66739a]">
+                {body}
+            </div>
         </div>
     );
 }
@@ -604,46 +940,58 @@ function UserMobileCard({
         <button
             type="button"
             onClick={onSelect}
-            className={
+            className={[
+                "block w-full max-w-full overflow-hidden rounded-[15px] border text-left transition",
                 selected
-                    ? "block w-full bg-blue-500/16 px-3 py-3 text-left xl:bg-[#eff6ff] xl:px-4"
-                    : "block w-full bg-[#111827] px-3 py-3 text-left transition active:bg-[#0F172A] xl:bg-white xl:px-4 xl:hover:bg-[#f8f7ff]"
-            }
+                    ? "border-blue-400/30 bg-blue-500/16"
+                    : "border-[#1F2937] bg-[#111827] active:bg-[#0F172A]",
+            ].join(" ")}
         >
-            <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-3">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#7c3aed] to-[#2563eb] text-[13px] font-semibold text-white shadow-sm">
-                        {(user.name || user.email || "U").slice(0, 1).toUpperCase()}
-                    </div>
-                    <div className="min-w-0">
-                        <div className="truncate text-[14px] font-black text-[#F9FAFB] xl:text-[13px] xl:font-bold xl:text-[#101936]">
-                            {user.name || "Usuario"}
+            <div className="p-2.5">
+                <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[13px] bg-gradient-to-br from-[#7c3aed] to-[#2563eb] text-[13px] font-black text-white shadow-sm">
+                            {(user.name || user.email || "U").slice(0, 1).toUpperCase()}
                         </div>
-                        <div className="mt-1 truncate text-[12px] font-extrabold text-[#9CA3AF] xl:text-[11px] xl:font-medium xl:text-[#8a93ad]">
-                            {user.email || "Sin correo registrado"}
+
+                        <div className="min-w-0">
+                            <div className="truncate text-[13px] font-black text-[#F9FAFB]">
+                                {user.name || "Usuario"}
+                            </div>
+                            <div className="mt-0.5 truncate text-[11px] font-extrabold text-[#9CA3AF]">
+                                {user.email || "Sin correo registrado"}
+                            </div>
                         </div>
                     </div>
+
+                    <Badge tone={user.active ? "green" : "red"}>
+                        {user.active ? "Activo" : "Inactivo"}
+                    </Badge>
                 </div>
 
-                <Badge tone={user.active ? "green" : "red"}>
-                    {user.active ? "Activo" : "Inactivo"}
-                </Badge>
-            </div>
+                <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                    <Badge tone={user.role === "admin" ? "blue" : "gray"}>
+                        {user.role === "admin" ? "Admin" : "Vendedor"}
+                    </Badge>
+                    <Badge tone="gray">
+                        {user.billingMode === "weekly_subscription" ? "Suscripción" : "Por visita"}
+                    </Badge>
+                    <Badge tone={autoEnabled ? "green" : "gray"}>
+                        {autoEnabled ? "Auto ON" : "Auto OFF"}
+                    </Badge>
+                </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-                <Badge tone={user.role === "admin" ? "blue" : "gray"}>
-                    {user.role === "admin" ? "Admin" : "Vendedor"}
-                </Badge>
-                <Badge tone="gray">
-                    {user.billingMode === "weekly_subscription" ? "Suscripcion" : "Por visita"}
-                </Badge>
-                <Badge tone={autoEnabled ? "green" : "gray"}>
-                    {autoEnabled ? "Auto ON" : "Auto OFF"}
-                </Badge>
-            </div>
-
-            <div className="mt-3 truncate text-[11px] font-black text-[#93C5FD] xl:font-semibold xl:text-[#66739a]">
-                {coverageLabel(user)}
+                <div className="mt-3 flex items-center gap-2 rounded-[12px] border border-blue-400/20 bg-blue-500/[0.08] px-3 py-2">
+                    <AppIcon
+                        name="map"
+                        tone="slate"
+                        size="sm"
+                        className="h-4 w-4 bg-transparent text-[#93C5FD] ring-0"
+                    />
+                    <div className="min-w-0 flex-1 truncate text-[11px] font-black text-[#93C5FD]">
+                        {coverageLabel(user)}
+                    </div>
+                </div>
             </div>
         </button>
     );
@@ -677,7 +1025,7 @@ function CreateUserModal({
         }
 
         if (cleanPassword.length < 6) {
-            onError("La contrasena debe tener minimo 6 caracteres.");
+            onError("La contraseña debe tener mínimo 6 caracteres.");
             return;
         }
 
@@ -734,12 +1082,12 @@ function CreateUserModal({
                         </Field>
                     </div>
 
-                    <Field label="Contrasena temporal">
+                    <Field label="Contraseña temporal">
                         <Input
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            placeholder="Minimo 6 caracteres"
+                            placeholder="Mínimo 6 caracteres"
                         />
                     </Field>
 
@@ -759,7 +1107,7 @@ function CreateUserModal({
                     </div>
 
                     <div className="rounded-xl border border-violet-100 bg-violet-50 px-3 py-2 text-[12px] font-semibold text-[#6d5fb4]">
-                        Se crea activo. Cobertura, auto-asignacion y contabilidad se ajustan luego en editar.
+                        Se crea activo. Cobertura, auto-asignación y contabilidad se ajustan luego en editar.
                     </div>
                 </EditorBlock>
 
@@ -831,9 +1179,7 @@ function EditUserModal({
             setWeeklyActive(user.weeklySubscriptionActive !== false);
             setAutoAssignEnabled(user.autoAssignEnabled === true);
             setAutoAssignDailyLimit(
-                user.autoAssignDailyLimit == null
-                    ? ""
-                    : String(user.autoAssignDailyLimit)
+                user.autoAssignDailyLimit == null ? "" : String(user.autoAssignDailyLimit)
             );
             setCoverageList(Array.isArray(user.geoCoverage) ? user.geoCoverage : []);
             setCoverageType("city");
@@ -882,9 +1228,11 @@ function EditUserModal({
                 autoAssignEnabled,
                 autoAssignEnabled ? dailyLimit : null
             );
+
             const normalizedCoverage = await updateUserGeoCoverage(user.id, coverageList);
             patch.geoCoverage = normalizedCoverage;
             patch.primaryGeoCoverageLabel = normalizedCoverage[0]?.displayLabel ?? null;
+
             await onPatch(user.id, patch);
             onClose();
         } catch (e: unknown) {
@@ -899,25 +1247,15 @@ function EditUserModal({
             open={open}
             onClose={onClose}
             title={`Editar ${user.name || "usuario"}`}
-            subtitle="Modifica perfil, rol, auto-asignacion y contabilidad."
+            subtitle="Modifica perfil, rol, auto-asignación y contabilidad."
         >
             <div className="space-y-4">
                 <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-                    <MiniTab icon="user" active={activeTab === "profile"} onClick={() => setActiveTab("profile")}>
-                        Perfil
-                    </MiniTab>
-                    <MiniTab icon="map" active={activeTab === "coverage"} onClick={() => setActiveTab("coverage")}>
-                        Cobertura
-                    </MiniTab>
-                    <MiniTab icon="shield" active={activeTab === "role"} onClick={() => setActiveTab("role")}>
-                        Rol
-                    </MiniTab>
-                    <MiniTab icon="bot" active={activeTab === "autoAssign"} onClick={() => setActiveTab("autoAssign")}>
-                        Auto
-                    </MiniTab>
-                    <MiniTab icon="wallet" active={activeTab === "billing"} onClick={() => setActiveTab("billing")}>
-                        Contabilidad
-                    </MiniTab>
+                    <MiniTab icon="user" active={activeTab === "profile"} onClick={() => setActiveTab("profile")}>Perfil</MiniTab>
+                    <MiniTab icon="map" active={activeTab === "coverage"} onClick={() => setActiveTab("coverage")}>Cobertura</MiniTab>
+                    <MiniTab icon="shield" active={activeTab === "role"} onClick={() => setActiveTab("role")}>Rol</MiniTab>
+                    <MiniTab icon="bot" active={activeTab === "autoAssign"} onClick={() => setActiveTab("autoAssign")}>Auto</MiniTab>
+                    <MiniTab icon="wallet" active={activeTab === "billing"} onClick={() => setActiveTab("billing")}>Contabilidad</MiniTab>
                 </div>
 
                 {activeTab === "profile" ? (
@@ -994,10 +1332,10 @@ function EditUserModal({
                 ) : null}
 
                 {activeTab === "autoAssign" ? (
-                    <EditorBlock title="Auto-asignacion">
+                    <EditorBlock title="Auto-asignación">
                         <label className="flex items-center justify-between rounded-lg border border-[#e5e7eb] bg-white px-3 py-2">
                             <span className="text-[12px] font-semibold text-[#52525b]">
-                                Recibir leads automaticamente
+                                Recibir leads automáticamente
                             </span>
                             <input
                                 type="checkbox"
@@ -1007,11 +1345,11 @@ function EditUserModal({
                         </label>
 
                         {autoAssignEnabled ? (
-                            <Field label="Limite diario">
+                            <Field label="Límite diario">
                                 <Input
                                     value={autoAssignDailyLimit}
                                     onChange={(e) => setAutoAssignDailyLimit(onlyNumberLike(e.target.value))}
-                                    placeholder="Vacio = sin limite"
+                                    placeholder="Vacío = sin límite"
                                 />
                             </Field>
                         ) : null}
@@ -1021,33 +1359,55 @@ function EditUserModal({
                 {activeTab === "billing" ? (
                     <EditorBlock title="Contabilidad">
                         <div className="grid grid-cols-2 gap-2">
-                            <Choice active={billingMode === "per_visit"} onClick={() => setBillingMode("per_visit")} label="Por visita" />
-                            <Choice active={billingMode === "weekly_subscription"} onClick={() => setBillingMode("weekly_subscription")} label="Suscripcion" />
+                            <Choice
+                                active={billingMode === "per_visit"}
+                                onClick={() => setBillingMode("per_visit")}
+                                label="Por visita"
+                            />
+                            <Choice
+                                active={billingMode === "weekly_subscription"}
+                                onClick={() => setBillingMode("weekly_subscription")}
+                                label="Suscripción"
+                            />
                         </div>
 
                         {billingMode === "per_visit" ? (
                             <Field label="Tarifa por visita">
-                                <Input value={ratePerVisit} onChange={(e) => setRatePerVisit(onlyNumberLike(e.target.value))} />
+                                <Input
+                                    value={ratePerVisit}
+                                    onChange={(e) => setRatePerVisit(onlyNumberLike(e.target.value))}
+                                />
                             </Field>
                         ) : (
                             <div className="grid grid-cols-2 gap-3">
                                 <Field label="Cuota semanal">
-                                    <Input value={weeklyAmount} onChange={(e) => setWeeklyAmount(onlyNumberLike(e.target.value))} />
+                                    <Input
+                                        value={weeklyAmount}
+                                        onChange={(e) => setWeeklyAmount(onlyNumberLike(e.target.value))}
+                                    />
                                 </Field>
 
                                 <Field label="Costo semanal">
-                                    <Input value={weeklyCost} onChange={(e) => setWeeklyCost(onlyNumberLike(e.target.value))} />
+                                    <Input
+                                        value={weeklyCost}
+                                        onChange={(e) => setWeeklyCost(onlyNumberLike(e.target.value))}
+                                    />
                                 </Field>
 
                                 <label className="col-span-2 flex items-center justify-between rounded-lg border border-[#e5e7eb] bg-white px-3 py-2">
                                     <span className="text-[12px] font-semibold text-[#52525b]">
-                                        Suscripcion activa
+                                        Suscripción activa
                                     </span>
-                                    <input type="checkbox" checked={weeklyActive} onChange={(e) => setWeeklyActive(e.target.checked)} />
+                                    <input
+                                        type="checkbox"
+                                        checked={weeklyActive}
+                                        onChange={(e) => setWeeklyActive(e.target.checked)}
+                                    />
                                 </label>
 
                                 <div className="col-span-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] font-semibold text-emerald-600">
-                                    Neto estimado: {money(safeNumber(weeklyAmount, 0) - safeNumber(weeklyCost, 0))}
+                                    Neto estimado:{" "}
+                                    {money(safeNumber(weeklyAmount, 0) - safeNumber(weeklyCost, 0))}
                                 </div>
                             </div>
                         )}
@@ -1061,7 +1421,11 @@ function EditUserModal({
                         variant={active ? "danger" : "secondary"}
                         onClick={() => setActive((value) => !value)}
                         disabled={saving}
-                        className={active ? "" : "border-emerald-200 text-emerald-600 hover:bg-emerald-50"}
+                        className={
+                            active
+                                ? ""
+                                : "border-emerald-200 text-emerald-600 hover:bg-emerald-50"
+                        }
                     />
                     <IconButton
                         icon="check"
@@ -1104,7 +1468,7 @@ function CoverageEditor({
     onRemove: (id: string) => void;
 }) {
     return (
-        <EditorBlock title="Cobertura geografica">
+        <EditorBlock title="Cobertura geográfica">
             <div className="grid gap-3 sm:grid-cols-3">
                 <Field label="Tipo">
                     <select
@@ -1114,24 +1478,32 @@ function CoverageEditor({
                     >
                         <option value="city">Ciudad</option>
                         <option value="state">Estado</option>
-                        <option value="country">Pais</option>
+                        <option value="country">País</option>
                     </select>
                 </Field>
 
-                <Field label="Pais">
+                <Field label="País">
                     <Input value={country} onChange={(e) => onCountry(e.target.value)} />
                 </Field>
 
                 {type !== "country" ? (
                     <Field label="Estado">
-                        <Input value={state} onChange={(e) => onState(e.target.value)} placeholder="Ej: Pernambuco" />
+                        <Input
+                            value={state}
+                            onChange={(e) => onState(e.target.value)}
+                            placeholder="Ej: Pernambuco"
+                        />
                     </Field>
                 ) : null}
             </div>
 
             {type === "city" ? (
                 <Field label="Ciudad">
-                    <Input value={city} onChange={(e) => onCity(e.target.value)} placeholder="Ej: Recife" />
+                    <Input
+                        value={city}
+                        onChange={(e) => onCity(e.target.value)}
+                        placeholder="Ej: Recife"
+                    />
                 </Field>
             ) : null}
 
@@ -1156,14 +1528,22 @@ function CoverageEditor({
                                     </span>
                                 </div>
                                 <div className="mt-0.5 text-[11px] font-medium text-[#9ca3af]">
-                                    {item.type === "city" ? "Ciudad" : item.type === "state" ? "Estado" : "Pais"}
+                                    {item.type === "city"
+                                        ? "Ciudad"
+                                        : item.type === "state"
+                                            ? "Estado"
+                                            : "País"}
                                 </div>
                             </div>
 
                             <div className="flex shrink-0 gap-2">
                                 <IconButton
                                     icon="power"
-                                    label={item.active === false ? "Activar cobertura" : "Pausar cobertura"}
+                                    label={
+                                        item.active === false
+                                            ? "Activar cobertura"
+                                            : "Pausar cobertura"
+                                    }
                                     onClick={() => onToggle(item.id)}
                                 />
                                 <IconButton
@@ -1185,13 +1565,7 @@ function CoverageEditor({
     );
 }
 
-function EditorBlock({
-    title,
-    children,
-}: {
-    title: string;
-    children: React.ReactNode;
-}) {
+function EditorBlock({ title, children }: { title: string; children: ReactNode }) {
     return (
         <div className="space-y-3 rounded-2xl border border-[#e4e7ec] bg-gradient-to-b from-white to-[#fbfaff] p-3 shadow-sm">
             <p className="text-[12px] font-semibold text-[#171717]">{title}</p>
@@ -1231,7 +1605,7 @@ function MiniTab({
     onClick,
 }: {
     active: boolean;
-    children: React.ReactNode;
+    children: ReactNode;
     icon: IconName;
     onClick: () => void;
 }) {
@@ -1250,4 +1624,3 @@ function MiniTab({
         </button>
     );
 }
-
