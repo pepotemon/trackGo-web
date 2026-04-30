@@ -14,18 +14,18 @@ export function PageHeader({
     actions?: ReactNode;
 }) {
     return (
-        <header className="mb-4 flex flex-col gap-3 rounded-2xl border border-[#e8e7fb] bg-white/88 px-3 py-3 shadow-[0_14px_34px_rgba(36,30,86,0.07)] backdrop-blur-xl sm:px-4 sm:py-4 lg:mb-5 lg:flex-row lg:items-start lg:justify-between">
+        <header className="mb-3 flex flex-col gap-3 rounded-none border-0 bg-transparent px-1 py-1 shadow-none backdrop-blur-xl sm:px-4 sm:py-4 lg:mb-5 lg:flex-row lg:items-start lg:justify-between xl:rounded-2xl xl:border xl:border-[#e8e7fb] xl:bg-white/88 xl:px-4 xl:py-4 xl:shadow-[0_14px_34px_rgba(36,30,86,0.07)]">
             <div>
                 <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#7c3aed] via-[#5b21ff] to-[#2563eb] text-white shadow-[0_12px_30px_rgba(91,33,255,0.24)] sm:h-11 sm:w-11">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-white/[0.08] bg-[#0F172A] text-white shadow-[0_12px_30px_rgba(0,0,0,0.24)] sm:h-11 sm:w-11 xl:border-0 xl:bg-gradient-to-br xl:from-[#7c3aed] xl:via-[#5b21ff] xl:to-[#2563eb] xl:shadow-[0_12px_30px_rgba(91,33,255,0.24)]">
                         {icon ?? <span className="text-[15px] font-bold">T</span>}
                     </div>
                     <div>
-                        <h1 className="text-[20px] font-bold tracking-[-0.035em] text-[#101936] sm:text-[24px]">
+                        <h1 className="text-[19px] font-black tracking-[-0.035em] text-[#F9FAFB] sm:text-[24px] xl:text-[#101936]">
                             {title}
                         </h1>
                         {subtitle ? (
-                            <p className="mt-0.5 text-[12px] font-medium leading-snug text-[#66739a] sm:mt-1 sm:text-[13px]">
+                            <p className="mt-0.5 text-[12px] font-extrabold leading-snug text-[#9CA3AF] sm:mt-1 sm:text-[13px] xl:font-medium xl:text-[#66739a]">
                                 {subtitle}
                             </p>
                         ) : null}
@@ -33,7 +33,7 @@ export function PageHeader({
                 </div>
 
                 {tabs ? (
-                    <div className="mt-4 inline-flex max-w-full flex-wrap items-center gap-1 rounded-xl border border-[#e4e7ec] bg-[#f8f7ff] p-1 shadow-sm lg:mt-5">
+                    <div className="mt-4 inline-flex max-w-full flex-wrap items-center gap-1 rounded-xl border border-white/[0.08] bg-white/[0.04] p-1 shadow-sm lg:mt-5 xl:border-[#e4e7ec] xl:bg-[#f8f7ff]">
                         {tabs}
                     </div>
                 ) : null}

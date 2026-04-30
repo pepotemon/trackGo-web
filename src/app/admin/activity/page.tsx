@@ -47,7 +47,7 @@ const rejectReasonLabel: Record<string, string> = {
 
 function selectClassName(extra = "") {
     return [
-        "h-9 rounded-lg border border-[#e5e7eb] bg-white px-3 text-[12px] font-semibold text-[#52525b] outline-none transition focus:border-[#171717]",
+        "h-10 rounded-xl border border-[#e5e7eb] bg-white px-3 text-[13px] font-semibold text-[#52525b] outline-none transition focus:border-[#7c3aed] focus:ring-2 focus:ring-violet-100 sm:h-9 sm:rounded-lg sm:text-[12px]",
         extra,
     ].join(" ");
 }
@@ -304,7 +304,7 @@ export default function ActivityPage() {
                 </div>
             ) : null}
 
-            <section className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <section className="mb-4 grid grid-cols-2 gap-2 md:gap-4 xl:grid-cols-5">
                 <KpiCard label="Actividad" value={stats.total} caption="Eventos + pendientes" icon="activity" tone="purple" />
                 <KpiCard label="Visitados" value={stats.visited} caption="Clientes trabajados" icon="check" tone="green" />
                 <KpiCard label="Rechazados" value={stats.rejected} caption="No concretados" icon="close" tone="red" />
@@ -313,7 +313,7 @@ export default function ActivityPage() {
             </section>
 
             <Card className="overflow-hidden">
-                <div className="flex flex-col gap-3 bg-gradient-to-b from-white to-[#fbfaff] px-4 py-4">
+                <div className="flex flex-col gap-3 bg-gradient-to-b from-white to-[#fbfaff] px-3 py-3 sm:px-4 sm:py-4">
                     <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                         <div>
                             <h2 className="text-[14px] font-semibold text-[#171717]">
@@ -481,14 +481,14 @@ function ActivityMobileCard({
         <button
             type="button"
             onClick={() => onQuickActions(row)}
-            className="block w-full px-4 py-3 text-left transition hover:bg-[#f8f7ff]"
+            className="block w-full bg-white px-3 py-3 text-left transition active:bg-[#f8f7ff] sm:px-4"
         >
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                     <div className="truncate text-[13px] font-bold text-[#101936]">
                         {eventTitle(row)}
                     </div>
-                    <div className="mt-1 truncate text-[11px] font-medium text-[#8a93ad]">
+                    <div className="mt-0.5 truncate text-[11px] font-semibold text-[#8a93ad]">
                         {eventSubtitle(row)}
                     </div>
                 </div>
@@ -497,19 +497,27 @@ function ActivityMobileCard({
                 </Badge>
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-2">
+            <div className="mt-3 grid grid-cols-[1fr_auto] gap-3">
+                <div className="min-w-0">
+                    <div className="truncate text-[12px] font-bold text-[#344054]">
+                        {row.userName}
+                    </div>
+                    <div className="mt-0.5 truncate text-[11px] font-medium text-[#98a2b3]">
+                        {row.billingMode === "weekly_subscription" ? "Suscripcion" : "Por visita"}
+                    </div>
+                </div>
+                <div className="text-right text-[11px] font-bold text-[#66739a]">
+                    {formatDate(row.createdAt)}
+                </div>
+            </div>
+
+            <div className="mt-2 flex flex-wrap items-center gap-2">
                 {reason ? (
                     <span className="max-w-full truncate rounded-md bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-600">
                         {reason}
                     </span>
                 ) : null}
                 {row.source === "pending_client" ? <Badge tone="yellow">Actual</Badge> : null}
-                <span className="truncate text-[11px] font-semibold text-[#66739a]">
-                    {row.userName}
-                </span>
-                <span className="text-[11px] font-medium text-[#9ca3af]">
-                    {formatDate(row.createdAt)}
-                </span>
             </div>
         </button>
     );

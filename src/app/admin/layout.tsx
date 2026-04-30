@@ -91,7 +91,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     }
 
     return (
-        <div className="min-h-screen bg-[linear-gradient(180deg,#fbfaff_0%,#f7f8ff_48%,#f3f0ff_100%)] text-[#101936]">
+        <div className="min-h-screen bg-[#0B1220] text-[#F9FAFB] xl:bg-[linear-gradient(180deg,#fbfaff_0%,#f7f8ff_48%,#f3f0ff_100%)] xl:text-[#101936]">
             <aside className="fixed left-0 top-0 hidden h-screen w-[244px] border-r border-[#c8c0ff] bg-[linear-gradient(180deg,#eee8ff_0%,#ddd5ff_46%,#f2f0ff_100%)] px-3 py-4 text-[#172033] shadow-[18px_0_55px_rgba(82,63,169,0.15)] xl:block">
                 <div className="mb-5 flex justify-center border-b border-[#c8c0ff] px-2 pb-4">
                     <TrackGoLogo size="lg" />
@@ -142,27 +142,27 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             </aside>
 
             <div className="xl:pl-[228px]">
-                <div className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-[#e4e7ec] bg-white/92 px-3 backdrop-blur-xl xl:hidden">
+                <div className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-white/[0.06] bg-[#0B1220]/92 px-3 backdrop-blur-xl xl:hidden">
                     <div className="flex items-center gap-2">
                         <TrackGoLogo size="sm" />
                     </div>
 
                     <div className="flex items-center gap-2">
                         <form className="hidden min-w-0 flex-1 sm:block" onSubmit={handleSidebarSearch}>
-                            <label className="flex h-9 w-[260px] items-center gap-2 rounded-full border border-[#e4e7ec] bg-[#fbfaff] px-3 text-[#66739a] shadow-sm">
+                            <label className="flex h-9 w-[260px] items-center gap-2 rounded-full border border-white/[0.08] bg-[#0F172A] px-3 text-[#9CA3AF] shadow-sm">
                                 <NavIcon name="search" />
                                 <input
                                     value={sidebarSearch}
                                     onChange={(event) => setSidebarSearch(event.target.value)}
                                     placeholder="Buscar lead..."
-                                    className="min-w-0 flex-1 bg-transparent text-[12px] font-semibold outline-none placeholder:text-[#98a2b3]"
+                                    className="min-w-0 flex-1 bg-transparent text-[12px] font-semibold text-[#F9FAFB] outline-none placeholder:text-[#9CA3AF]"
                                 />
                             </label>
                         </form>
                         <button
                             type="button"
                             onClick={() => setMobileMenuOpen(true)}
-                            className="flex h-10 w-10 items-center justify-center rounded-2xl border border-[#e8e7fb] bg-white text-[#5b21ff] shadow-[0_10px_24px_rgba(91,33,255,0.14)]"
+                            className="flex h-10 w-10 items-center justify-center rounded-[13px] border border-white/[0.08] bg-[#0F172A] text-[#F9FAFB] shadow-[0_10px_24px_rgba(0,0,0,0.18)]"
                             aria-label="Abrir menu"
                             title="Menu"
                         >
@@ -185,7 +185,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                     pathname={pathname}
                 />
 
-                <main className="min-h-screen px-3 pb-24 pt-4 sm:px-5 lg:px-7 xl:pb-6 xl:pt-5">
+                <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(37,99,235,0.22),_transparent_32%),linear-gradient(180deg,#0B1220_0%,#0B1220_55%,#111827_100%)] px-3 pb-24 pt-4 sm:px-5 lg:px-7 xl:bg-none xl:pb-6 xl:pt-5">
                     {children}
                 </main>
 
@@ -306,13 +306,13 @@ function MobileDrawer({
                 onClick={onClose}
             />
 
-            <aside className="absolute bottom-0 right-0 top-0 flex w-[min(86vw,340px)] flex-col border-l border-[#c8c0ff] bg-[linear-gradient(180deg,#f4f0ff_0%,#e4dcff_48%,#fbfaff_100%)] p-4 text-[#172033] shadow-[-24px_0_70px_rgba(82,63,169,0.26)]">
+            <aside className="absolute bottom-0 right-0 top-0 flex w-[min(86vw,340px)] flex-col border-l border-white/[0.08] bg-[linear-gradient(180deg,#0B1220_0%,#111827_48%,#0F172A_100%)] p-4 text-[#F9FAFB] shadow-[-24px_0_70px_rgba(0,0,0,0.36)]">
                 <div className="mb-4 flex items-center justify-between">
                     <TrackGoLogo size="md" />
                     <button
                         type="button"
                         onClick={onClose}
-                        className="flex h-9 w-9 items-center justify-center rounded-full border border-[#d8d2ff] bg-white/80 text-[20px] leading-none text-[#5b21ff] shadow-sm"
+                        className="flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.04] text-[20px] leading-none text-[#F9FAFB] shadow-sm"
                         aria-label="Cerrar menu"
                     >
                         x
@@ -320,13 +320,13 @@ function MobileDrawer({
                 </div>
 
                 <form className="mb-5" onSubmit={onSearch}>
-                    <label className="flex h-11 items-center gap-2 rounded-2xl border border-[#c8c0ff] bg-white/75 px-3 text-[#5b4ea6] shadow-sm shadow-violet-200/70">
+                    <label className="flex h-11 items-center gap-2 rounded-2xl border border-white/[0.08] bg-[#0F172A] px-3 text-[#9CA3AF] shadow-sm">
                         <NavIcon name="search" />
                         <input
                             value={search}
                             onChange={(event) => setSearch(event.target.value)}
                             placeholder="Buscar lead, telefono..."
-                            className="min-w-0 flex-1 bg-transparent text-[13px] font-semibold text-[#364260] outline-none placeholder:text-[#7c70ba]"
+                            className="min-w-0 flex-1 bg-transparent text-[13px] font-semibold text-[#F9FAFB] outline-none placeholder:text-[#9CA3AF]"
                         />
                     </label>
                 </form>
@@ -337,15 +337,15 @@ function MobileDrawer({
                 </nav>
 
                 <div className="mt-auto space-y-3">
-                    <div className="rounded-2xl border border-[#c8c0ff] bg-white/65 p-3 shadow-sm shadow-violet-200/70">
-                        <span className="block truncate text-[13px] font-bold text-[#101936]">{adminLabel}</span>
-                        <span className="mt-0.5 block text-[11px] font-semibold text-[#7c70ba]">{liveDate}</span>
+                    <div className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-3 shadow-sm">
+                        <span className="block truncate text-[13px] font-bold text-[#F9FAFB]">{adminLabel}</span>
+                        <span className="mt-0.5 block text-[11px] font-semibold text-[#9CA3AF]">{liveDate}</span>
                     </div>
 
                     <button
                         type="button"
                         onClick={onLogout}
-                        className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-red-100 bg-white/75 text-[13px] font-bold text-[#dc2626] shadow-sm"
+                        className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-red-400/20 bg-red-400/10 text-[13px] font-bold text-[#FCA5A5] shadow-sm"
                     >
                         <NavIcon name="logOut" />
                         Cerrar sesion
@@ -383,11 +383,11 @@ function MobileNavSection({
                             className={[
                                 "flex h-12 items-center gap-3 rounded-2xl border px-3 text-[13px] font-bold shadow-sm transition",
                                 active
-                                    ? "border-[#c4b5fd] bg-white text-[#5b21ff]"
-                                    : "border-white/40 bg-white/45 text-[#364260]",
+                                    ? "border-white/18 bg-blue-500/16 text-[#F9FAFB]"
+                                    : "border-white/[0.08] bg-white/[0.04] text-[#CBD5E1]",
                             ].join(" ")}
                         >
-                            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#f3f0ff] text-[#5b21ff] ring-1 ring-[#d8d2ff]">
+                            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#0F172A] text-[#93C5FD] ring-1 ring-white/[0.08]">
                                 <NavIcon name={item.icon} />
                             </span>
                             {item.label}
@@ -401,7 +401,7 @@ function MobileNavSection({
 
 function MobileBottomNav({ pathname }: { pathname: string }) {
     return (
-        <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#e4e7ec] bg-white/92 px-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-2 shadow-[0_-18px_45px_rgba(36,30,86,0.12)] backdrop-blur-xl xl:hidden">
+        <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/[0.06] bg-[#0B1220]/92 px-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-2 shadow-[0_-18px_45px_rgba(0,0,0,0.24)] backdrop-blur-xl xl:hidden">
             <div className="mx-auto grid max-w-md grid-cols-4 gap-1">
                 {NAV_MAIN.map((item) => {
                     const active = pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href));
@@ -411,10 +411,10 @@ function MobileBottomNav({ pathname }: { pathname: string }) {
                             href={item.href}
                             className={[
                                 "flex flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[10px] font-bold transition",
-                                active ? "bg-[#f3f0ff] text-[#5b21ff]" : "text-[#66739a]",
+                                active ? "bg-white/[0.06] text-[#F9FAFB]" : "text-[#9CA3AF]",
                             ].join(" ")}
                         >
-                            <span className={active ? "text-[#5b21ff]" : "text-[#98a2b3]"}>
+                            <span className={active ? "text-[#93C5FD]" : "text-[#9CA3AF]"}>
                                 <NavIcon name={item.icon} />
                             </span>
                             <span className="max-w-full truncate">{item.label === "Contabilidad" ? "Conta" : item.label}</span>
