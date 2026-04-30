@@ -15,7 +15,7 @@ import { LeadEditModal } from "@/features/leads/LeadEditModal";
 import { listAdminUsers } from "@/data/usersRepo";
 import type { LeadChatMode, LeadMessageDoc, LeadReviewStatus, MetaLeadDoc } from "@/types/leads";
 import type { UserDoc } from "@/types/users";
-import { Badge, Button, Card, Input, PageHeader } from "@/components/ui";
+import { AppIcon, Badge, Button, Card, CardHeader, IconButton, Input, PageHeader } from "@/components/ui";
 
 const statusLabel: Record<LeadReviewStatus, string> = {
     pending_review: "Por revisar",
@@ -200,21 +200,22 @@ export default function LeadChatPage() {
     return (
         <div className="mx-auto w-full max-w-[1220px]">
             <PageHeader
-                title="Chat de lead"
+                title={displayName(lead)}
+                subtitle={lead?.business || lead?.phone || "Conversacion y validacion del lead"}
+                icon={<AppIcon name="chat" tone="purple" size="sm" className="bg-transparent text-white ring-0" />}
                 actions={
                     <>
-                        <Link
-                            href="/admin/leads"
-                            className="inline-flex items-center justify-center rounded-lg border border-[#e5e7eb] bg-white px-3 py-2 text-[12px] font-semibold text-[#52525b] shadow-sm transition hover:bg-[#f9fafb]"
-                        >
-                            Volver
-                        </Link>
-                        <Button
+                        <QuickLink href="/admin/leads" icon="lead" label="Leads" />
+                        <QuickLink href={`/admin/clients/${clientId}`} icon="users" label="Cliente" />
+                        {lead?.location.mapsUrl ? (
+                            <QuickLink href={lead.location.mapsUrl} icon="map" label="Maps" external />
+                        ) : null}
+                        <IconButton
+                            icon="edit"
+                            label="Editar lead"
                             onClick={() => setEditOpen(true)}
                             disabled={!lead}
-                        >
-                            Editar
-                        </Button>
+                        />
                         <Button
                             onClick={() => changeMode("human")}
                             disabled={busyMode || mode === "human"}
@@ -238,22 +239,29 @@ export default function LeadChatPage() {
                 </div>
             ) : null}
 
-            <section className="grid gap-4 xl:grid-cols-[340px_1fr]">
+            <section className="grid gap-4 xl:grid-cols-[360px_1fr]">
                 <aside className="space-y-4">
-                    <Card className="p-4">
+                    <Card className="overflow-hidden">
+                        <CardHeader title="Lead" subtitle="Perfil y asignacion" />
+                        <div className="border-t border-[#eef1f5] p-4">
                         {loadingLead ? (
                             <p className="text-[13px] font-medium text-[#71717a]">Cargando lead...</p>
                         ) : !lead ? (
                             <p className="text-[13px] font-medium text-red-500">Lead no encontrado.</p>
                         ) : (
                             <div className="space-y-4">
-                                <div>
-                                    <h2 className="text-[18px] font-semibold text-[#171717]">
+                                <div className="flex items-start gap-3">
+                                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#7c3aed] to-[#4f46e5] text-[18px] font-black text-white shadow-[0_14px_30px_rgba(91,33,255,0.22)]">
+                                        {displayName(lead).slice(0, 1).toUpperCase()}
+                                    </div>
+                                    <div className="min-w-0">
+                                    <h2 className="truncate text-[20px] font-black tracking-[-0.03em] text-[#101936]">
                                         {displayName(lead)}
                                     </h2>
                                     <p className="mt-1 text-[12px] font-medium text-[#71717a]">
                                         {subtitle(lead)}
                                     </p>
+                                    </div>
                                 </div>
 
                                 <div className="flex flex-wrap gap-2">
@@ -268,38 +276,65 @@ export default function LeadChatPage() {
                                     ) : null}
                                 </div>
 
-                                <div className="space-y-2 text-[12px] font-medium text-[#52525b]">
+                                <div className="space-y-2 rounded-2xl border border-[#eef1f5] bg-[#fbfaff] p-3 text-[12px] font-medium text-[#52525b]">
                                     <Info label="Telefono" value={lead.phone || "Sin telefono"} />
                                     <Info label="Ciudad" value={lead.location.displayLabel || "Sin ciudad"} />
                                     <Info label="Ultimo inbound" value={formatDate(lead.lastInboundMessageAt)} />
                                 </div>
 
-                                {lead.location.mapsUrl ? (
-                                    <a
-                                        href={lead.location.mapsUrl}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        title="Google Maps"
-                                        aria-label="Abrir en Google Maps"
-                                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#e5e7eb] bg-white text-[#52525b] shadow-sm transition hover:bg-[#f9fafb]"
+                                <div className="grid grid-cols-3 gap-2">
+                                    <SmallAction href={`/admin/clients/${clientId}`} icon="users" label="Cliente" />
+                                    {lead.location.mapsUrl ? (
+                                        <SmallAction href={lead.location.mapsUrl} icon="map" label="Maps" external />
+                                    ) : null}
+                                    <button
+                                        type="button"
+                                        onClick={() => setEditOpen(true)}
+                                        className="inline-flex h-10 items-center justify-center rounded-xl border border-[#e8e7fb] bg-[#fbfaff] text-[#7c3aed] transition hover:bg-[#f5f3ff]"
+                                        aria-label="Editar lead"
+                                        title="Editar lead"
                                     >
-                                        <MapIcon />
-                                    </a>
-                                ) : null}
+                                        <AppIcon name="edit" tone="purple" size="sm" plain />
+                                    </button>
+                                </div>
                             </div>
                         )}
+                        </div>
+                    </Card>
+
+                    <Card className="overflow-hidden">
+                        <CardHeader title="Control de bot" subtitle="Modo de atencion actual" />
+                        <div className="space-y-3 border-t border-[#eef1f5] p-4">
+                            <div className="flex items-center justify-between rounded-2xl border border-[#eef1f5] bg-[#fbfaff] px-3 py-2">
+                                <span className="text-[12px] font-bold text-[#66739a]">Modo</span>
+                                <Badge tone={mode === "human" ? "blue" : "green"}>
+                                    {modeLabel(mode)}
+                                </Badge>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <Button onClick={() => changeMode("human")} disabled={busyMode || mode === "human"}>
+                                    Tomar
+                                </Button>
+                                <Button variant="primary" onClick={() => changeMode("bot")} disabled={busyMode || mode === "bot"}>
+                                    Bot
+                                </Button>
+                            </div>
+                        </div>
                     </Card>
                 </aside>
 
                 <Card className="flex min-h-[680px] flex-col overflow-hidden">
-                    <div className="border-b border-[#f0f1f2] px-4 py-3">
-                        <div className="text-[13px] font-semibold text-[#171717]">Conversacion</div>
-                        <div className="mt-0.5 text-[12px] font-medium text-[#9ca3af]">
-                            {messages.length} mensajes
-                        </div>
-                    </div>
+                    <CardHeader
+                        title="Conversacion"
+                        subtitle={`${messages.length} mensajes`}
+                        action={
+                            <Badge tone={mode === "human" ? "blue" : "green"}>
+                                {modeLabel(mode)}
+                            </Badge>
+                        }
+                    />
 
-                    <div className="flex-1 space-y-3 overflow-y-auto bg-[#fafafa] p-4">
+                    <div className="flex-1 space-y-3 overflow-y-auto border-t border-[#eef1f5] bg-[radial-gradient(circle_at_top_left,#f5f3ff_0,#fbfaff_28%,#ffffff_70%)] p-4">
                         {loadingMessages ? (
                             <div className="py-10 text-center text-[13px] font-medium text-[#71717a]">
                                 Cargando mensajes...
@@ -315,8 +350,8 @@ export default function LeadChatPage() {
                         )}
                     </div>
 
-                    <div className="border-t border-[#f0f1f2] bg-white p-4">
-                        <div className="flex gap-2">
+                    <div className="border-t border-[#eef1f5] bg-white p-4">
+                        <div className="flex gap-2 rounded-2xl border border-[#e8e7fb] bg-[#fbfaff] p-2">
                             <Input
                                 value={draft}
                                 onChange={(e) => setDraft(e.target.value)}
@@ -332,6 +367,7 @@ export default function LeadChatPage() {
                                         void sendMessage();
                                     }
                                 }}
+                                className="border-transparent bg-white"
                             />
                             <Button variant="primary" onClick={sendMessage} disabled={!canSend}>
                                 {sending ? "Enviando..." : "Enviar"}
@@ -355,12 +391,53 @@ export default function LeadChatPage() {
     );
 }
 
-function MapIcon() {
+function QuickLink({
+    href,
+    icon,
+    label,
+    external = false,
+}: {
+    href: string;
+    icon: "lead" | "users" | "map";
+    label: string;
+    external?: boolean;
+}) {
     return (
-        <span aria-hidden className="relative block h-4 w-4">
-            <span className="absolute left-[5px] top-[1px] h-3 w-3 rotate-45 rounded-[3px] border border-current" />
-            <span className="absolute left-[8px] top-[4px] h-1.5 w-1.5 rounded-full bg-current" />
-        </span>
+        <Link
+            href={href}
+            target={external ? "_blank" : undefined}
+            rel={external ? "noreferrer" : undefined}
+            aria-label={label}
+            title={label}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#e4e7ec] bg-white text-[#344054] shadow-sm transition hover:bg-[#f8f7ff] hover:text-[#4f46e5]"
+        >
+            <AppIcon name={icon} tone={icon === "map" ? "green" : "purple"} size="sm" plain />
+        </Link>
+    );
+}
+
+function SmallAction({
+    href,
+    icon,
+    label,
+    external = false,
+}: {
+    href: string;
+    icon: "users" | "map";
+    label: string;
+    external?: boolean;
+}) {
+    return (
+        <Link
+            href={href}
+            target={external ? "_blank" : undefined}
+            rel={external ? "noreferrer" : undefined}
+            className="inline-flex h-10 items-center justify-center rounded-xl border border-[#e8e7fb] bg-[#fbfaff] text-[#7c3aed] transition hover:bg-[#f5f3ff]"
+            aria-label={label}
+            title={label}
+        >
+            <AppIcon name={icon} tone={icon === "map" ? "green" : "purple"} size="sm" plain />
+        </Link>
     );
 }
 

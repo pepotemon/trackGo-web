@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/features/auth/AuthProvider";
+import { TrackGoLogo } from "@/components/brand/TrackGoLogo";
 
 export default function NoAccessPage() {
     const router = useRouter();
@@ -13,11 +14,9 @@ export default function NoAccessPage() {
     }
 
     return (
-        <main className="grid min-h-screen place-items-center bg-[#f6f8fb] px-4 py-8 text-[#172033]">
-            <section className="w-full max-w-md rounded-xl border border-[#e4e7ec] bg-white p-6 text-center shadow-sm">
-                <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-[#fef2f2] text-[15px] font-bold text-[#dc2626]">
-                    !
-                </div>
+        <main className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top,#f5f3ff_0,#f8f7ff_34%,#ffffff_100%)] px-4 py-8 text-[#172033]">
+            <section className="w-full max-w-md rounded-2xl border border-[#e8e7fb] bg-white p-6 text-center shadow-[0_24px_70px_rgba(91,33,255,0.12)]">
+                <TrackGoLogo variant="mark" size="lg" className="mx-auto justify-center" />
 
                 <h1 className="mt-4 text-[22px] font-semibold tracking-[-0.02em]">
                     Sin acceso

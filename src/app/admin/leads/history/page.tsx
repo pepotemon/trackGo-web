@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { LeadSectionNav } from "@/features/leads/LeadSectionNav";
+import { LeadQuickAccessCards } from "@/features/leads/LeadQuickAccessCards";
 import { useAdminLeadHistory } from "@/features/leads/useAdminLeadHistory";
 import type { LeadHistoryBucket, LeadHistoryFilters, MetaLeadDoc } from "@/types/leads";
-import { ActionTile, ActionTileButton, AppIcon, Badge, Button, Card, Input, KpiCard, Modal, PageHeader, PageTab } from "@/components/ui";
+import { ActionTile, ActionTileButton, AppIcon, Badge, Button, Card, Input, KpiCard, Modal, PageHeader } from "@/components/ui";
 
 const bucketLabel: Record<LeadHistoryBucket, string> = {
     incomplete: "Incompleto",
@@ -95,50 +95,17 @@ export default function LeadHistoryPage() {
                 title="Historial de leads"
                 subtitle="Consulta leads archivados, incompletos y no aptos."
                 icon={<AppIcon name="history" tone="slate" size="sm" className="bg-transparent text-white ring-0" />}
-                tabs={
-                    <>
-                        <PageTab
-                            active={filters.bucket === "all"}
-                            onClick={() => patchFilters({ bucket: "all" })}
-                        >
-                            Todos
-                        </PageTab>
-                        <PageTab
-                            active={filters.bucket === "incomplete"}
-                            onClick={() => patchFilters({ bucket: "incomplete" })}
-                        >
-                            Incompletos
-                        </PageTab>
-                        <PageTab
-                            active={filters.bucket === "not_suitable"}
-                            onClick={() => patchFilters({ bucket: "not_suitable" })}
-                        >
-                            No aptos
-                        </PageTab>
-                    </>
-                }
                 actions={
-                    <>
-                        <Link
-                            href="/admin/leads"
-                            className="inline-flex items-center justify-center rounded-lg border border-[#e5e7eb] bg-white px-3 py-2 text-[12px] font-semibold text-[#52525b] shadow-sm transition hover:bg-[#f9fafb]"
-                        >
-                            Cola activa
-                        </Link>
-                        {activeFiltersCount > 0 ? (
-                            <Button onClick={resetFilters}>Limpiar filtros</Button>
-                        ) : null}
-                        <Button
-                            variant="primary"
-                            onClick={reloadHistory}
-                            disabled={loading}
-                            aria-label="Actualizar historial"
-                            title="Actualizar historial"
-                            className="h-10 w-10 px-0 py-0"
-                        >
-                            <AppIcon name="refresh" tone="purple" size="sm" className="bg-transparent text-white ring-0" />
-                        </Button>
-                    </>
+                    <Button
+                        variant="primary"
+                        onClick={reloadHistory}
+                        disabled={loading}
+                        aria-label="Actualizar historial"
+                        title="Actualizar historial"
+                        className="h-10 w-10 px-0 py-0"
+                    >
+                        <AppIcon name="refresh" tone="purple" size="sm" className="bg-transparent text-white ring-0" />
+                    </Button>
                 }
             />
 
@@ -148,7 +115,7 @@ export default function LeadHistoryPage() {
                 </div>
             ) : null}
 
-            <LeadSectionNav />
+            <LeadQuickAccessCards />
 
             <section className="mb-4 grid gap-4 md:grid-cols-3">
                 <KpiCard label="Historial cargado" value={stats.total} caption="Leads fuera de la cola activa" icon="history" tone="slate" />
@@ -220,6 +187,12 @@ export default function LeadHistoryPage() {
                             <option value="not_suitable">No aptos</option>
                         </FilterSelect>
                     </div>
+
+                    {activeFiltersCount > 0 ? (
+                        <div className="flex justify-end">
+                            <Button onClick={resetFilters}>Limpiar filtros</Button>
+                        </div>
+                    ) : null}
                 </div>
 
                 <HistoryTable
@@ -291,7 +264,29 @@ function HistoryTable({
     onQuickActions: (lead: MetaLeadDoc) => void;
 }) {
     return (
-        <div className="overflow-x-auto border-t border-[#f0f1f2]">
+        <div className="border-t border-[#f0f1f2]">
+            <div className="divide-y divide-[#f0f1f2] lg:hidden">
+                {loading ? (
+                    <div className="p-6 text-center text-[13px] font-semibold text-[#71717a]">
+                        Cargando historial...
+                    </div>
+                ) : leads.length === 0 ? (
+                    <div className="p-6 text-center text-[13px] font-semibold text-[#71717a]">
+                        No hay leads historicos con esos filtros.
+                    </div>
+                ) : (
+                    leads.map((lead) => (
+                        <HistoryMobileCard
+                            key={lead.id}
+                            lead={lead}
+                            saving={savingId === lead.id}
+                            onQuickActions={onQuickActions}
+                        />
+                    ))
+                )}
+            </div>
+
+            <div className="hidden overflow-x-auto lg:block">
             <table className="w-full min-w-[1080px] border-collapse">
                 <thead>
                     <tr className="border-b border-[#f0f1f2] text-left text-[11px] font-medium text-[#9ca3af]">
@@ -328,7 +323,56 @@ function HistoryTable({
                     )}
                 </tbody>
             </table>
+            </div>
         </div>
+    );
+}
+
+function HistoryMobileCard({
+    lead,
+    saving,
+    onQuickActions,
+}: {
+    lead: MetaLeadDoc;
+    saving: boolean;
+    onQuickActions: (lead: MetaLeadDoc) => void;
+}) {
+    const bucket = lead.verificationStatus === "not_suitable" ? "not_suitable" : "incomplete";
+
+    return (
+        <button
+            type="button"
+            onClick={() => {
+                if (!saving) onQuickActions(lead);
+            }}
+            className="w-full bg-white px-3 py-3 text-left transition active:bg-[#f8f7ff]"
+        >
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <div className="truncate text-[13px] font-bold text-[#101936]">
+                        {displayName(lead)}
+                    </div>
+                    <div className="mt-1 truncate text-[11px] font-semibold text-[#66739a]">
+                        {lead.business || lead.phone || "Sin informacion comercial"}
+                    </div>
+                </div>
+                <Badge tone={bucketTone[bucket]}>{bucketLabel[bucket]}</Badge>
+            </div>
+
+            <div className="mt-3 grid grid-cols-[1fr_auto] gap-3">
+                <div className="min-w-0">
+                    <div className="truncate text-[12px] font-bold text-[#344054]">
+                        {cityLabel(lead)}
+                    </div>
+                    <div className="mt-0.5 truncate text-[11px] font-medium text-[#98a2b3]">
+                        {lead.notSuitableReason || quickStatus(lead) || lead.location.address || "Sin motivo"}
+                    </div>
+                </div>
+                <div className="text-right text-[11px] font-bold text-[#66739a]">
+                    {formatDate(historyActivityAt(lead))}
+                </div>
+            </div>
+        </button>
     );
 }
 
@@ -410,8 +454,9 @@ function HistoryQuickActionsModal({
             onClose={onClose}
             title={displayName(lead)}
             subtitle={lead.business || lead.location.address || lead.phone || "Acciones rapidas"}
+            size="sm"
         >
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-2">
                 <ActionTile href={`/admin/leads/${lead.id}`} icon="chat" label="Chat" tone="purple" />
                 {lead.location.mapsUrl ? (
                     <ActionTile href={lead.location.mapsUrl} icon="map" label="Maps" tone="green" external />

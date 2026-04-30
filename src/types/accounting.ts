@@ -57,6 +57,13 @@ export type DailyEventDoc = {
     note?: string | null;
 };
 
+export type AccountingAssignmentDoc = {
+    id: string;
+    userId: string;
+    assignedAt: number;
+    assignedDayKey: string;
+};
+
 export type WeeklyInvestmentAllocations = Record<string, number>;
 
 export type InvestmentGroupStatus = "active" | "inactive";
@@ -101,6 +108,7 @@ export type WeeklyInvestmentDoc = {
 export type AccountingFinalSummary = {
     visited: number;
     rejected: number;
+    assigned?: number;
     gross: number;
     grossVisits: number;
     grossSubscriptions: number;
@@ -125,6 +133,7 @@ export type AccountingUserRow = {
 
     visited: number;
     rejected: number;
+    assigned: number;
 
     gross: number;
     cost: number;
@@ -139,6 +148,7 @@ export type AccountingSummary = {
 
     visited: number;
     rejected: number;
+    assigned: number;
 
     gross: number;
     grossVisits: number;

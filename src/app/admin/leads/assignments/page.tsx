@@ -1,9 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useAutoAssignLogs } from "@/features/leads/useAutoAssignLogs";
-import { LeadSectionNav } from "@/features/leads/LeadSectionNav";
+import { LeadQuickAccessCards } from "@/features/leads/LeadQuickAccessCards";
 import type {
     AutoAssignLogDoc,
     AutoAssignLogFilters,
@@ -62,7 +61,7 @@ function safeMatchType(value: unknown): LeadAutoAssignMatchType | null {
 }
 
 function leadTitle(log: AutoAssignLogDoc) {
-    return log.leadName || log.leadPhone || log.leadId || "Lead";
+    return log.leadName || log.leadPhone || "Lead";
 }
 
 function leadGeo(log: AutoAssignLogDoc) {
@@ -110,27 +109,16 @@ export default function AutoAssignLogsPage() {
                 subtitle="Auditoria de auto-asignacion y distribucion de trabajo."
                 icon={<AppIcon name="assign" tone="green" size="sm" className="bg-transparent text-white ring-0" />}
                 actions={
-                    <>
-                        <Link
-                            href="/admin/settings/users"
-                            className="inline-flex items-center justify-center rounded-lg border border-[#e5e7eb] bg-white px-3 py-2 text-[12px] font-semibold text-[#52525b] shadow-sm transition hover:bg-[#f9fafb]"
-                        >
-                            Usuarios y cobertura
-                        </Link>
-                        {activeFiltersCount > 0 ? (
-                            <Button onClick={resetFilters}>Limpiar filtros</Button>
-                        ) : null}
-                        <Button
-                            variant="primary"
-                            onClick={reloadLogs}
-                            disabled={loading}
-                            aria-label="Actualizar asignaciones"
-                            title="Actualizar asignaciones"
-                            className="h-10 w-10 px-0 py-0"
-                        >
-                            <AppIcon name="refresh" tone="purple" size="sm" className="bg-transparent text-white ring-0" />
-                        </Button>
-                    </>
+                    <Button
+                        variant="primary"
+                        onClick={reloadLogs}
+                        disabled={loading}
+                        aria-label="Actualizar asignaciones"
+                        title="Actualizar asignaciones"
+                        className="h-10 w-10 px-0 py-0"
+                    >
+                        <AppIcon name="refresh" tone="purple" size="sm" className="bg-transparent text-white ring-0" />
+                    </Button>
                 }
             />
 
@@ -140,7 +128,7 @@ export default function AutoAssignLogsPage() {
                 </div>
             ) : null}
 
-            <LeadSectionNav />
+            <LeadQuickAccessCards />
 
             <section className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <KpiCard label="Asignaciones" value={stats.total} caption="Logs cargados" icon="assign" tone="green" />
@@ -187,7 +175,7 @@ export default function AutoAssignLogsPage() {
                                 <option value="all">Todos los usuarios</option>
                                 {users.map((user) => (
                                     <option key={user.id} value={user.id}>
-                                        {user.name || user.email || user.id}
+                                        {user.name || user.email || "Usuario sin nombre"}
                                     </option>
                                 ))}
                             </select>
@@ -212,6 +200,12 @@ export default function AutoAssignLogsPage() {
                             </select>
                         </Field>
                     </div>
+
+                    {activeFiltersCount > 0 ? (
+                        <div className="flex justify-end">
+                            <Button onClick={resetFilters}>Limpiar filtros</Button>
+                        </div>
+                    ) : null}
                 </div>
 
                 <AssignmentsTable logs={filteredLogs} loading={loading} onQuickActions={setQuickLog} />
@@ -246,7 +240,24 @@ function AssignmentsTable({
     onQuickActions: (log: AutoAssignLogDoc) => void;
 }) {
     return (
-        <div className="overflow-x-auto border-t border-[#f0f1f2]">
+        <div className="border-t border-[#f0f1f2]">
+            <div className="divide-y divide-[#f0f1f2] lg:hidden">
+                {loading ? (
+                    <div className="p-6 text-center text-[13px] font-semibold text-[#71717a]">
+                        Cargando asignaciones...
+                    </div>
+                ) : logs.length === 0 ? (
+                    <div className="p-6 text-center text-[13px] font-semibold text-[#71717a]">
+                        No hay asignaciones con esos filtros.
+                    </div>
+                ) : (
+                    logs.map((log) => (
+                        <AssignmentMobileCard key={log.id} log={log} onQuickActions={onQuickActions} />
+                    ))
+                )}
+            </div>
+
+            <div className="hidden overflow-x-auto lg:block">
             <table className="w-full min-w-[1120px] border-collapse">
                 <thead>
                     <tr className="border-b border-[#f0f1f2] text-left text-[11px] font-medium text-[#9ca3af]">
@@ -277,7 +288,56 @@ function AssignmentsTable({
                     )}
                 </tbody>
             </table>
+            </div>
         </div>
+    );
+}
+
+function AssignmentMobileCard({
+    log,
+    onQuickActions,
+}: {
+    log: AutoAssignLogDoc;
+    onQuickActions: (log: AutoAssignLogDoc) => void;
+}) {
+    const matchType = safeMatchType(log.matchType);
+
+    return (
+        <button
+            type="button"
+            onClick={() => onQuickActions(log)}
+            className="w-full bg-white px-3 py-3 text-left transition active:bg-[#f8f7ff]"
+        >
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <div className="truncate text-[13px] font-bold text-[#101936]">
+                        {leadTitle(log)}
+                    </div>
+                    <div className="mt-1 truncate text-[11px] font-semibold text-[#66739a]">
+                        {log.leadBusiness || log.leadPhone || "Lead asignado"}
+                    </div>
+                </div>
+                {matchType ? (
+                    <Badge tone={matchTone[matchType]}>{matchLabel[matchType]}</Badge>
+                ) : (
+                    <Badge tone="gray">{log.matchType || "Match"}</Badge>
+                )}
+            </div>
+
+            <div className="mt-3 grid grid-cols-[1fr_auto] gap-3">
+                <div className="min-w-0">
+                    <div className="truncate text-[12px] font-bold text-[#344054]">
+                        {log.userName || "Usuario"}
+                    </div>
+                    <div className="mt-0.5 truncate text-[11px] font-medium text-[#98a2b3]">
+                        {leadGeo(log)}
+                    </div>
+                </div>
+                <div className="text-right text-[11px] font-bold text-[#66739a]">
+                    {formatDate(log.createdAt)}
+                </div>
+            </div>
+        </button>
     );
 }
 
@@ -309,10 +369,10 @@ function AssignmentRow({
 
             <td className="px-4 py-3">
                 <div className="text-[12px] font-semibold text-[#171717]">
-                    {log.userName || log.userId || "Usuario"}
+                    {log.userName || "Usuario"}
                 </div>
                 <div className="mt-0.5 max-w-[220px] truncate text-[11px] font-medium text-[#9ca3af]">
-                    {log.userId || "Sin UID"}
+                    {log.userCoverageLabel || "Sin cobertura visible"}
                 </div>
             </td>
 
@@ -368,9 +428,10 @@ function AssignmentQuickActionsModal({
             onClose={onClose}
             title={leadTitle(log)}
             subtitle={leadGeo(log)}
+            size="sm"
         >
             {log.leadId ? (
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-2">
                     <ActionTile href={`/admin/leads/${log.leadId}`} icon="chat" label="Chat" tone="purple" />
                     <ActionTile href={`/admin/leads/${log.leadId}`} icon="edit" label="Editar lead" tone="orange" />
                 </div>

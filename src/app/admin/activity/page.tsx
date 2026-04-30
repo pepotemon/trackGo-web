@@ -138,7 +138,7 @@ export default function ActivityPage() {
             return {
                 ...event,
                 source: String(event.id || "").startsWith("pending_") ? "pending_client" : "daily_event",
-                userName: user?.name || event.userId || "Usuario",
+                userName: user?.name || "Usuario",
                 userEmail: user?.email,
                 billingMode: user?.billingMode || event.billingModeSnapshot || "per_visit",
             };
@@ -305,7 +305,7 @@ export default function ActivityPage() {
             ) : null}
 
             <section className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-                <KpiCard label="Eventos" value={stats.total} caption="Visibles en la vista" icon="activity" tone="purple" />
+                <KpiCard label="Actividad" value={stats.total} caption="Eventos + pendientes" icon="activity" tone="purple" />
                 <KpiCard label="Visitados" value={stats.visited} caption="Clientes trabajados" icon="check" tone="green" />
                 <KpiCard label="Rechazados" value={stats.rejected} caption="No concretados" icon="close" tone="red" />
                 <KpiCard label="Pendientes" value={stats.pending} caption="Sin cierre" icon="alert" tone="orange" />
@@ -358,7 +358,7 @@ export default function ActivityPage() {
                                 <option value="all">Todos</option>
                                 {users.map((user) => (
                                     <option key={user.id} value={user.id}>
-                                        {user.name || user.email || user.id}
+                                        {user.name || user.email || "Usuario sin nombre"}
                                     </option>
                                 ))}
                             </select>
@@ -611,8 +611,9 @@ function ActivityQuickActionsModal({
             onClose={onClose}
             title={eventTitle(row)}
             subtitle={eventSubtitle(row)}
+            size="sm"
         >
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-2">
                 <ActionTile href={`/admin/clients/${row.clientId}`} label="Ver cliente" icon="users" tone="blue" />
                 {row.mapsUrl ? (
                     <ActionTile href={row.mapsUrl} label="Abrir Maps" icon="map" tone="green" external />

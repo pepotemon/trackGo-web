@@ -5,7 +5,7 @@ export function dayKeyFromDate(d: Date) {
     return `${y}-${m}-${day}`;
 }
 
-export function weekRangeKeysMonToSat(base = new Date()) {
+export function weekRangeKeysMonToSun(base = new Date()) {
     const d = new Date(base);
     d.setHours(0, 0, 0, 0);
 
@@ -16,7 +16,7 @@ export function weekRangeKeysMonToSat(base = new Date()) {
     start.setDate(d.getDate() - diffToMonday);
 
     const end = new Date(start);
-    end.setDate(start.getDate() + 5);
+    end.setDate(start.getDate() + 6);
 
     return {
         startKey: dayKeyFromDate(start),
@@ -25,6 +25,8 @@ export function weekRangeKeysMonToSat(base = new Date()) {
         endDate: end,
     };
 }
+
+export const weekRangeKeysMonToSat = weekRangeKeysMonToSun;
 
 export function addDays(date: Date, days: number) {
     const d = new Date(date);

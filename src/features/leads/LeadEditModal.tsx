@@ -250,7 +250,7 @@ export function LeadEditModal({
                             <option value="">Sin asignar</option>
                             {users.map((user) => (
                                 <option key={user.id} value={user.id}>
-                                    {user.name || user.email || user.id}
+                                    {user.name || user.email || "Usuario sin nombre"}
                                 </option>
                             ))}
                         </select>

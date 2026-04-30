@@ -25,7 +25,7 @@ const EMPTY_SNAPSHOT: AdminDashboardSnapshot = {
         notSuitable: 0,
         outOfCoverage: 0,
     },
-    queueRange: "all",
+    queueRange: "today",
     recentLeads: [],
     recentAssignments: [],
 };
@@ -107,7 +107,7 @@ function assignmentLeadTitle(log: AutoAssignLogDoc) {
 
 export default function AdminDashboardPage() {
     const [snapshot, setSnapshot] = useState<AdminDashboardSnapshot>(EMPTY_SNAPSHOT);
-    const [queueRange, setQueueRange] = useState<AdminDashboardRange>("all");
+    const [queueRange, setQueueRange] = useState<AdminDashboardRange>("today");
     const [loading, setLoading] = useState(true);
     const [err, setErr] = useState<string | null>(null);
 
@@ -136,38 +136,8 @@ export default function AdminDashboardPage() {
         setQueueRange(range);
     }
 
-    const alerts = useMemo(() => {
-        const items: Array<{ title: string; body: string; href: string; tone: "red" | "yellow" | "blue" }> = [];
-        const { stats } = snapshot;
-
-        if (stats.outOfCoverage > 0) {
-            items.push({
-                title: "Leads fuera de cobertura",
-                body: `${stats.outOfCoverage} leads cargados no tienen cobertura clara.`,
-                href: "/admin/leads",
-                tone: "yellow",
-            });
-        }
-
-        if (stats.usersWithoutCoverage > 0) {
-            items.push({
-                title: "Usuarios sin cobertura",
-                body: `${stats.usersWithoutCoverage} vendedores activos no tienen cobertura configurada.`,
-                href: "/admin/settings/users",
-                tone: "red",
-            });
-        }
-
-        if (stats.autoAssignUsers === 0) {
-            items.push({
-                title: "Auto-asignacion apagada",
-                body: "No hay vendedores activos recibiendo leads automaticamente.",
-                href: "/admin/settings/users",
-                tone: "blue",
-            });
-        }
-
-        return items;
+    const pendingReviewLeads = useMemo(() => {
+        return snapshot.recentLeads.filter((lead) => lead.verificationStatus === "pending_review");
     }, [snapshot]);
 
     return (
@@ -230,33 +200,19 @@ export default function AdminDashboardPage() {
 
                 <Card className="overflow-hidden">
                     <PanelHeader
-                        title="Alertas operativas"
-                        caption="Riesgos que conviene revisar"
-                        href="/admin/settings/users"
+                        title="Por revisar"
+                        caption={`${pendingReviewLeads.length} leads listos para validar`}
+                        href="/admin/leads"
                     />
                     <div className="divide-y divide-[#f0f1f2]">
-                        {alerts.length ? (
-                            alerts.map((alert) => (
-                                <Link
-                                    key={alert.title}
-                                    href={alert.href}
-                                    className="block px-4 py-3 transition hover:bg-[#fafafa]"
-                                >
-                                    <div className="flex items-center justify-between gap-3">
-                                        <div className="min-w-0">
-                                            <div className="text-[12px] font-semibold text-[#171717]">
-                                                {alert.title}
-                                            </div>
-                                            <div className="mt-0.5 text-[11px] font-medium text-[#71717a]">
-                                                {alert.body}
-                                            </div>
-                                        </div>
-                                        <Badge tone={alert.tone}>Revisar</Badge>
-                                    </div>
-                                </Link>
+                        {loading ? (
+                            <EmptyRow text="Cargando leads por revisar..." />
+                        ) : pendingReviewLeads.length ? (
+                            pendingReviewLeads.slice(0, 5).map((lead) => (
+                                <RecentLeadRow key={lead.id} lead={lead} compact />
                             ))
                         ) : (
-                            <EmptyRow text="No hay alertas fuertes ahora mismo." />
+                            <EmptyRow text="No hay leads por revisar en el resumen." />
                         )}
                     </div>
                 </Card>
@@ -387,9 +343,9 @@ function EmptyRow({ text }: { text: string }) {
     );
 }
 
-function RecentLeadRow({ lead }: { lead: MetaLeadDoc }) {
+function RecentLeadRow({ lead, compact = false }: { lead: MetaLeadDoc; compact?: boolean }) {
     return (
-        <Link href={`/admin/leads/${lead.id}`} className="block px-4 py-3 transition hover:bg-[#fafafa]">
+        <Link href={`/admin/leads/${lead.id}`} className={compact ? "block px-4 py-2.5 transition hover:bg-[#fafafa]" : "block px-4 py-3 transition hover:bg-[#fafafa]"}>
             <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                     <div className="truncate text-[12px] font-semibold text-[#171717]">
@@ -403,7 +359,7 @@ function RecentLeadRow({ lead }: { lead: MetaLeadDoc }) {
                     <Badge tone={statusTone(lead.verificationStatus)}>
                         {statusLabel(lead.verificationStatus)}
                     </Badge>
-                    <span className="text-[11px] font-semibold text-[#9ca3af]">
+                    <span className="hidden text-[11px] font-semibold text-[#9ca3af] sm:inline">
                         {formatDate(lead.lastInboundMessageAt || lead.updatedAt || lead.createdAt)}
                     </span>
                 </div>
@@ -426,7 +382,7 @@ function RecentAssignmentRow({ log }: { log: AutoAssignLogDoc }) {
                         {assignmentLeadTitle(log)}
                     </div>
                     <div className="mt-0.5 truncate text-[11px] font-medium text-[#9ca3af]">
-                        {log.userName || log.userId || "Usuario"} - {log.userCoverageLabel || "Sin cobertura visible"}
+                        {log.userName || "Usuario"} - {log.userCoverageLabel || "Sin cobertura visible"}
                     </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
@@ -454,11 +410,11 @@ function MiniMetric({
     tone: "gray" | "red" | "yellow";
 }) {
     return (
-        <div className="rounded-lg border border-[#e5e7eb] bg-[#fafafa] p-3">
-            <div className="mb-3">
+        <div className="rounded-xl border border-[#e5e7eb] bg-[#fafafa] p-3">
+            <div className="mb-2">
                 <Badge tone={tone}>{label}</Badge>
             </div>
-            <div className="text-[24px] font-semibold text-[#171717]">{value}</div>
+            <div className="text-[22px] font-semibold text-[#171717]">{value}</div>
         </div>
     );
 }

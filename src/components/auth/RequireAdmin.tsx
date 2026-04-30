@@ -3,6 +3,7 @@
 import { useAuth } from "@/features/auth/AuthProvider";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { TrackGoLogo } from "@/components/brand/TrackGoLogo";
 
 export default function RequireAdmin({ children }: { children: React.ReactNode }) {
     const router = useRouter();
@@ -23,8 +24,11 @@ export default function RequireAdmin({ children }: { children: React.ReactNode }
 
     if (loading) {
         return (
-            <main className="min-h-screen bg-slate-950 text-white grid place-items-center">
-                <p className="text-sm text-slate-400">Cargando TrackGo...</p>
+            <main className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top,#f5f3ff_0,#f8f7ff_34%,#ffffff_100%)] text-[#101936]">
+                <div className="rounded-2xl border border-[#e8e7fb] bg-white p-6 text-center shadow-[0_24px_70px_rgba(91,33,255,0.12)]">
+                    <TrackGoLogo variant="mark" size="lg" className="mx-auto mb-4 justify-center" />
+                    <p className="text-sm font-semibold text-[#66739a]">Cargando TrackGo...</p>
+                </div>
             </main>
         );
     }

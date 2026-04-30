@@ -1,6 +1,7 @@
 import type {
     AccountingSummary,
     AccountingUserRow,
+    AccountingAssignmentDoc,
     DailyEventDoc,
     UserDoc,
     WeeklyInvestmentDoc,
@@ -149,6 +150,7 @@ export function buildAccountingSummary(input: {
     endKey: string;
     users: UserDoc[];
     events: DailyEventDoc[];
+    assignments: AccountingAssignmentDoc[];
     investment: WeeklyInvestmentDoc | null;
 }): AccountingSummary {
     const usersById = new Map(input.users.map((u) => [u.id, u]));
@@ -178,6 +180,7 @@ export function buildAccountingSummary(input: {
             name: user.name || "Usuario",
             email: user.email,
             billingMode,
+            assigned: 0,
             visited: 0,
             rejected: 0,
             gross: subscription?.gross ?? 0,
@@ -185,6 +188,20 @@ export function buildAccountingSummary(input: {
             real: 0,
             subscriptionPaid: subscription?.paid,
         });
+    }
+
+    let assigned = 0;
+
+    const assignedClientIds = new Set<string>();
+    for (const assignment of input.assignments) {
+        if (!assignment.id || assignedClientIds.has(assignment.id)) continue;
+        assignedClientIds.add(assignment.id);
+
+        const row = rowsMap.get(assignment.userId);
+        if (!row) continue;
+
+        assigned += 1;
+        row.assigned += 1;
     }
 
     const latestEvents = latestEventByClient(input.events);
@@ -252,6 +269,7 @@ export function buildAccountingSummary(input: {
         endKey: input.endKey,
         visited,
         rejected,
+        assigned,
         gross,
         grossVisits,
         grossSubscriptions,

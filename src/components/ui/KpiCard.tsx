@@ -50,26 +50,26 @@ export function KpiCard({
     tone?: AppIconTone;
 }) {
     return (
-        <div className={`relative overflow-hidden rounded-2xl border border-[#e7e8f0] bg-gradient-to-br ${fillColors[tone]} to-white p-5 shadow-[0_16px_42px_rgba(16,25,54,0.08)]`}>
-            <div className="flex items-start gap-4">
-                <AppIcon name={icon} tone={tone} size="lg" />
+        <div className={`relative overflow-hidden rounded-2xl border border-[#e7e8f0] bg-gradient-to-br ${fillColors[tone]} to-white p-3 shadow-[0_12px_30px_rgba(16,25,54,0.07)] sm:p-5 sm:shadow-[0_16px_42px_rgba(16,25,54,0.08)]`}>
+            <div className="flex items-start gap-3 sm:gap-4">
+                <AppIcon name={icon} tone={tone} size="md" className="sm:h-14 sm:w-14" />
 
                 <div className="min-w-0">
-                    <p className={`text-[11px] font-extrabold uppercase tracking-[0.06em] ${labelColors[tone]}`}>
+                    <p className={`text-[10px] font-extrabold uppercase tracking-[0.06em] sm:text-[11px] ${labelColors[tone]}`}>
                         {label}
                     </p>
-                    <p className="mt-2 font-mono text-[30px] font-semibold leading-none tracking-[-0.05em] text-[#101936]">
+                    <p className="mt-1.5 break-words font-mono text-[clamp(18px,7vw,24px)] font-semibold leading-none tracking-[-0.04em] text-[#101936] sm:mt-2 sm:text-[clamp(20px,2.15vw,30px)]">
                         {value}
                     </p>
                     {caption ? (
-                        <p className="mt-2 max-w-[160px] text-[12px] font-medium leading-snug text-[#66739a]">
+                        <p className="mt-1.5 max-w-[160px] text-[11px] font-medium leading-snug text-[#66739a] sm:mt-2 sm:text-[12px]">
                             {caption}
                         </p>
                     ) : null}
                 </div>
             </div>
 
-            <svg aria-hidden="true" viewBox="0 0 96 50" className="mt-5 h-12 w-full">
+            <svg aria-hidden="true" viewBox="0 0 96 50" className="mt-3 h-8 w-full sm:mt-5 sm:h-12">
                 <path
                     d={pathByTone[tone]}
                     fill="none"

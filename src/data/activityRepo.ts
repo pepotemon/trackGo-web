@@ -26,6 +26,16 @@ function safeNumber(value: unknown, fallback = 0) {
     return Number.isFinite(n) ? n : fallback;
 }
 
+function toMs(value: unknown) {
+    if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+    if (value && typeof value === "object" && "toMillis" in value) {
+        const maybeTimestamp = value as { toMillis?: () => number };
+        const ms = maybeTimestamp.toMillis?.();
+        return Number.isFinite(ms) ? (ms ?? 0) : 0;
+    }
+    return 0;
+}
+
 function dayKeyFromMs(ms: number) {
     const d = new Date(ms);
     const y = d.getFullYear();
@@ -79,7 +89,10 @@ export async function listPendingClientsForActivity(input: {
         query(
             collection(db, "clients"),
             where("status", "==", "pending"),
-            orderBy("updatedAt", "desc"),
+            where("assignedDayKey", ">=", input.startKey),
+            where("assignedDayKey", "<=", input.endKey),
+            orderBy("assignedDayKey", "desc"),
+            orderBy("assignedAt", "desc"),
             limit(input.pageSize)
         )
     );
@@ -87,8 +100,8 @@ export async function listPendingClientsForActivity(input: {
     return snap.docs
         .map((docSnap) => {
             const data = docSnap.data();
-            const assignedAt = safeNumber(data.assignedAt, 0);
-            const updatedAt = safeNumber(data.updatedAt, 0);
+            const assignedAt = toMs(data.assignedAt);
+            const updatedAt = toMs(data.updatedAt) || safeNumber(data.updatedAt, 0);
             const createdAt = assignedAt || updatedAt || Date.now();
             const dayKey = text(data.assignedDayKey) || dayKeyFromMs(createdAt);
 
@@ -105,8 +118,5 @@ export async function listPendingClientsForActivity(input: {
                 address: text(data.address),
                 mapsUrl: text(data.mapsUrl),
             } satisfies DailyEventDoc;
-        })
-        .filter((event) => {
-            return event.userId && event.dayKey >= input.startKey && event.dayKey <= input.endKey;
         });
 }

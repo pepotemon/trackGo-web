@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
     createManagedUserProfile,
     listAdminUsers,
-    toggleUserActive,
     updateUserAutoAssign,
     updateUserBilling,
     updateUserGeoCoverage,
@@ -305,20 +304,6 @@ export default function UsersPage() {
         );
     }
 
-    async function handleToggleActive(user: UserDoc) {
-        const next = !user.active;
-        setSavingId(user.id);
-
-        try {
-            await toggleUserActive(user.id, next);
-            await patchUserLocal(user.id, { active: next });
-        } catch (e: unknown) {
-            setErr(e instanceof Error ? e.message : "No se pudo actualizar el usuario.");
-        } finally {
-            setSavingId(null);
-        }
-    }
-
     async function handleCreated(user: UserDoc) {
         setUsers((prev) => [user, ...prev.filter((u) => u.id !== user.id)]);
         setSelectedUserId(user.id);
@@ -340,7 +325,7 @@ export default function UsersPage() {
                 icon={<AppIcon name="users" tone="blue" size="sm" className="bg-transparent text-white ring-0" />}
                 actions={
                     <>
-                        <IconButton icon="refresh" label="Actualizar" onClick={loadUsers} />
+                        <IconButton icon="refresh" label="Actualizar" variant="primary" onClick={loadUsers} />
                         <IconButton
                             icon="plus"
                             label="Crear usuario"
@@ -493,7 +478,7 @@ export default function UsersPage() {
                                                                 {u.name || "Usuario"}
                                                             </div>
                                                             <div className="mt-0.5 truncate text-[11px] font-medium text-[#98a2b3]">
-                                                                {u.email || u.id}
+                                                                {u.email || "Sin correo registrado"}
                                                             </div>
                                                         </div>
                                                     </div>
@@ -547,7 +532,6 @@ export default function UsersPage() {
                 onSaving={setSavingId}
                 onPatch={patchUserLocal}
                 onError={setErr}
-                onToggleActive={handleToggleActive}
             />
 
             <CreateUserModal
@@ -636,7 +620,7 @@ function UserMobileCard({
                             {user.name || "Usuario"}
                         </div>
                         <div className="mt-1 truncate text-[11px] font-medium text-[#8a93ad]">
-                            {user.email || user.id}
+                            {user.email || "Sin correo registrado"}
                         </div>
                     </div>
                 </div>
@@ -739,41 +723,45 @@ function CreateUserModal({
             subtitle="Crea el acceso real en Firebase Auth y su perfil operativo."
         >
             <div className="space-y-4">
-                <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="Nombre">
-                        <Input value={name} onChange={(e) => setName(e.target.value)} />
+                <EditorBlock title="Datos de acceso">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        <Field label="Nombre">
+                            <Input value={name} onChange={(e) => setName(e.target.value)} />
+                        </Field>
+
+                        <Field label="Email">
+                            <Input value={email} onChange={(e) => setEmail(e.target.value)} />
+                        </Field>
+                    </div>
+
+                    <Field label="Contrasena temporal">
+                        <Input
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            placeholder="Minimo 6 caracteres"
+                        />
                     </Field>
 
-                    <Field label="Email">
-                        <Input value={email} onChange={(e) => setEmail(e.target.value)} />
+                    <Field label="WhatsApp operativo">
+                        <Input
+                            value={whatsappPhone}
+                            onChange={(e) => setWhatsappPhone(e.target.value)}
+                            placeholder="+55..."
+                        />
                     </Field>
-                </div>
+                </EditorBlock>
 
-                <Field label="Contrasena temporal">
-                    <Input
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="Minimo 6 caracteres"
-                    />
-                </Field>
+                <EditorBlock title="Rol inicial">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        <Choice active={role === "user"} onClick={() => setRole("user")} label="Vendedor" />
+                        <Choice active={role === "admin"} onClick={() => setRole("admin")} label="Admin" />
+                    </div>
 
-                <Field label="WhatsApp operativo">
-                    <Input
-                        value={whatsappPhone}
-                        onChange={(e) => setWhatsappPhone(e.target.value)}
-                        placeholder="+55..."
-                    />
-                </Field>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                    <Choice active={role === "user"} onClick={() => setRole("user")} label="Vendedor" />
-                    <Choice active={role === "admin"} onClick={() => setRole("admin")} label="Admin" />
-                </div>
-
-                <div className="rounded-lg border border-[#e4e7ec] bg-[#f9fafb] px-3 py-2 text-[12px] font-medium text-[#667085]">
-                    El usuario se crea activo. Luego puedes ajustar cobertura, auto-asignacion y contabilidad desde editar.
-                </div>
+                    <div className="rounded-xl border border-violet-100 bg-violet-50 px-3 py-2 text-[12px] font-semibold text-[#6d5fb4]">
+                        Se crea activo. Cobertura, auto-asignacion y contabilidad se ajustan luego en editar.
+                    </div>
+                </EditorBlock>
 
                 <div className="flex flex-col-reverse gap-2 border-t border-[#f0f1f2] pt-4 sm:flex-row sm:justify-end">
                     <IconButton icon="close" label="Cancelar" onClick={onClose} />
@@ -798,7 +786,6 @@ function EditUserModal({
     onSaving,
     onPatch,
     onError,
-    onToggleActive,
 }: {
     user: UserDoc | null;
     open: boolean;
@@ -807,13 +794,13 @@ function EditUserModal({
     onSaving: (id: string | null) => void;
     onPatch: (userId: string, patch: Partial<UserDoc>) => Promise<void>;
     onError: (msg: string | null) => void;
-    onToggleActive: (user: UserDoc) => Promise<void>;
 }) {
     const [activeTab, setActiveTab] = useState<EditorTab>("profile");
     const [name, setName] = useState("");
     const [email, setEmail] = useState("");
     const [whatsappPhone, setWhatsappPhone] = useState("");
     const [role, setRole] = useState<UserRole>("user");
+    const [active, setActive] = useState(true);
     const [billingMode, setBillingMode] = useState<UserBillingMode>("per_visit");
     const [ratePerVisit, setRatePerVisit] = useState("0");
     const [weeklyAmount, setWeeklyAmount] = useState("0");
@@ -836,6 +823,7 @@ function EditUserModal({
             setEmail(user.email ?? "");
             setWhatsappPhone(user.whatsappPhone ?? "");
             setRole(user.role ?? "user");
+            setActive(user.active !== false);
             setBillingMode(user.billingMode ?? "per_visit");
             setRatePerVisit(String(user.ratePerVisit ?? 0));
             setWeeklyAmount(String(user.weeklySubscriptionAmount ?? 0));
@@ -873,6 +861,7 @@ function EditUserModal({
             email: email.trim(),
             whatsappPhone: whatsappPhone.trim(),
             role,
+            active,
             billingMode,
             ratePerVisit: safeNumber(ratePerVisit, 0),
             weeklySubscriptionAmount: safeNumber(weeklyAmount, 0),
@@ -1068,13 +1057,12 @@ function EditUserModal({
                 <div className="flex flex-col-reverse gap-2 border-t border-[#f0f1f2] pt-4 sm:flex-row sm:justify-end">
                     <IconButton
                         icon="power"
-                        label={user.active ? "Desactivar usuario" : "Activar usuario"}
-                        variant={user.active ? "danger" : "secondary"}
-                        onClick={() => void onToggleActive(user)}
+                        label={active ? "Dejar inactivo al guardar" : "Dejar activo al guardar"}
+                        variant={active ? "danger" : "secondary"}
+                        onClick={() => setActive((value) => !value)}
                         disabled={saving}
-                        className={user.active ? "" : "border-emerald-200 text-emerald-600 hover:bg-emerald-50"}
+                        className={active ? "" : "border-emerald-200 text-emerald-600 hover:bg-emerald-50"}
                     />
-                    <IconButton icon="close" label="Cancelar" onClick={onClose} />
                     <IconButton
                         icon="check"
                         label={saving ? "Guardando" : "Guardar cambios"}

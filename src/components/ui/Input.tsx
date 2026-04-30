@@ -7,7 +7,7 @@ export function Input({
     return (
         <input
             className={[
-                "h-9 w-full rounded-md border border-[#d0d5dd] bg-white px-3 text-[12px] font-medium text-[#172033] outline-none transition placeholder:text-[#98a2b3] focus:border-[#2563eb] focus:ring-2 focus:ring-blue-100",
+                "h-10 w-full rounded-xl border border-[#d0d5dd] bg-white px-3 text-[13px] font-medium text-[#172033] outline-none transition placeholder:text-[#98a2b3] focus:border-[#7c3aed] focus:ring-2 focus:ring-violet-100 sm:h-9 sm:rounded-md sm:text-[12px]",
                 className,
             ].join(" ")}
             {...props}

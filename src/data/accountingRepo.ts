@@ -13,6 +13,7 @@ import {
 import { db } from "@/lib/firebase";
 import type {
     AccountingFinalSummary,
+    AccountingAssignmentDoc,
     AccountingSummary,
     DailyEventDoc,
     InvestmentGroupDoc,
@@ -29,6 +30,35 @@ function safeNumber(value: unknown, fallback = 0) {
 
 function record(value: unknown): Record<string, unknown> {
     return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function text(value: unknown) {
+    return typeof value === "string" ? value.trim() : "";
+}
+
+function toMs(value: unknown): number {
+    if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+    if (value && typeof value === "object" && "toMillis" in value) {
+        const maybeTimestamp = value as { toMillis?: () => number };
+        const ms = maybeTimestamp.toMillis?.();
+        return Number.isFinite(ms) ? (ms ?? 0) : 0;
+    }
+    return 0;
+}
+
+function normalizeAssignment(id: string, data: Record<string, unknown>): AccountingAssignmentDoc | null {
+    const userId = text(data.assignedTo);
+    const assignedAt = toMs(data.assignedAt);
+    const assignedDayKey = text(data.assignedDayKey);
+
+    if (!userId) return null;
+
+    return {
+        id,
+        userId,
+        assignedAt,
+        assignedDayKey,
+    };
 }
 
 function normalizeAllocations(value: unknown): WeeklyInvestmentAllocations {
@@ -71,6 +101,7 @@ function normalizeFinalSummary(value: unknown): AccountingFinalSummary | undefin
     return {
         visited: safeNumber(data.visited, 0),
         rejected: safeNumber(data.rejected, 0),
+        assigned: safeNumber(data.assigned, 0),
         gross: clamp2(safeNumber(data.gross, 0)),
         grossVisits: clamp2(safeNumber(data.grossVisits, 0)),
         grossSubscriptions: clamp2(safeNumber(data.grossSubscriptions, 0)),
@@ -158,6 +189,47 @@ export async function listDailyEventsByRange(
         id: d.id,
         ...(d.data() as Omit<DailyEventDoc, "id">),
     }));
+}
+
+export async function listClientAssignmentsByRange(input: {
+    startKey: string;
+    endKey: string;
+    startMs: number;
+    endMs: number;
+}): Promise<AccountingAssignmentDoc[]> {
+    const byId = new Map<string, AccountingAssignmentDoc>();
+
+    const byDaySnap = await getDocs(
+        query(
+            collection(db, "clients"),
+            where("assignedDayKey", ">=", input.startKey),
+            where("assignedDayKey", "<=", input.endKey),
+            orderBy("assignedDayKey", "asc"),
+            limit(10000)
+        )
+    );
+
+    for (const docSnap of byDaySnap.docs) {
+        const assignment = normalizeAssignment(docSnap.id, record(docSnap.data()));
+        if (assignment) byId.set(assignment.id, assignment);
+    }
+
+    const byMsSnap = await getDocs(
+        query(
+            collection(db, "clients"),
+            where("assignedAt", ">=", input.startMs),
+            where("assignedAt", "<=", input.endMs),
+            orderBy("assignedAt", "asc"),
+            limit(10000)
+        )
+    );
+
+    for (const docSnap of byMsSnap.docs) {
+        const assignment = normalizeAssignment(docSnap.id, record(docSnap.data()));
+        if (assignment) byId.set(assignment.id, assignment);
+    }
+
+    return Array.from(byId.values());
 }
 
 export async function getWeeklyInvestment(
@@ -294,6 +366,7 @@ export async function closeWeeklyInvestment(input: {
     const finalSummary: AccountingFinalSummary = {
         visited: input.summary.visited,
         rejected: input.summary.rejected,
+        assigned: input.summary.assigned,
         gross: clamp2(input.summary.gross),
         grossVisits: clamp2(input.summary.grossVisits),
         grossSubscriptions: clamp2(input.summary.grossSubscriptions),

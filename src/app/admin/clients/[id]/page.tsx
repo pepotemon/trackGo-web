@@ -8,16 +8,16 @@ import {
     updateClientOperationalStatus,
     type ClientRejectedReason,
 } from "@/data/clientsRepo";
+import { assignLeadToUser } from "@/data/leadsRepo";
 import { subscribeLeadClient, subscribeLeadMessages } from "@/data/leadChatRepo";
 import { listAdminUsers } from "@/data/usersRepo";
+import { LeadEditModal } from "@/features/leads/LeadEditModal";
 import { auth } from "@/lib/firebase";
 import { money } from "@/lib/date";
 import type { DailyEventDoc } from "@/types/accounting";
 import type { LeadMessageDoc, MetaLeadDoc } from "@/types/leads";
 import type { UserDoc } from "@/types/users";
-import { Badge, Card, Field, IconButton, Input, Modal, PageHeader, StatCard } from "@/components/ui";
-
-type IconName = "activity" | "chat" | "check" | "map" | "pause" | "x";
+import { AppIcon, Badge, Card, CardHeader, Field, IconButton, Input, Modal, PageHeader } from "@/components/ui";
 type ConfirmStatus = "pending" | "visited" | null;
 
 const clientStatusLabel: Record<NonNullable<MetaLeadDoc["status"]>, string> = {
@@ -85,37 +85,6 @@ function rawText(client: MetaLeadDoc | null, key: string) {
     return typeof value === "string" ? value.trim() : "";
 }
 
-function Icon({ name }: { name: IconName }) {
-    const common = {
-        fill: "none",
-        stroke: "currentColor",
-        strokeLinecap: "round" as const,
-        strokeLinejoin: "round" as const,
-        strokeWidth: 1.8,
-    };
-
-    return (
-        <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4">
-            {name === "activity" ? <path {...common} d="M22 12h-4l-3 8L9 4l-3 8H2" /> : null}
-            {name === "chat" ? (
-                <>
-                    <path {...common} d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z" />
-                    <path {...common} d="M8 9h8M8 13h5" />
-                </>
-            ) : null}
-            {name === "check" ? <path {...common} d="M20 6 9 17l-5-5" /> : null}
-            {name === "map" ? (
-                <>
-                    <path {...common} d="M9 18 3 21V6l6-3 6 3 6-3v15l-6 3-6-3Z" />
-                    <path {...common} d="M9 3v15M15 6v15" />
-                </>
-            ) : null}
-            {name === "pause" ? <path {...common} d="M8 5v14M16 5v14" /> : null}
-            {name === "x" ? <path {...common} d="M18 6 6 18M6 6l12 12" /> : null}
-        </svg>
-    );
-}
-
 export default function ClientDetailPage() {
     const params = useParams<{ id: string }>();
     const clientId = String(params.id ?? "").trim();
@@ -129,6 +98,7 @@ export default function ClientDetailPage() {
     const [savingStatus, setSavingStatus] = useState(false);
     const [rejectOpen, setRejectOpen] = useState(false);
     const [confirmStatus, setConfirmStatus] = useState<ConfirmStatus>(null);
+    const [editOpen, setEditOpen] = useState(false);
     const [rejectReason, setRejectReason] = useState<ClientRejectedReason>("no_le_interesa");
     const [rejectText, setRejectText] = useState("");
     const [err, setErr] = useState<string | null>(null);
@@ -263,14 +233,29 @@ export default function ClientDetailPage() {
         }
     }
 
+    async function assignFromEdit(lead: MetaLeadDoc, userId: string) {
+        await assignLeadToUser(lead.id, userId);
+    }
+
     return (
         <div className="mx-auto w-full max-w-[1220px]">
             <PageHeader
-                title="Cliente"
+                title={displayName(client)}
+                subtitle={client?.business || client?.phone || "Gestion operativa del cliente"}
+                icon={<AppIcon name="users" tone="blue" size="sm" className="bg-transparent text-white ring-0" />}
                 actions={
                     <>
-                        <LinkIcon href="/admin/activity" icon="activity" label="Actividad" />
-                        <LinkIcon href={`/admin/leads/${clientId}`} icon="chat" label="Chat" />
+                        <QuickLink href="/admin/activity" icon="activity" label="Actividad" />
+                        <QuickLink href={`/admin/leads/${clientId}`} icon="chat" label="Chat" />
+                        {client?.location.mapsUrl ? (
+                            <QuickLink href={client.location.mapsUrl} icon="map" label="Maps" external />
+                        ) : null}
+                        <IconButton
+                            icon="edit"
+                            label="Editar lead"
+                            onClick={() => setEditOpen(true)}
+                            disabled={!client}
+                        />
                         <IconButton
                             icon="pause"
                             label="Volver a pendiente"
@@ -301,30 +286,37 @@ export default function ClientDetailPage() {
                 </div>
             ) : null}
 
-            <section className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-                <StatCard label="Estado" value={clientStatusLabel[status]} caption={formatDate(client?.raw?.statusAt as number | null)} />
-                <StatCard label="Eventos" value={events.length} caption="Historial del cliente" />
-                <StatCard label="Visitados" value={visited} caption="Marcaciones positivas" />
-                <StatCard label="Rechazados" value={rejected} caption="Marcaciones negativas" />
-                <StatCard label="Monto" value={money(totalAmount)} caption="Eventos registrados" />
+            <section className="mb-4 grid gap-2 md:grid-cols-3 xl:grid-cols-5">
+                <ClientMiniStat label="Estado" value={clientStatusLabel[status]} caption={formatDate(client?.raw?.statusAt as number | null) || "Actual"} tone={clientStatusTone[status]} />
+                <ClientMiniStat label="Eventos" value={String(events.length)} caption="Historial" tone="blue" />
+                <ClientMiniStat label="Visitados" value={String(visited)} caption="Positivos" tone="green" />
+                <ClientMiniStat label="Rechazados" value={String(rejected)} caption="Negativos" tone="red" />
+                <ClientMiniStat label="Monto" value={money(totalAmount)} caption="Registrado" tone="purple" />
             </section>
 
             <section className="grid gap-4 xl:grid-cols-[360px_1fr]">
                 <aside className="space-y-4">
-                    <Card className="p-4">
+                    <Card className="overflow-hidden">
+                        <CardHeader title="Perfil" subtitle="Datos normalizados del cliente" />
+                        <div className="border-t border-[#eef1f5] p-4">
                         {loadingClient ? (
                             <p className="text-[13px] font-medium text-[#667085]">Cargando cliente...</p>
                         ) : !client ? (
                             <p className="text-[13px] font-medium text-red-500">Cliente no encontrado.</p>
                         ) : (
                             <div className="space-y-4">
-                                <div>
-                                    <h2 className="text-[20px] font-semibold text-[#172033]">
+                                <div className="flex items-start gap-3">
+                                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#7c3aed] to-[#4f46e5] text-[18px] font-black text-white shadow-[0_14px_30px_rgba(91,33,255,0.22)]">
+                                        {displayName(client).slice(0, 1).toUpperCase()}
+                                    </div>
+                                    <div className="min-w-0">
+                                    <h2 className="truncate text-[20px] font-bold tracking-[-0.03em] text-[#101936]">
                                         {displayName(client)}
                                     </h2>
                                     <p className="mt-1 text-[12px] font-medium text-[#667085]">
                                         {client.business || client.phone || client.id}
                                     </p>
+                                    </div>
                                 </div>
 
                                 <div className="flex flex-wrap gap-2">
@@ -341,29 +333,33 @@ export default function ClientDetailPage() {
                                     <Info label="Telefono" value={client.phone || "Sin telefono"} />
                                     <Info label="Negocio" value={client.business || "Sin negocio"} />
                                     <Info label="Ciudad" value={client.location.displayLabel || client.location.adminCityLabel || "Sin ciudad"} />
-                                    <Info label="Asignado a" value={assignedUser?.name || assignedUser?.email || client.assignedTo || "Sin asignar"} />
+                                    <Info label="Asignado a" value={assignedUser?.name || assignedUser?.email || (client.assignedTo ? "Usuario asignado" : "Sin asignar")} />
                                     <Info label="Actualizado" value={formatDate(client.updatedAt)} />
                                 </div>
 
-                                {client.location.mapsUrl ? (
-                                    <a
-                                        href={client.location.mapsUrl}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        aria-label="Abrir Maps"
-                                        title="Abrir Maps"
-                                        className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#e4e7ec] bg-white text-[#344054] shadow-sm transition hover:bg-[#f9fafb] hover:text-[#172033]"
+                                <div className="grid grid-cols-3 gap-2 pt-1">
+                                    <SmallAction href={`/admin/leads/${clientId}`} icon="chat" label="Chat" />
+                                    {client.location.mapsUrl ? (
+                                        <SmallAction href={client.location.mapsUrl} icon="map" label="Maps" external />
+                                    ) : null}
+                                    <button
+                                        type="button"
+                                        onClick={() => setEditOpen(true)}
+                                        className="inline-flex h-10 items-center justify-center rounded-xl border border-[#e8e7fb] bg-[#fbfaff] text-[#7c3aed] transition hover:bg-[#f5f3ff]"
+                                        aria-label="Editar lead"
+                                        title="Editar lead"
                                     >
-                                        <Icon name="map" />
-                                    </a>
-                                ) : null}
+                                        <AppIcon name="edit" tone="purple" size="sm" plain />
+                                    </button>
+                                </div>
                             </div>
                         )}
+                        </div>
                     </Card>
 
-                    <Card className="p-4">
-                        <div className="text-[13px] font-semibold text-[#172033]">Trazabilidad</div>
-                        <div className="mt-3 space-y-2 text-[12px] font-medium">
+                    <Card className="overflow-hidden">
+                        <CardHeader title="Trazabilidad" subtitle="Estado operativo" />
+                        <div className="space-y-2 border-t border-[#eef1f5] p-4 text-[12px] font-medium">
                             <Info label="Ultimo evento" value={latestEvent ? `${eventLabel[latestEvent.type]} - ${formatDate(latestEvent.createdAt)}` : "Sin eventos"} />
                             <Info label="Mensajes" value={String(messages.length)} />
                             <Info label="Pendiente actual" value={pending ? "Si" : "No"} />
@@ -371,9 +367,10 @@ export default function ClientDetailPage() {
                     </Card>
 
                     {status === "rejected" ? (
-                        <Card className="p-4">
-                            <div className="text-[13px] font-semibold text-[#172033]">Motivo de rechazo</div>
-                            <p className="mt-2 text-[12px] font-medium leading-5 text-[#667085]">
+                        <Card className="overflow-hidden border-red-100">
+                            <CardHeader title="Motivo de rechazo" subtitle="Registro del ultimo cierre" />
+                            <div className="border-t border-[#eef1f5] p-4">
+                            <p className="text-[12px] font-medium leading-5 text-[#667085]">
                                 {rejectedReason || "Sin motivo estructurado"}
                             </p>
                             {rejectedReasonText ? (
@@ -381,17 +378,13 @@ export default function ClientDetailPage() {
                                     {rejectedReasonText}
                                 </p>
                             ) : null}
+                            </div>
                         </Card>
                     ) : null}
                 </aside>
 
                 <Card className="overflow-hidden">
-                    <div className="border-b border-[#eef1f5] px-4 py-3">
-                        <div className="text-[13px] font-semibold text-[#172033]">Historial operativo</div>
-                        <div className="mt-0.5 text-[12px] font-medium text-[#667085]">
-                            Eventos diarios registrados para este cliente
-                        </div>
-                    </div>
+                    <CardHeader title="Historial operativo" subtitle="Eventos diarios que alimentan Activity y Contabilidad" />
 
                     <div className="overflow-x-auto">
                         <table className="w-full min-w-[760px] border-collapse">
@@ -420,7 +413,7 @@ export default function ClientDetailPage() {
                                                 </td>
                                                 <td className="px-4 py-3">
                                                     <div className="text-[12px] font-semibold text-[#344054]">
-                                                        {user?.name || user?.email || event.userId || "Usuario"}
+                                                        {user?.name || user?.email || "Usuario"}
                                                     </div>
                                                 </td>
                                                 <td className="px-4 py-3">
@@ -453,6 +446,7 @@ export default function ClientDetailPage() {
                 onClose={() => setRejectOpen(false)}
                 title="Rechazar cliente"
                 subtitle={displayName(client)}
+                size="sm"
             >
                 <div className="space-y-4">
                     <Field label="Motivo">
@@ -506,6 +500,7 @@ export default function ClientDetailPage() {
                         : "Volver a pendiente"
                 }
                 subtitle={displayName(client)}
+                size="sm"
             >
                 <div className="space-y-4">
                     <p className="text-[13px] font-medium leading-5 text-[#667085]">
@@ -533,28 +528,97 @@ export default function ClientDetailPage() {
                     </div>
                 </div>
             </Modal>
+
+            <LeadEditModal
+                open={editOpen}
+                lead={client}
+                onClose={() => setEditOpen(false)}
+                onSaved={refreshEvents}
+                users={users}
+                onAssign={assignFromEdit}
+            />
         </div>
     );
 }
 
-function LinkIcon({
+function QuickLink({
     href,
     icon,
     label,
+    external = false,
 }: {
     href: string;
-    icon: IconName;
+    icon: "activity" | "chat" | "map";
     label: string;
+    external?: boolean;
 }) {
     return (
         <Link
             href={href}
+            target={external ? "_blank" : undefined}
+            rel={external ? "noreferrer" : undefined}
             aria-label={label}
             title={label}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#e4e7ec] bg-white text-[#344054] shadow-sm transition hover:bg-[#f9fafb] hover:text-[#172033]"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#e4e7ec] bg-white text-[#344054] shadow-sm transition hover:bg-[#f8f7ff] hover:text-[#4f46e5]"
         >
-            <Icon name={icon} />
+            <AppIcon name={icon} tone={icon === "map" ? "green" : "purple"} size="sm" plain />
         </Link>
+    );
+}
+
+function SmallAction({
+    href,
+    icon,
+    label,
+    external = false,
+}: {
+    href: string;
+    icon: "chat" | "map";
+    label: string;
+    external?: boolean;
+}) {
+    return (
+        <Link
+            href={href}
+            target={external ? "_blank" : undefined}
+            rel={external ? "noreferrer" : undefined}
+            className="inline-flex h-10 items-center justify-center rounded-xl border border-[#e8e7fb] bg-[#fbfaff] text-[#7c3aed] transition hover:bg-[#f5f3ff]"
+            aria-label={label}
+            title={label}
+        >
+            <AppIcon name={icon} tone={icon === "map" ? "green" : "purple"} size="sm" plain />
+        </Link>
+    );
+}
+
+function ClientMiniStat({
+    label,
+    value,
+    caption,
+    tone,
+}: {
+    label: string;
+    value: string;
+    caption: string;
+    tone: "yellow" | "green" | "red" | "blue" | "purple";
+}) {
+    const color =
+        tone === "green"
+            ? "text-emerald-600"
+            : tone === "red"
+                ? "text-red-500"
+                : tone === "yellow"
+                    ? "text-orange-600"
+                    : tone === "blue"
+                        ? "text-blue-600"
+                        : "text-[#7c3aed]";
+
+    return (
+        <div className="rounded-xl border border-[#e8e7fb] bg-white px-3 py-2.5 shadow-[0_10px_28px_rgba(16,25,54,0.045)]">
+            <div className="text-[10px] font-black uppercase tracking-[0.08em] text-[#8a93ad]">{label}</div>
+            <div className={`mt-1 truncate text-[20px] font-black leading-none tracking-[-0.04em] ${color}`}>{value}</div>
+            <div className="mt-1 truncate text-[11px] font-semibold text-[#66739a]">{caption}</div>
+        </div>
     );
 }
 

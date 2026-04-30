@@ -1,16 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, type ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useAuth } from "@/features/auth/AuthProvider";
+import { TrackGoLogo } from "@/components/brand/TrackGoLogo";
 
 type NavIconName =
     | "activity"
     | "dashboard"
     | "inbox"
-    | "spark"
-    | "support"
+    | "search"
     | "users"
     | "wallet"
     | "logOut";
@@ -28,11 +28,36 @@ const NAV_SETTINGS: { href: string; label: string; icon: NavIconName }[] = [
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
     const router = useRouter();
+    const pathname = usePathname();
     const { firebaseUser, isAdmin, loading, logout } = useAuth();
+    const [sidebarSearch, setSidebarSearch] = useState("");
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const [now, setNow] = useState(() => new Date());
+
+    const adminLabel = useMemo(() => {
+        return firebaseUser?.displayName || firebaseUser?.email || "Admin";
+    }, [firebaseUser]);
+
+    const liveDate = useMemo(() => {
+        return new Intl.DateTimeFormat("es", {
+            weekday: "short",
+            day: "2-digit",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+        }).format(now);
+    }, [now]);
 
     async function handleLogout() {
         await logout();
         router.replace("/login");
+    }
+
+    function handleSidebarSearch(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        const query = sidebarSearch.trim();
+        setMobileMenuOpen(false);
+        router.push(query ? `/admin/leads?search=${encodeURIComponent(query)}` : "/admin/leads");
     }
 
     useEffect(() => {
@@ -48,6 +73,11 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         }
     }, [firebaseUser, isAdmin, loading, router]);
 
+    useEffect(() => {
+        const id = window.setInterval(() => setNow(new Date()), 1000);
+        return () => window.clearInterval(id);
+    }, []);
+
     if (loading) {
         return <AdminAccessState title="Validando acceso" body="Estamos revisando tu sesion administrativa." />;
     }
@@ -61,32 +91,31 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     }
 
     return (
-        <div className="min-h-screen bg-[#f7f8ff] text-[#101936]">
+        <div className="min-h-screen bg-[linear-gradient(180deg,#fbfaff_0%,#f7f8ff_48%,#f3f0ff_100%)] text-[#101936]">
             <aside className="fixed left-0 top-0 hidden h-screen w-[244px] border-r border-[#c8c0ff] bg-[linear-gradient(180deg,#eee8ff_0%,#ddd5ff_46%,#f2f0ff_100%)] px-3 py-4 text-[#172033] shadow-[18px_0_55px_rgba(82,63,169,0.15)] xl:block">
-                <div className="mb-5 flex items-center gap-2 border-b border-[#c8c0ff] px-2 pb-4">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#8b5cf6] to-[#5b21ff] text-[13px] font-bold text-white shadow-lg shadow-violet-200/70">
-                        T
-                    </div>
-
-                    <div className="min-w-0">
-                        <p className="truncate text-[17px] font-bold leading-none text-[#101936]">
-                            TrackGo
-                        </p>
-                        <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#7c70ba]">
-                            Admin OS
-                        </p>
-                    </div>
+                <div className="mb-5 flex justify-center border-b border-[#c8c0ff] px-2 pb-4">
+                    <TrackGoLogo size="lg" />
                 </div>
 
-                <div className="mb-4">
-                    <div className="flex h-9 items-center gap-2 rounded-xl border border-[#c8c0ff] bg-white/62 px-2 text-[#5b4ea6] shadow-sm shadow-violet-200/70">
-                        <span className="text-[12px]">/</span>
-                        <span className="text-[12px] font-medium">Buscar</span>
-                        <span className="ml-auto rounded border border-[#e4e7ec] bg-white px-1.5 py-0.5 text-[10px] text-[#8a93ad]">
-                            K
-                        </span>
-                    </div>
-                </div>
+                <form className="mb-4" onSubmit={handleSidebarSearch}>
+                    <label className="flex h-9 items-center gap-2 rounded-xl border border-[#c8c0ff] bg-white/62 px-2 text-[#5b4ea6] shadow-sm shadow-violet-200/70">
+                        <NavIcon name="search" />
+                        <input
+                            value={sidebarSearch}
+                            onChange={(event) => setSidebarSearch(event.target.value)}
+                            placeholder="Buscar lead..."
+                            className="min-w-0 flex-1 bg-transparent text-[12px] font-medium text-[#364260] outline-none placeholder:text-[#7c70ba]"
+                        />
+                        <button
+                            type="submit"
+                            className="rounded border border-[#e4e7ec] bg-white px-1.5 py-0.5 text-[10px] font-bold text-[#6d5fb4]"
+                            aria-label="Buscar en leads"
+                            title="Buscar en leads"
+                        >
+                            Ir
+                        </button>
+                    </label>
+                </form>
 
                 <nav className="space-y-5">
                     <NavSection title="Navegacion" items={NAV_MAIN} />
@@ -94,8 +123,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                 </nav>
 
                 <div className="absolute bottom-4 left-3 right-3 space-y-1">
-                    <SidebarFooterLink label="Soporte" icon="support" />
-                    <SidebarFooterLink label="Novedades" icon="spark" />
                     <SidebarFooterAction label="Cerrar sesion" icon="logOut" onClick={handleLogout} />
 
                     <div className="mt-3 flex items-center gap-2 rounded-xl border border-[#c8c0ff] bg-white/62 px-2 py-2 shadow-sm shadow-violet-200/70">
@@ -104,10 +131,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                         </div>
                         <div>
                             <span className="block text-[12px] font-semibold text-[#101936]">
-                                Admin
+                                {adminLabel}
                             </span>
                             <span className="block text-[10px] font-medium text-[#7c70ba]">
-                                Operacion
+                                {liveDate}
                             </span>
                         </div>
                     </div>
@@ -115,33 +142,54 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             </aside>
 
             <div className="xl:pl-[228px]">
-                <div className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-[#e4e7ec] bg-white/90 px-4 backdrop-blur-xl xl:hidden">
+                <div className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-[#e4e7ec] bg-white/92 px-3 backdrop-blur-xl xl:hidden">
                     <div className="flex items-center gap-2">
-                        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#2563eb] text-[12px] font-bold text-white">
-                            T
-                        </div>
-                        <p className="text-[14px] font-semibold">TrackGo</p>
+                        <TrackGoLogo size="sm" />
                     </div>
 
-                    <div className="flex items-center gap-2 overflow-x-auto">
-                        <MobileLink href="/admin" label="Dash" />
-                        <MobileLink href="/admin/leads" label="Leads" />
-                        <MobileLink href="/admin/activity" label="Act." />
-                        <MobileLink href="/admin/accounting" label="Conta." />
-                        <MobileLink href="/admin/settings/users" label="Usuarios" />
+                    <div className="flex items-center gap-2">
+                        <form className="hidden min-w-0 flex-1 sm:block" onSubmit={handleSidebarSearch}>
+                            <label className="flex h-9 w-[260px] items-center gap-2 rounded-full border border-[#e4e7ec] bg-[#fbfaff] px-3 text-[#66739a] shadow-sm">
+                                <NavIcon name="search" />
+                                <input
+                                    value={sidebarSearch}
+                                    onChange={(event) => setSidebarSearch(event.target.value)}
+                                    placeholder="Buscar lead..."
+                                    className="min-w-0 flex-1 bg-transparent text-[12px] font-semibold outline-none placeholder:text-[#98a2b3]"
+                                />
+                            </label>
+                        </form>
                         <button
                             type="button"
-                            onClick={handleLogout}
-                            className="rounded-lg border border-[#e4e7ec] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#344054] shadow-sm"
+                            onClick={() => setMobileMenuOpen(true)}
+                            className="flex h-10 w-10 items-center justify-center rounded-2xl border border-[#e8e7fb] bg-white text-[#5b21ff] shadow-[0_10px_24px_rgba(91,33,255,0.14)]"
+                            aria-label="Abrir menu"
+                            title="Menu"
                         >
-                            Salir
+                            <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5">
+                                <path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+                            </svg>
                         </button>
                     </div>
                 </div>
 
-                <main className="min-h-screen px-4 py-5 sm:px-6 lg:px-7">
+                <MobileDrawer
+                    open={mobileMenuOpen}
+                    onClose={() => setMobileMenuOpen(false)}
+                    onLogout={handleLogout}
+                    onSearch={handleSidebarSearch}
+                    search={sidebarSearch}
+                    setSearch={setSidebarSearch}
+                    adminLabel={adminLabel}
+                    liveDate={liveDate}
+                    pathname={pathname}
+                />
+
+                <main className="min-h-screen px-3 pb-24 pt-4 sm:px-5 lg:px-7 xl:pb-6 xl:pt-5">
                     {children}
                 </main>
+
+                <MobileBottomNav pathname={pathname} />
             </div>
         </div>
     );
@@ -149,11 +197,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
 function AdminAccessState({ title, body }: { title: string; body: string }) {
     return (
-        <main className="flex min-h-screen items-center justify-center bg-[#f6f8fb] p-6 text-[#172033]">
-            <div className="w-full max-w-sm rounded-lg border border-[#e4e7ec] bg-white p-5 text-center shadow-sm">
-                <div className="mx-auto mb-3 flex h-8 w-8 items-center justify-center rounded-lg bg-[#2563eb] text-[12px] font-bold text-white">
-                    T
-                </div>
+        <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,#f5f3ff_0,#f8f7ff_34%,#ffffff_100%)] p-6 text-[#172033]">
+            <div className="w-full max-w-sm rounded-2xl border border-[#e8e7fb] bg-white p-6 text-center shadow-[0_24px_70px_rgba(91,33,255,0.12)]">
+                <TrackGoLogo variant="mark" size="lg" className="mx-auto mb-4 justify-center" />
                 <h1 className="text-[16px] font-semibold">{title}</h1>
                 <p className="mt-1 text-[13px] font-medium text-[#667085]">{body}</p>
             </div>
@@ -205,20 +251,6 @@ function NavItem({
     );
 }
 
-function SidebarFooterLink({ label, icon }: { label: string; icon: NavIconName }) {
-    return (
-        <button
-            type="button"
-            className="flex h-8 w-full items-center gap-2 rounded-lg px-2 text-[12px] font-medium text-[#6b7280] transition hover:bg-white/80 hover:text-[#4f46e5]"
-        >
-            <span className="flex h-5 w-5 items-center justify-center text-[#6d5fb4]">
-                <NavIcon name={icon} />
-            </span>
-            <span>{label}</span>
-        </button>
-    );
-}
-
 function SidebarFooterAction({
     label,
     icon,
@@ -242,14 +274,155 @@ function SidebarFooterAction({
     );
 }
 
-function MobileLink({ href, label }: { href: string; label: string }) {
+function MobileDrawer({
+    open,
+    onClose,
+    onLogout,
+    onSearch,
+    search,
+    setSearch,
+    adminLabel,
+    liveDate,
+    pathname,
+}: {
+    open: boolean;
+    onClose: () => void;
+    onLogout: () => void;
+    onSearch: (event: FormEvent<HTMLFormElement>) => void;
+    search: string;
+    setSearch: (value: string) => void;
+    adminLabel: string;
+    liveDate: string;
+    pathname: string;
+}) {
+    if (!open) return null;
+
     return (
-        <Link
-            href={href}
-            className="rounded-lg border border-[#e4e7ec] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#344054] shadow-sm"
-        >
-            {label}
-        </Link>
+        <div className="fixed inset-0 z-50 xl:hidden">
+            <button
+                type="button"
+                className="absolute inset-0 bg-[#101936]/35 backdrop-blur-sm"
+                aria-label="Cerrar menu"
+                onClick={onClose}
+            />
+
+            <aside className="absolute bottom-0 right-0 top-0 flex w-[min(86vw,340px)] flex-col border-l border-[#c8c0ff] bg-[linear-gradient(180deg,#f4f0ff_0%,#e4dcff_48%,#fbfaff_100%)] p-4 text-[#172033] shadow-[-24px_0_70px_rgba(82,63,169,0.26)]">
+                <div className="mb-4 flex items-center justify-between">
+                    <TrackGoLogo size="md" />
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="flex h-9 w-9 items-center justify-center rounded-full border border-[#d8d2ff] bg-white/80 text-[20px] leading-none text-[#5b21ff] shadow-sm"
+                        aria-label="Cerrar menu"
+                    >
+                        x
+                    </button>
+                </div>
+
+                <form className="mb-5" onSubmit={onSearch}>
+                    <label className="flex h-11 items-center gap-2 rounded-2xl border border-[#c8c0ff] bg-white/75 px-3 text-[#5b4ea6] shadow-sm shadow-violet-200/70">
+                        <NavIcon name="search" />
+                        <input
+                            value={search}
+                            onChange={(event) => setSearch(event.target.value)}
+                            placeholder="Buscar lead, telefono..."
+                            className="min-w-0 flex-1 bg-transparent text-[13px] font-semibold text-[#364260] outline-none placeholder:text-[#7c70ba]"
+                        />
+                    </label>
+                </form>
+
+                <nav className="space-y-5">
+                    <MobileNavSection title="Navegacion" items={NAV_MAIN} pathname={pathname} onClose={onClose} />
+                    <MobileNavSection title="Configurar" items={NAV_SETTINGS} pathname={pathname} onClose={onClose} />
+                </nav>
+
+                <div className="mt-auto space-y-3">
+                    <div className="rounded-2xl border border-[#c8c0ff] bg-white/65 p-3 shadow-sm shadow-violet-200/70">
+                        <span className="block truncate text-[13px] font-bold text-[#101936]">{adminLabel}</span>
+                        <span className="mt-0.5 block text-[11px] font-semibold text-[#7c70ba]">{liveDate}</span>
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={onLogout}
+                        className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-red-100 bg-white/75 text-[13px] font-bold text-[#dc2626] shadow-sm"
+                    >
+                        <NavIcon name="logOut" />
+                        Cerrar sesion
+                    </button>
+                </div>
+            </aside>
+        </div>
+    );
+}
+
+function MobileNavSection({
+    title,
+    items,
+    pathname,
+    onClose,
+}: {
+    title: string;
+    items: { href: string; label: string; icon: NavIconName }[];
+    pathname: string;
+    onClose: () => void;
+}) {
+    return (
+        <div>
+            <p className="mb-2 px-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#7c70ba]">
+                {title}
+            </p>
+            <div className="grid gap-2">
+                {items.map((item) => {
+                    const active = pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href));
+                    return (
+                        <Link
+                            key={item.href}
+                            href={item.href}
+                            onClick={onClose}
+                            className={[
+                                "flex h-12 items-center gap-3 rounded-2xl border px-3 text-[13px] font-bold shadow-sm transition",
+                                active
+                                    ? "border-[#c4b5fd] bg-white text-[#5b21ff]"
+                                    : "border-white/40 bg-white/45 text-[#364260]",
+                            ].join(" ")}
+                        >
+                            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#f3f0ff] text-[#5b21ff] ring-1 ring-[#d8d2ff]">
+                                <NavIcon name={item.icon} />
+                            </span>
+                            {item.label}
+                        </Link>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
+function MobileBottomNav({ pathname }: { pathname: string }) {
+    return (
+        <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#e4e7ec] bg-white/92 px-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-2 shadow-[0_-18px_45px_rgba(36,30,86,0.12)] backdrop-blur-xl xl:hidden">
+            <div className="mx-auto grid max-w-md grid-cols-4 gap-1">
+                {NAV_MAIN.map((item) => {
+                    const active = pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href));
+                    return (
+                        <Link
+                            key={item.href}
+                            href={item.href}
+                            className={[
+                                "flex flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[10px] font-bold transition",
+                                active ? "bg-[#f3f0ff] text-[#5b21ff]" : "text-[#66739a]",
+                            ].join(" ")}
+                        >
+                            <span className={active ? "text-[#5b21ff]" : "text-[#98a2b3]"}>
+                                <NavIcon name={item.icon} />
+                            </span>
+                            <span className="max-w-full truncate">{item.label === "Contabilidad" ? "Conta" : item.label}</span>
+                        </Link>
+                    );
+                })}
+            </div>
+        </nav>
     );
 }
 
@@ -301,19 +474,7 @@ function NavIcon({ name }: { name: NavIconName }) {
                     <path {...common} d="M16 3.3a4 4 0 0 1 0 7.4" />
                 </>
             ) : null}
-            {name === "support" ? (
-                <>
-                    <circle {...common} cx="12" cy="12" r="9" />
-                    <path {...common} d="M9.5 9a2.5 2.5 0 0 1 4.8 1c0 2-2.3 2.1-2.3 4" />
-                    <path {...common} d="M12 17h.01" />
-                </>
-            ) : null}
-            {name === "spark" ? (
-                <>
-                    <path {...common} d="M12 3l1.8 5.1L19 10l-5.2 1.9L12 17l-1.8-5.1L5 10l5.2-1.9L12 3Z" />
-                    <path {...common} d="M5 16l.8 2.2L8 19l-2.2.8L5 22l-.8-2.2L2 19l2.2-.8L5 16Z" />
-                </>
-            ) : null}
+            {name === "search" ? <path {...common} d="m21 21-4.3-4.3M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16Z" /> : null}
         </svg>
     );
 }

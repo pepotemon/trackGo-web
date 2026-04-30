@@ -24,7 +24,8 @@ export type AppIconName =
     | "settings"
     | "trash"
     | "unlock"
-    | "users";
+    | "users"
+    | "wallet";
 
 export type AppIconTone =
     | "blue"
@@ -123,6 +124,12 @@ export function AppIcon({
                         <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
                         <circle cx="9" cy="7" r="4" />
                         <path d="M22 21v-2a4 4 0 0 0-3-3.8M16 3.3a4 4 0 0 1 0 7.4" />
+                    </>
+                ) : null}
+                {name === "wallet" ? (
+                    <>
+                        <path d="M4 7h15a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h12" />
+                        <path d="M16 14h5" />
                     </>
                 ) : null}
             </svg>

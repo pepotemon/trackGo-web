@@ -46,3 +46,94 @@ textarea {
   background: rgba(37, 99, 235, 0.18);
   color: var(--tg-text);
 }
+
+@keyframes tg-chart-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes tg-chart-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tg-chart-grow {
+  from {
+    opacity: 0;
+    transform: scaleY(0);
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+.tg-chart-line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: tg-chart-draw 1.15s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.tg-chart-bar {
+  transform-box: fill-box;
+  transform-origin: bottom;
+  transform: scaleY(0);
+  animation: tg-chart-grow 0.72s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.tg-chart-row {
+  opacity: 0;
+  transform: translateY(8px) scale(0.98);
+  animation: tg-chart-fade-up 0.5s ease-out forwards;
+}
+
+.tg-chart-hbar {
+  transform-origin: left;
+  transform: scaleX(0);
+  animation: tg-chart-width 0.78s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes tg-chart-width {
+  from {
+    opacity: 0;
+    transform: scaleX(0);
+  }
+  to {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+.tg-chart-area {
+  opacity: 0;
+  animation: tg-chart-fade-up 0.8s ease-out 0.25s forwards;
+}
+
+.tg-chart-point {
+  opacity: 0;
+  animation: tg-chart-fade-up 0.45s ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tg-chart-line,
+  .tg-chart-area,
+  .tg-chart-point,
+  .tg-chart-bar,
+  .tg-chart-row,
+  .tg-chart-hbar {
+    animation: none;
+    opacity: 1;
+    stroke-dashoffset: 0;
+    transform: none;
+  }
+}

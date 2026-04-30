@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
     buildCoverageMatches,
     userCoverageLabel,
 } from "@/features/leads/coverageMatching";
-import { LeadSectionNav } from "@/features/leads/LeadSectionNav";
+import { LeadQuickAccessCards } from "@/features/leads/LeadQuickAccessCards";
 import { LeadEditModal } from "@/features/leads/LeadEditModal";
 import { useAdminLeadQueue } from "@/features/leads/useAdminLeadQueue";
 import type { LeadFilters, LeadReviewStatus, MetaLeadDoc } from "@/types/leads";
@@ -115,6 +115,12 @@ export default function AdminLeadsPage() {
         setFilters((prev) => ({ ...prev, ...patch }));
     }
 
+    useEffect(() => {
+        const query = new URLSearchParams(window.location.search).get("search")?.trim();
+        if (!query) return;
+        setFilters((prev) => ({ ...prev, search: query }));
+    }, [setFilters]);
+
     return (
         <div className="mx-auto w-full max-w-[1220px]">
             <PageHeader
@@ -127,9 +133,6 @@ export default function AdminLeadsPage() {
                             <AppIcon name="assign" tone="purple" size="sm" className="h-5 w-5 rounded-md bg-transparent text-current ring-0" />
                             Asignar por cobertura
                         </Button>
-                        {activeFiltersCount > 0 ? (
-                            <Button onClick={resetFilters}>Limpiar filtros</Button>
-                        ) : null}
                         <Button
                             variant="primary"
                             onClick={reloadUsers}
@@ -150,24 +153,7 @@ export default function AdminLeadsPage() {
                 </div>
             ) : null}
 
-            <LeadSectionNav />
-
-            <section className="mb-4 grid gap-3 md:grid-cols-2">
-                <LeadAccessCard
-                    href="/admin/leads/history"
-                    title="Historial"
-                    body="Leads incompletos o descartados fuera de la cola activa."
-                    icon="history"
-                    tone="slate"
-                />
-                <LeadAccessCard
-                    href="/admin/leads/assignments"
-                    title="Asignaciones"
-                    body="Auditoria de auto-asignacion y distribucion de trabajo."
-                    icon="assign"
-                    tone="green"
-                />
-            </section>
+            <LeadQuickAccessCards />
 
             <section className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <KpiCard label="Cola activa" value={stats.total} caption="Leads Meta sin asignar" icon="users" tone="blue" />
@@ -235,6 +221,11 @@ export default function AdminLeadsPage() {
                             <option value="manual">Manuales</option>
                         </FilterSelect>
                     </div>
+                    {activeFiltersCount > 0 ? (
+                        <div className="flex justify-end">
+                            <Button onClick={resetFilters}>Limpiar filtros</Button>
+                        </div>
+                    ) : null}
                 </div>
 
                 <LeadsTable
@@ -286,6 +277,8 @@ export default function AdminLeadsPage() {
     );
 }
 
+// Kept temporarily while the lead section access cards are being consolidated.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function LeadAccessCard({
     href,
     title,
@@ -562,8 +555,9 @@ function LeadQuickActionsModal({
             onClose={onClose}
             title={displayName(lead)}
             subtitle={lead.business || lead.location.address || lead.phone || "Acciones rapidas"}
+            size="sm"
         >
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-2">
                 <ActionTile href={`/admin/leads/${lead.id}`} icon="chat" label="Chat" tone="purple" />
                 {lead.location.mapsUrl ? (
                     <ActionTile href={lead.location.mapsUrl} icon="map" label="Maps" tone="green" external />

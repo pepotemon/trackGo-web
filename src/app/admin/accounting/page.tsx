@@ -1,11 +1,12 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { weekRangeKeysMonToSat, addDays, money } from "@/lib/date";
+import { weekRangeKeysMonToSun, addDays, money } from "@/lib/date";
 import {
     closeWeeklyInvestment,
     deleteInvestmentGroup,
     getWeeklyInvestment,
+    listClientAssignmentsByRange,
     listInvestmentGroups,
     listAccountingUsers,
     listDailyEventsByRange,
@@ -18,6 +19,7 @@ import { buildAccountingSummary } from "@/features/accounting/calcAccounting";
 import { useAuth } from "@/features/auth/AuthProvider";
 import type {
     AccountingSummary,
+    AccountingAssignmentDoc,
     DailyEventDoc,
     InvestmentGroupDoc,
     UserDoc,
@@ -36,10 +38,16 @@ import {
     KpiCard,
     Modal,
     PageHeader,
-    PageTab,
 } from "@/components/ui";
 
 type AccountingTab = "overview" | "investment";
+type AccountingMetric = "real" | "gross" | "visited" | "rejected" | "assigned" | "cost";
+type ChartMode = "trend" | "bars" | "mix" | "share";
+type ChartPoint = {
+    dayKey: string;
+    label: string;
+    value: number;
+};
 type IconName =
     | "activity"
     | "arrowLeft"
@@ -119,6 +127,7 @@ function snapshotDiffers(summary: AccountingSummary, finalSummary: NonNullable<W
         || differs(summary.investment, finalSummary.investment)
         || differs(summary.real, finalSummary.real)
         || differs(summary.roi, finalSummary.roi)
+        || summary.assigned !== (finalSummary.assigned ?? 0)
         || summary.visited !== finalSummary.visited
         || summary.rejected !== finalSummary.rejected
         || summary.subscriptionsPaid !== finalSummary.subscriptionsPaid
@@ -152,6 +161,7 @@ function exportAccountingSheet(summary: AccountingSummary) {
                     <td class="text">${excelText(row.name)}</td>
                     <td class="text">${excelText(row.email || row.userId)}</td>
                     <td class="text">${model}</td>
+                    <td class="num">${row.assigned}</td>
                     <td class="num">${row.visited}</td>
                     <td class="num">${row.rejected}</td>
                     <td class="money">${excelMoney(row.gross)}</td>
@@ -188,32 +198,34 @@ function exportAccountingSheet(summary: AccountingSummary) {
             </head>
             <body>
                 <table>
-                    <tr><td class="title" colspan="9">TrackGo - Contabilidad semanal</td></tr>
-                    <tr><td class="label">Semana</td><td colspan="8">${summary.startKey} a ${summary.endKey}</td></tr>
-                    <tr><td class="section" colspan="9">Resumen</td></tr>
+                    <tr><td class="title" colspan="10">TrackGo - Contabilidad semanal</td></tr>
+                    <tr><td class="label">Semana</td><td colspan="9">${summary.startKey} a ${summary.endKey}</td></tr>
+                    <tr><td class="section" colspan="10">Resumen</td></tr>
                     <tr>
+                        <td class="label">Asignados</td><td class="num">${summary.assigned}</td>
                         <td class="label">Visitados</td><td class="num">${summary.visited}</td>
                         <td class="label">Rechazados</td><td class="num">${summary.rejected}</td>
                         <td class="label">Suscripciones pagadas</td><td class="num">${summary.subscriptionsPaid}</td>
-                        <td class="label">ROI</td><td class="num" colspan="2">${summary.roi == null ? "" : summary.roi.toFixed(2) + "%"}</td>
                     </tr>
                     <tr>
                         <td class="label">Ganancia bruta</td><td class="money">${excelMoney(summary.gross)}</td>
                         <td class="label">Inversion</td><td class="money">${excelMoney(summary.investment)}</td>
                         <td class="label">Ganancia real</td><td class="money ${summary.real >= 0 ? "positive" : "negative"}">${excelMoney(summary.real)}</td>
-                        <td class="label">Ajuste manual</td><td class="money" colspan="2">${excelMoney(summary.manualAdjustment)}</td>
+                        <td class="label">ROI</td><td class="num">${summary.roi == null ? "" : summary.roi.toFixed(2) + "%"}</td>
+                        <td class="label">Ajuste manual</td><td class="money">${excelMoney(summary.manualAdjustment)}</td>
                     </tr>
                     <tr>
                         <td class="label">Ventas por visita</td><td class="money">${excelMoney(summary.grossVisits)}</td>
                         <td class="label">Suscripciones</td><td class="money">${excelMoney(summary.grossSubscriptions)}</td>
                         <td class="label">Inversion suscripciones</td><td class="money">${excelMoney(summary.subscriptionInvestment)}</td>
-                        <td class="label">Inversion grupos</td><td class="money" colspan="2">${excelMoney(summary.groupInvestment)}</td>
+                        <td class="label">Inversion grupos</td><td class="money" colspan="3">${excelMoney(summary.groupInvestment)}</td>
                     </tr>
-                    <tr><td class="section" colspan="9">Detalle por usuario</td></tr>
+                    <tr><td class="section" colspan="10">Detalle por usuario</td></tr>
                     <tr>
                         <th class="w-user">Usuario</th>
                         <th class="w-id">Email / ID</th>
                         <th class="w-model">Modelo</th>
+                        <th>Asignados</th>
                         <th>Visitados</th>
                         <th>Rechazados</th>
                         <th>Bruta</th>
@@ -247,6 +259,7 @@ export default function AccountingPage() {
     const [refreshNonce, setRefreshNonce] = useState(0);
     const [users, setUsers] = useState<UserDoc[]>([]);
     const [events, setEvents] = useState<DailyEventDoc[]>([]);
+    const [assignments, setAssignments] = useState<AccountingAssignmentDoc[]>([]);
     const [investment, setInvestment] = useState<WeeklyInvestmentDoc | null>(null);
     const [investmentGroups, setInvestmentGroups] = useState<InvestmentGroupDoc[]>([]);
     const [closeOpen, setCloseOpen] = useState(false);
@@ -257,7 +270,7 @@ export default function AccountingPage() {
     const [err, setErr] = useState<string | null>(null);
 
     const week = useMemo(() => {
-        return weekRangeKeysMonToSat(shiftWeek(new Date(), weekOffset));
+        return weekRangeKeysMonToSun(shiftWeek(new Date(), weekOffset));
     }, [weekOffset]);
 
     useEffect(() => {
@@ -268,9 +281,18 @@ export default function AccountingPage() {
             setErr(null);
 
             try {
-                const [u, ev, inv, groupCatalog] = await Promise.all([
+                const endOfWeek = new Date(week.endDate);
+                endOfWeek.setHours(23, 59, 59, 999);
+
+                const [u, ev, ass, inv, groupCatalog] = await Promise.all([
                     listAccountingUsers(),
                     listDailyEventsByRange(week.startKey, week.endKey),
+                    listClientAssignmentsByRange({
+                        startKey: week.startKey,
+                        endKey: week.endKey,
+                        startMs: week.startDate.getTime(),
+                        endMs: endOfWeek.getTime(),
+                    }),
                     getWeeklyInvestment(week.startKey),
                     listInvestmentGroups(),
                 ]);
@@ -294,6 +316,7 @@ export default function AccountingPage() {
 
                 setUsers(u);
                 setEvents(ev);
+                setAssignments(ass);
                 setInvestment(weeklyInvestment);
                 setInvestmentGroups(groupCatalog);
             } catch (e: unknown) {
@@ -309,7 +332,7 @@ export default function AccountingPage() {
         return () => {
             cancelled = true;
         };
-    }, [week.startKey, week.endKey, weekOffset, refreshNonce]);
+    }, [week.startKey, week.endKey, week.startDate, week.endDate, weekOffset, refreshNonce]);
 
     const summary: AccountingSummary | null = useMemo(() => {
         return buildAccountingSummary({
@@ -317,9 +340,10 @@ export default function AccountingPage() {
             endKey: week.endKey,
             users,
             events,
+            assignments,
             investment,
         });
-    }, [week.startKey, week.endKey, users, events, investment]);
+    }, [week.startKey, week.endKey, users, events, assignments, investment]);
 
     const weekStatus = investment?.status ?? "draft";
     const isClosed = weekStatus === "closed";
@@ -423,55 +447,57 @@ export default function AccountingPage() {
                 title="Contabilidad"
                 subtitle="Control semanal de ingresos, inversion, suscripciones y resultado real."
                 icon={<AppIcon name="activity" tone="green" size="sm" className="bg-transparent text-white ring-0" />}
-                tabs={
-                    <>
-                        <PageTab active={activeTab === "overview"} onClick={() => setActiveTab("overview")}>
-                            Vision general
-                        </PageTab>
-                        <PageTab active={activeTab === "investment"} onClick={() => setActiveTab("investment")}>
-                            Inversion
-                        </PageTab>
-                    </>
-                }
                 actions={
-                    <>
-                        <StatusPill status={weekStatus} />
-                        {summary ? (
+                    <div className="flex flex-col items-end gap-2">
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                            {activeTab === "investment" ? (
+                                <IconButton
+                                    icon="activity"
+                                    label="Ver resumen"
+                                    variant="primary"
+                                    onClick={() => setActiveTab("overview")}
+                                />
+                            ) : null}
+                            {summary ? (
+                                <IconButton
+                                    icon="download"
+                                    label="Exportar Excel"
+                                    variant="primary"
+                                    onClick={() => exportAccountingSheet(summary)}
+                                />
+                            ) : null}
                             <IconButton
-                                icon="download"
-                                label="Exportar Excel"
-                                onClick={() => exportAccountingSheet(summary)}
-                            />
-                        ) : null}
-                        <IconButton
-                            icon="settings"
-                            label="Configurar inversion"
-                            variant="primary"
-                            onClick={() => setActiveTab("investment")}
-                        />
-                        {isClosed ? (
-                            <IconButton
-                                icon="unlock"
-                                label="Reabrir semana"
-                                onClick={() => setReopenOpen(true)}
-                                disabled={savingWeek || !investment}
-                            />
-                        ) : (
-                            <IconButton
-                                icon="lock"
-                                label="Cerrar semana"
+                                icon="wallet"
+                                label="Configurar inversion"
                                 variant="primary"
-                                onClick={() => setCloseOpen(true)}
-                                disabled={savingWeek || !summary}
+                                onClick={() => setActiveTab("investment")}
                             />
-                        )}
-                        <IconButton
-                            icon="refresh"
-                            label="Actualizar"
-                            onClick={() => setRefreshNonce((value) => value + 1)}
-                            disabled={loading}
-                        />
-                    </>
+                            {isClosed ? (
+                                <IconButton
+                                    icon="unlock"
+                                    label="Reabrir semana"
+                                    onClick={() => setReopenOpen(true)}
+                                    disabled={savingWeek || !investment}
+                                />
+                            ) : (
+                                <IconButton
+                                    icon="lock"
+                                    label="Cerrar semana"
+                                    variant="primary"
+                                    onClick={() => setCloseOpen(true)}
+                                    disabled={savingWeek || !summary}
+                                />
+                            )}
+                            <IconButton
+                                icon="refresh"
+                                label="Actualizar"
+                                variant="primary"
+                                onClick={() => setRefreshNonce((value) => value + 1)}
+                                disabled={loading}
+                            />
+                        </div>
+                        <StatusPill status={weekStatus} />
+                    </div>
                 }
             />
 
@@ -528,6 +554,10 @@ export default function AccountingPage() {
                     {activeTab === "overview" ? (
                         <DashboardContent
                             summary={summary}
+                            events={events}
+                            assignments={assignments}
+                            startDate={week.startDate}
+                            endDate={week.endDate}
                             isClosed={isClosed}
                             onToggleSubscriptionPayment={toggleSubscriptionPayment}
                         />
@@ -1203,7 +1233,11 @@ function ClosedWeekPanel({
                 <MiniInvestmentStat label="ROI final" value={formatPercent(finalSummary.roi)} />
             </div>
 
-            <div className="grid gap-3 border-t border-[#eef1f5] bg-[#f9fafb] p-4 text-[12px] font-semibold text-[#667085] sm:grid-cols-4">
+            <div className="grid gap-3 border-t border-[#eef1f5] bg-[#f9fafb] p-4 text-[12px] font-semibold text-[#667085] sm:grid-cols-5">
+                <div>
+                    <span className="block text-[10px] uppercase tracking-[0.08em] text-[#98a2b3]">Asignados</span>
+                    <span className="mt-1 block text-[#172033]">{finalSummary.assigned ?? 0}</span>
+                </div>
                 <div>
                     <span className="block text-[10px] uppercase tracking-[0.08em] text-[#98a2b3]">Visitados</span>
                     <span className="mt-1 block text-[#172033]">{finalSummary.visited}</span>
@@ -1362,7 +1396,7 @@ function InvestmentGroupManageCard({
     onToggleActive: () => void;
 }) {
     return (
-        <details className="rounded-lg border border-[#e4e7ec] bg-white p-3">
+        <details className="group relative rounded-lg border border-[#e4e7ec] bg-white p-3">
             <summary className="flex cursor-pointer list-none items-start justify-between gap-3 [&::-webkit-details-marker]:hidden">
                 <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
@@ -1387,12 +1421,12 @@ function InvestmentGroupManageCard({
                 </span>
             </summary>
 
-            <div className="mt-3 overflow-hidden rounded-lg border border-[#e4e7ec] bg-[#f9fafb]">
+            <div className="absolute right-3 top-12 z-20 hidden w-40 overflow-hidden rounded-xl border border-[#e4e7ec] bg-white shadow-[0_18px_45px_rgba(16,25,54,0.18)] group-open:block">
                 <button
                     type="button"
                     onClick={onEdit}
                     disabled={disabled}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] font-semibold text-[#344054] hover:bg-white"
+                    className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[12px] font-semibold text-[#344054] hover:bg-[#f8f7ff]"
                 >
                     <Icon name="edit" />
                     <span>Editar</span>
@@ -1401,7 +1435,7 @@ function InvestmentGroupManageCard({
                     type="button"
                     onClick={onToggleActive}
                     disabled={disabled}
-                    className="flex w-full items-center gap-2 border-t border-[#e4e7ec] px-3 py-2 text-left text-[12px] font-semibold text-[#344054] hover:bg-white"
+                    className="flex w-full items-center gap-2 border-t border-[#e4e7ec] px-3 py-2.5 text-left text-[12px] font-semibold text-[#344054] hover:bg-[#f8f7ff]"
                 >
                     <Icon name={group.active ? "pause" : "play"} />
                     <span>{group.active ? "Inactivar" : "Activar"}</span>
@@ -1410,7 +1444,7 @@ function InvestmentGroupManageCard({
                     type="button"
                     onClick={onDelete}
                     disabled={disabled}
-                    className="flex w-full items-center gap-2 border-t border-[#e4e7ec] px-3 py-2 text-left text-[12px] font-semibold text-red-600 hover:bg-red-50"
+                    className="flex w-full items-center gap-2 border-t border-[#e4e7ec] px-3 py-2.5 text-left text-[12px] font-semibold text-red-600 hover:bg-red-50"
                 >
                     <Icon name="trash" />
                     <span>Eliminar</span>
@@ -1503,33 +1537,28 @@ function InvestmentGroupCard({
                     </select>
 
                     {selectedUsers.length ? (
-                        <details className="mt-2 rounded-lg border border-[#eef1f5] bg-[#f9fafb]">
-                            <summary className="cursor-pointer px-3 py-2 text-[12px] font-semibold text-[#344054]">
-                                Ver o quitar miembros
-                            </summary>
-                            <div className="max-h-40 space-y-1 overflow-y-auto border-t border-[#eef1f5] p-2">
-                                {selectedUsers.map((user) => (
-                                    <button
-                                        key={user.id}
-                                        type="button"
-                                        onClick={() => onToggleUser(user.id)}
-                                        className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-2 text-left text-[12px] font-semibold text-[#344054] hover:bg-white"
-                                    >
-                                        <span className="min-w-0">
-                                            <span className="block truncate">
-                                                {user.name || user.email || user.id}
-                                            </span>
-                                            <span className="block truncate text-[10px] font-medium text-[#98a2b3]">
-                                                {subscriptionCaption(user)}
-                                            </span>
+                        <div className="mt-2 max-h-44 space-y-1 overflow-y-auto rounded-lg border border-[#eef1f5] bg-[#f9fafb] p-2">
+                            {selectedUsers.map((user) => (
+                                <button
+                                    key={user.id}
+                                    type="button"
+                                    onClick={() => onToggleUser(user.id)}
+                                    className="flex w-full items-center justify-between gap-3 rounded-md bg-white px-2 py-2 text-left text-[12px] font-semibold text-[#344054] hover:bg-red-50"
+                                >
+                                    <span className="min-w-0">
+                                        <span className="block truncate">
+                                            {user.name || user.email || "Usuario"}
                                         </span>
-                                        <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-red-500 hover:bg-red-50">
-                                            <Icon name="x" />
+                                        <span className="block truncate text-[10px] font-medium text-[#98a2b3]">
+                                            {subscriptionCaption(user)}
                                         </span>
-                                    </button>
-                                ))}
-                            </div>
-                        </details>
+                                    </span>
+                                    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-red-500">
+                                        <Icon name="x" />
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
                     ) : (
                         <div className="mt-2 rounded-lg border border-dashed border-[#d0d5dd] bg-[#f9fafb] px-3 py-3 text-[12px] font-semibold text-[#98a2b3]">
                             Ningun miembro asignado.
@@ -1541,19 +1570,200 @@ function InvestmentGroupCard({
     );
 }
 
+const ACCOUNTING_METRICS: Record<
+    AccountingMetric,
+    {
+        label: string;
+        shortLabel: string;
+        description: string;
+        tone: "purple" | "green" | "red" | "orange" | "slate";
+        format: (value: number) => string;
+    }
+> = {
+    real: {
+        label: "Ganancia real",
+        shortLabel: "Real",
+        description: "bruta menos inversion",
+        tone: "purple",
+        format: money,
+    },
+    gross: {
+        label: "Ganancia bruta",
+        shortLabel: "Bruta",
+        description: "visitas + suscripciones",
+        tone: "green",
+        format: money,
+    },
+    visited: {
+        label: "Visitados",
+        shortLabel: "Visitados",
+        description: "clientes visitados",
+        tone: "green",
+        format: (value) => String(Math.round(value)),
+    },
+    rejected: {
+        label: "Rechazados",
+        shortLabel: "Rechazados",
+        description: "clientes rechazados",
+        tone: "red",
+        format: (value) => String(Math.round(value)),
+    },
+    assigned: {
+        label: "Asignados",
+        shortLabel: "Asignados",
+        description: "clientes asignados",
+        tone: "orange",
+        format: (value) => String(Math.round(value)),
+    },
+    cost: {
+        label: "Costo",
+        shortLabel: "Costo",
+        description: "suscripcion + grupos",
+        tone: "slate",
+        format: money,
+    },
+};
+
+function accountingMetricValue(row: AccountingSummary["rows"][number], metric: AccountingMetric) {
+    if (metric === "visited") return row.visited;
+    if (metric === "rejected") return row.rejected;
+    if (metric === "assigned") return row.assigned;
+    if (metric === "gross") return row.gross;
+    if (metric === "cost") return row.cost;
+    return row.real;
+}
+
+function dayKeysBetween(startDate: Date, endDate: Date) {
+    const out: { key: string; label: string }[] = [];
+    const cursor = new Date(startDate);
+    cursor.setHours(0, 0, 0, 0);
+    const end = new Date(endDate);
+    end.setHours(0, 0, 0, 0);
+
+    while (cursor <= end) {
+        const key = [
+            cursor.getFullYear(),
+            String(cursor.getMonth() + 1).padStart(2, "0"),
+            String(cursor.getDate()).padStart(2, "0"),
+        ].join("-");
+
+        out.push({
+            key,
+            label: new Intl.DateTimeFormat("es", { weekday: "short", day: "2-digit" }).format(cursor),
+        });
+        cursor.setDate(cursor.getDate() + 1);
+    }
+
+    return out;
+}
+
+function eventMoneyValue(event: DailyEventDoc) {
+    return safeNumber(
+        event.amount,
+        safeNumber(
+            event.amountSnapshot,
+            safeNumber(event.rateApplied, safeNumber(event.ratePerVisitSnapshot, 0))
+        )
+    );
+}
+
+function buildDailyChartSeries(
+    events: DailyEventDoc[],
+    assignments: AccountingAssignmentDoc[],
+    startDate: Date,
+    endDate: Date,
+    metric: AccountingMetric
+): ChartPoint[] {
+    const days = dayKeysBetween(startDate, endDate);
+    const totals = new Map(days.map((day) => [day.key, 0]));
+
+    if (metric === "assigned") {
+        const assignedClientIdsByDay = new Set<string>();
+        for (const assignment of assignments) {
+            if (!totals.has(assignment.assignedDayKey)) continue;
+            const key = `${assignment.assignedDayKey}_${assignment.id}`;
+            if (assignedClientIdsByDay.has(key)) continue;
+            assignedClientIdsByDay.add(key);
+            totals.set(assignment.assignedDayKey, safeNumber(totals.get(assignment.assignedDayKey), 0) + 1);
+        }
+
+        return days.map((day) => ({
+            dayKey: day.key,
+            label: day.label,
+            value: safeNumber(totals.get(day.key), 0),
+        }));
+    }
+
+    for (const event of events) {
+        if (!totals.has(event.dayKey)) continue;
+
+        let value = 0;
+        if (metric === "visited") value = event.type === "visited" ? 1 : 0;
+        if (metric === "rejected") value = event.type === "rejected" ? 1 : 0;
+        if (metric === "gross") value = event.type === "visited" ? eventMoneyValue(event) : 0;
+        if (metric === "real") value = event.type === "visited" ? eventMoneyValue(event) : 0;
+        if (metric === "cost") value = 0;
+
+        totals.set(event.dayKey, safeNumber(totals.get(event.dayKey), 0) + value);
+    }
+
+    return days.map((day) => ({
+        dayKey: day.key,
+        label: day.label,
+        value: safeNumber(totals.get(day.key), 0),
+    }));
+}
+
 function DashboardContent({
     summary,
+    events,
+    assignments,
+    startDate,
+    endDate,
     isClosed,
     onToggleSubscriptionPayment,
 }: {
     summary: AccountingSummary;
+    events: DailyEventDoc[];
+    assignments: AccountingAssignmentDoc[];
+    startDate: Date;
+    endDate: Date;
     isClosed: boolean;
     onToggleSubscriptionPayment: (row: AccountingSummary["rows"][number]) => void;
 }) {
-    const maxReal = Math.max(
+    const [rankingMetric, setRankingMetric] = useState<AccountingMetric>("real");
+    const [chartMetric, setChartMetric] = useState<AccountingMetric>("real");
+    const [chartMode, setChartMode] = useState<ChartMode>("trend");
+    const activeRows = useMemo(() => {
+        return summary.rows.filter((row) => {
+            return row.assigned > 0
+                || row.visited > 0
+                || row.rejected > 0
+                || row.subscriptionPaid === true
+                || Math.abs(Number(row.gross) || 0) > 0
+                || Math.abs(Number(row.cost) || 0) > 0
+                || Math.abs(Number(row.real) || 0) > 0;
+        });
+    }, [summary.rows]);
+    const rankedRows = useMemo(() => {
+        return [...activeRows].sort((a, b) => {
+            return accountingMetricValue(b, rankingMetric) - accountingMetricValue(a, rankingMetric);
+        });
+    }, [activeRows, rankingMetric]);
+    const chartRows = useMemo(() => {
+        return [...activeRows]
+            .sort((a, b) => Math.abs(accountingMetricValue(b, chartMetric)) - Math.abs(accountingMetricValue(a, chartMetric)))
+            .slice(0, 8);
+    }, [activeRows, chartMetric]);
+    const maxChartValue = Math.max(
         1,
-        ...summary.rows.map((row) => Math.abs(Number(row.real) || 0))
+        ...chartRows.map((row) => Math.abs(accountingMetricValue(row, chartMetric)))
     );
+    const chartMeta = ACCOUNTING_METRICS[chartMetric];
+    const rankingMeta = ACCOUNTING_METRICS[rankingMetric];
+    const chartSeries = useMemo(() => {
+        return buildDailyChartSeries(events, assignments, startDate, endDate, chartMetric);
+    }, [events, assignments, startDate, endDate, chartMetric]);
 
     return (
         <div className="space-y-4">
@@ -1561,7 +1771,33 @@ function DashboardContent({
                 <Card>
                     <CardHeader
                         title="Resultado semanal"
-                        subtitle="Ganancia generada por visitas y suscripciones."
+                        subtitle={`Analisis por ${chartMeta.label.toLowerCase()}.`}
+                        action={
+                            <div className="flex flex-wrap items-center justify-end gap-2">
+                                <select
+                                    value={chartMetric}
+                                    onChange={(event) => setChartMetric(event.target.value as AccountingMetric)}
+                                    className="h-9 rounded-lg border border-[#e4e7ec] bg-white px-3 text-[12px] font-semibold text-[#344054] outline-none"
+                                >
+                                    <option value="real">Ganancia real</option>
+                                    <option value="gross">Ganancia bruta</option>
+                                    <option value="assigned">Asignados</option>
+                                    <option value="visited">Visitados</option>
+                                    <option value="rejected">Rechazados</option>
+                                    <option value="cost">Costo</option>
+                                </select>
+                                <select
+                                    value={chartMode}
+                                    onChange={(event) => setChartMode(event.target.value as ChartMode)}
+                                    className="h-9 rounded-lg border border-[#e4e7ec] bg-white px-3 text-[12px] font-semibold text-[#344054] outline-none"
+                                >
+                                    <option value="trend">Linea semanal</option>
+                                    <option value="bars">Barras</option>
+                                    <option value="mix">Comparativo</option>
+                                    <option value="share">Participacion</option>
+                                </select>
+                            </div>
+                        }
                     />
 
                     <div className="border-t border-[#eef1f5] p-5">
@@ -1581,48 +1817,44 @@ function DashboardContent({
                             />
                         </div>
 
-                        <div className="mt-8 h-[210px]">
-                            <div className="flex h-full items-end gap-3 border-b border-l border-[#eef0f2] px-3 pb-0">
-                                {summary.rows.slice(0, 8).map((row) => {
-                                    const pct = Math.max(
-                                        8,
-                                        Math.min(100, (Math.abs(Number(row.real) || 0) / maxReal) * 100)
-                                    );
-
-                                    return (
-                                        <div key={row.userId} className="flex flex-1 flex-col items-center justify-end gap-2">
-                                            <div
-                                                className={row.real >= 0 ? "w-full rounded-t-md bg-[#7c3aed]" : "w-full rounded-t-md bg-[#ef4444]"}
-                                                style={{ height: `${pct}%` }}
-                                            />
-                                            <span className="max-w-[70px] truncate text-[10px] font-medium text-[#98a2b3]">
-                                                {row.name}
-                                            </span>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-
-                        <div className="mt-4 flex flex-wrap items-center gap-4 text-[11px] font-medium text-[#667085]">
-                            <Legend color="purple" label="Resultado positivo" />
-                            <Legend color="red" label="Resultado negativo" />
-                            <Legend color="gray" label="Top usuarios" />
-                        </div>
+                        <AccountingChart
+                            rows={chartRows}
+                            series={chartSeries}
+                            metric={chartMetric}
+                            mode={chartMode}
+                            maxValue={maxChartValue}
+                        />
                     </div>
                 </Card>
 
                 <Card>
-                    <CardHeader title="Ranking por usuario" subtitle="Ordenado por ganancia real." />
+                    <CardHeader
+                        title="Ranking por usuario"
+                        subtitle="Cambia el criterio para comparar rendimiento."
+                        action={
+                            <select
+                                value={rankingMetric}
+                                onChange={(event) => setRankingMetric(event.target.value as AccountingMetric)}
+                                className="h-9 rounded-lg border border-[#e4e7ec] bg-white px-3 text-[12px] font-semibold text-[#344054] outline-none"
+                            >
+                                <option value="real">Ganancia real</option>
+                                <option value="assigned">Asignados</option>
+                                <option value="visited">Visitados</option>
+                                <option value="rejected">Rechazados</option>
+                                <option value="gross">Ganancia bruta</option>
+                                <option value="cost">Costo</option>
+                            </select>
+                        }
+                    />
 
                     <div className="border-t border-[#eef1f5]">
                         <div className="grid grid-cols-[42px_1fr_90px] px-4 py-3 text-[11px] font-medium text-[#98a2b3]">
                             <span>#</span>
                             <span>Usuario</span>
-                            <span className="text-right">Real</span>
+                            <span className="text-right">{rankingMeta.shortLabel}</span>
                         </div>
 
-                        {summary.rows.slice(0, 7).map((row, index) => (
+                        {rankedRows.slice(0, 7).map((row, index) => (
                             <div key={row.userId} className="grid grid-cols-[42px_1fr_90px] items-center border-t border-[#eef1f5] px-4 py-3">
                                 <span className="text-[12px] font-medium text-[#98a2b3]">{index + 1}.</span>
 
@@ -1633,8 +1865,8 @@ function DashboardContent({
                                     </div>
                                 </div>
 
-                                <div className={row.real >= 0 ? "text-right text-[12px] font-semibold text-emerald-600" : "text-right text-[12px] font-semibold text-red-500"}>
-                                    {money(row.real)}
+                                <div className={metricValueClass(rankingMetric, accountingMetricValue(row, rankingMetric))}>
+                                    {rankingMeta.format(accountingMetricValue(row, rankingMetric))}
                                 </div>
                             </div>
                         ))}
@@ -1642,11 +1874,12 @@ function DashboardContent({
                 </Card>
             </section>
 
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <KpiCard label="Visitados" value={String(summary.visited)} caption="Clientes visitados" icon="check" tone="green" />
-                <KpiCard label="Rechazados" value={String(summary.rejected)} caption="Clientes rechazados" icon="close" tone="red" />
-                <KpiCard label="Ventas por visita" value={money(summaryNumber(summary, "grossVisits"))} caption="Modelo por visita" icon="activity" tone="purple" />
-                <KpiCard
+            <section className="grid gap-2 md:grid-cols-3 xl:grid-cols-5">
+                <AccountingMiniKpi label="Asignados" value={String(summary.assigned)} caption="Asignados semana" icon="assign" tone="orange" />
+                <AccountingMiniKpi label="Visitados" value={String(summary.visited)} caption="Clientes visitados" icon="check" tone="green" />
+                <AccountingMiniKpi label="Rechazados" value={String(summary.rejected)} caption="Clientes rechazados" icon="close" tone="red" />
+                <AccountingMiniKpi label="Ventas" value={money(summaryNumber(summary, "grossVisits"))} caption="Por visita" icon="activity" tone="purple" />
+                <AccountingMiniKpi
                     label="Suscripciones"
                     value={money(summaryNumber(summary, "grossSubscriptions"))}
                     caption={`${summaryNumber(summary, "subscriptionsPaid")} pagadas`}
@@ -1670,7 +1903,7 @@ function DashboardContent({
 
                 <div className="border-t border-[#eef1f5]">
                     <div className="divide-y divide-[#eef1f5] lg:hidden">
-                        {summary.rows.map((row) => (
+                        {activeRows.map((row) => (
                             <AccountingUserMobileCard
                                 key={row.userId}
                                 row={row}
@@ -1686,8 +1919,7 @@ function DashboardContent({
                             <tr className="border-b border-[#eef1f5] bg-[#fcfcff] text-left text-[10px] font-bold uppercase tracking-[0.06em] text-[#8a93ad]">
                                 <th className="px-3 py-2.5">Usuario</th>
                                 <th className="px-3 py-2.5">Modelo</th>
-                                <th className="px-3 py-2.5">Visitados</th>
-                                <th className="px-3 py-2.5">Rechazados</th>
+                                <th className="px-3 py-2.5">Asig. / Vis. / Rech.</th>
                                 <th className="px-3 py-2.5 text-right">Bruta</th>
                                 <th className="px-3 py-2.5 text-right">Costo</th>
                                 <th className="px-3 py-2.5 text-right">Real</th>
@@ -1696,11 +1928,11 @@ function DashboardContent({
                         </thead>
 
                         <tbody>
-                            {summary.rows.map((row) => (
+                            {activeRows.map((row) => (
                                 <tr key={row.userId} className="border-b border-[#eef1f5] last:border-0 hover:bg-[#f9fafb]">
                                     <td className="px-3 py-2.5">
                                         <div className="text-[12px] font-semibold text-[#172033]">{row.name}</div>
-                                        <div className="mt-0.5 text-[11px] font-medium text-[#98a2b3]">{row.email || row.userId}</div>
+                                        <div className="mt-0.5 text-[11px] font-medium text-[#98a2b3]">{row.email || "Sin correo registrado"}</div>
                                     </td>
 
                                     <td className="px-3 py-2.5">
@@ -1708,11 +1940,11 @@ function DashboardContent({
                                     </td>
 
                                     <td className="px-3 py-2.5">
-                                        <Badge tone="green">{row.visited}</Badge>
-                                    </td>
-
-                                    <td className="px-3 py-2.5">
-                                        <Badge tone="red">{row.rejected}</Badge>
+                                        <span className="inline-flex overflow-hidden rounded-lg border border-[#e4e7ec] text-[11px] font-bold">
+                                            <span className="bg-orange-50 px-2 py-1 text-orange-600">{row.assigned}</span>
+                                            <span className="bg-emerald-50 px-2 py-1 text-emerald-700">{row.visited}</span>
+                                            <span className="bg-red-50 px-2 py-1 text-red-600">{row.rejected}</span>
+                                        </span>
                                     </td>
 
                                     <td className="px-3 py-2.5 text-right text-[12px] font-semibold text-[#172033]">{money(row.gross)}</td>
@@ -1745,6 +1977,284 @@ function DashboardContent({
                 </div>
             </Card>
         </div>
+    );
+}
+
+function metricValueClass(metric: AccountingMetric, value: number) {
+    const base = "text-right text-[12px] font-semibold";
+    if (metric === "rejected") return `${base} text-red-500`;
+    if (metric === "visited") return `${base} text-emerald-600`;
+    if (metric === "assigned") return `${base} text-orange-600`;
+    if (metric === "cost") return `${base} text-[#667085]`;
+    if (metric === "gross") return `${base} text-emerald-600`;
+    return value >= 0 ? `${base} text-emerald-600` : `${base} text-red-500`;
+}
+
+function AccountingMiniKpi({
+    label,
+    value,
+    caption,
+    icon,
+    tone,
+}: {
+    label: string;
+    value: string;
+    caption: string;
+    icon: Parameters<typeof AppIcon>[0]["name"];
+    tone: Parameters<typeof AppIcon>[0]["tone"];
+}) {
+    return (
+        <div className="rounded-xl border border-[#e8e7fb] bg-white px-3 py-2.5 shadow-[0_10px_28px_rgba(16,25,54,0.045)]">
+            <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                    <div className="truncate text-[10px] font-black uppercase tracking-[0.08em] text-[#8a93ad]">
+                        {label}
+                    </div>
+                    <div className="mt-1 truncate text-[20px] font-black leading-none tracking-[-0.04em] text-[#101936]">
+                        {value}
+                    </div>
+                </div>
+                <AppIcon name={icon} tone={tone} size="sm" className="h-7 w-7 rounded-lg" />
+            </div>
+            <div className="mt-1 truncate text-[11px] font-semibold text-[#66739a]">
+                {caption}
+            </div>
+        </div>
+    );
+}
+
+function chartFillClass(metric: AccountingMetric, value: number) {
+    if (metric === "rejected") return "bg-[#ef4444]";
+    if (metric === "visited") return "bg-emerald-500";
+    if (metric === "assigned") return "bg-orange-400";
+    if (metric === "cost") return "bg-slate-400";
+    if (metric === "gross") return "bg-emerald-500";
+    return value >= 0 ? "bg-[#7c3aed]" : "bg-[#ef4444]";
+}
+
+function AccountingChart({
+    rows,
+    series,
+    metric,
+    mode,
+    maxValue,
+}: {
+    rows: AccountingSummary["rows"];
+    series: ChartPoint[];
+    metric: AccountingMetric;
+    mode: ChartMode;
+    maxValue: number;
+}) {
+    const meta = ACCOUNTING_METRICS[metric];
+    const total = rows.reduce((sum, row) => sum + Math.abs(accountingMetricValue(row, metric)), 0);
+    const maxSeriesValue = Math.max(1, ...series.map((point) => Math.abs(point.value)));
+
+    if (!rows.length) {
+        return (
+            <div className="mt-6 flex h-[210px] items-center justify-center rounded-2xl border border-dashed border-[#d8ddea] bg-[#fbfaff] text-[12px] font-semibold text-[#98a2b3]">
+                Sin datos para graficar esta semana.
+            </div>
+        );
+    }
+
+    if (mode === "trend") {
+        const width = 640;
+        const height = 220;
+        const padX = 34;
+        const padTop = 22;
+        const padBottom = 42;
+        const plotHeight = height - padTop - padBottom;
+        const step = series.length > 1 ? (width - padX * 2) / (series.length - 1) : 0;
+        const points = series.map((point, index) => {
+            const x = padX + step * index;
+            const y = padTop + plotHeight - (Math.abs(point.value) / maxSeriesValue) * plotHeight;
+            return { ...point, x, y };
+        });
+        const path = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+        const areaPath = `${path} L ${points.at(-1)?.x ?? padX} ${height - padBottom} L ${padX} ${height - padBottom} Z`;
+        const bestPoint = points.reduce<ChartPoint | null>((best, point) => {
+            if (!best) return point;
+            return Math.abs(point.value) > Math.abs(best.value) ? point : best;
+        }, null);
+
+        return (
+            <div className="mt-6 rounded-2xl border border-[#eef1f5] bg-gradient-to-b from-white to-[#fbfaff] p-4">
+                <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+                    <div>
+                        <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#8a93ad]">
+                            Tendencia semanal
+                        </div>
+                        <div className="mt-1 text-[22px] font-black tracking-[-0.04em] text-[#101936]">
+                            {meta.format(series.reduce((sum, point) => sum + point.value, 0))}
+                        </div>
+                    </div>
+                    <div className="rounded-xl border border-[#e8e7fb] bg-white px-3 py-2 text-right shadow-sm">
+                        <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#98a2b3]">
+                            Mejor dia
+                        </div>
+                        <div className="mt-0.5 text-[13px] font-bold text-[#7c3aed]">
+                            {bestPoint ? `${bestPoint.label} · ${meta.format(bestPoint.value)}` : "-"}
+                        </div>
+                    </div>
+                </div>
+
+                <svg viewBox={`0 0 ${width} ${height}`} className="h-[240px] w-full overflow-visible">
+                    <defs>
+                        <linearGradient id={`accounting-area-${metric}`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#7c3aed" stopOpacity="0.24" />
+                            <stop offset="100%" stopColor="#7c3aed" stopOpacity="0.02" />
+                        </linearGradient>
+                    </defs>
+                    {[0, 0.25, 0.5, 0.75, 1].map((tick) => {
+                        const y = padTop + plotHeight * tick;
+                        return (
+                            <line
+                                key={tick}
+                                x1={padX}
+                                x2={width - padX}
+                                y1={y}
+                                y2={y}
+                                stroke="#edf0f7"
+                                strokeWidth="1"
+                            />
+                        );
+                    })}
+                    <path className="tg-chart-area" d={areaPath} fill={`url(#accounting-area-${metric})`} />
+                    <path
+                        key={`${metric}-${path}`}
+                        className="tg-chart-line"
+                        pathLength={1}
+                        d={path}
+                        fill="none"
+                        stroke="#7c3aed"
+                        strokeWidth="4"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                    />
+                    {points.map((point, index) => (
+                        <g
+                            key={point.dayKey}
+                            className="tg-chart-point"
+                            style={{ animationDelay: `${0.45 + index * 0.07}s` }}
+                        >
+                            <circle cx={point.x} cy={point.y} r="5" fill="#ffffff" stroke="#7c3aed" strokeWidth="3" />
+                            <text x={point.x} y={height - 16} textAnchor="middle" className="fill-[#8a93ad] text-[11px] font-bold">
+                                {point.label}
+                            </text>
+                        </g>
+                    ))}
+                </svg>
+            </div>
+        );
+    }
+
+    if (mode === "share") {
+        return (
+            <div className="mt-6 space-y-3">
+                {rows.map((row, index) => {
+                    const value = accountingMetricValue(row, metric);
+                    const pct = total > 0 ? Math.max(4, Math.round((Math.abs(value) / total) * 100)) : 0;
+
+                    return (
+                        <div
+                            key={row.userId}
+                            className="tg-chart-row grid gap-2 sm:grid-cols-[120px_1fr_90px] sm:items-center"
+                            style={{ animationDelay: `${index * 0.06}s` }}
+                        >
+                            <span className="truncate text-[11px] font-semibold text-[#344054]">{row.name}</span>
+                            <div className="h-2.5 overflow-hidden rounded-full bg-[#eef1f7]">
+                                <div
+                                    className={`tg-chart-hbar h-full rounded-full ${chartFillClass(metric, value)}`}
+                                    style={{ width: `${pct}%`, animationDelay: `${0.15 + index * 0.06}s` }}
+                                />
+                            </div>
+                            <span className={metricValueClass(metric, value)}>
+                                {meta.format(value)}
+                            </span>
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    }
+
+    if (mode === "mix") {
+        return (
+            <div className="mt-6 grid gap-3 md:grid-cols-2">
+                {rows.map((row, index) => {
+                    const value = accountingMetricValue(row, metric);
+                    const visitPct = row.assigned > 0 ? Math.round((row.visited / row.assigned) * 100) : 0;
+                    const rejectPct = row.assigned > 0 ? Math.round((row.rejected / row.assigned) * 100) : 0;
+
+                    return (
+                        <div
+                            key={row.userId}
+                            className="tg-chart-row rounded-2xl border border-[#eef1f5] bg-[#fcfcff] p-3"
+                            style={{ animationDelay: `${index * 0.06}s` }}
+                        >
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                    <div className="truncate text-[12px] font-bold text-[#172033]">{row.name}</div>
+                                    <div className="mt-0.5 text-[11px] font-semibold text-[#98a2b3]">
+                                        {row.assigned} asignados
+                                    </div>
+                                </div>
+                                <div className={metricValueClass(metric, value)}>
+                                    {meta.format(value)}
+                                </div>
+                            </div>
+                            <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-[#eef1f7]">
+                                <div
+                                    className="tg-chart-hbar bg-emerald-500"
+                                    style={{ width: `${visitPct}%`, animationDelay: `${0.18 + index * 0.06}s` }}
+                                />
+                                <div
+                                    className="tg-chart-hbar bg-red-400"
+                                    style={{ width: `${rejectPct}%`, animationDelay: `${0.28 + index * 0.06}s` }}
+                                />
+                            </div>
+                            <div className="mt-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.04em] text-[#98a2b3]">
+                                <span>{row.visited} visitados</span>
+                                <span>{row.rejected} rechazados</span>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    }
+
+    return (
+        <>
+            <div className="mt-8 h-[230px]">
+                <div className="flex h-full items-stretch gap-3 border-b border-l border-[#eef0f2] px-3 pb-0">
+                    {rows.map((row, index) => {
+                        const value = accountingMetricValue(row, metric);
+                        const pct = Math.max(8, Math.min(100, (Math.abs(value) / maxValue) * 100));
+
+                        return (
+                            <div key={row.userId} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-2">
+                                <div className="flex min-h-0 w-full flex-1 items-end">
+                                    <div
+                                        className={`tg-chart-bar min-h-2 w-full rounded-t-md ${chartFillClass(metric, value)}`}
+                                        style={{ height: `${pct}%`, animationDelay: `${index * 0.055}s` }}
+                                        title={`${row.name}: ${meta.format(value)}`}
+                                    />
+                                </div>
+                                <span className="max-w-[70px] truncate text-[10px] font-medium text-[#98a2b3]">
+                                    {row.name}
+                                </span>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-4 text-[11px] font-medium text-[#667085]">
+                <Legend color={metric === "rejected" ? "red" : metric === "assigned" ? "orange" : "purple"} label={meta.label} />
+                <Legend color="gray" label={meta.description} />
+            </div>
+        </>
     );
 }
 
@@ -1801,7 +2311,7 @@ function AccountingUserMobileCard({
                 <div className="min-w-0">
                     <div className="truncate text-[13px] font-bold text-[#101936]">{row.name}</div>
                     <div className="mt-1 truncate text-[11px] font-medium text-[#8a93ad]">
-                        {row.email || row.userId}
+                        {row.email || "Sin correo registrado"}
                     </div>
                 </div>
                 <div className={row.real >= 0 ? "text-right text-[13px] font-bold text-emerald-600" : "text-right text-[13px] font-bold text-red-500"}>
@@ -1811,6 +2321,7 @@ function AccountingUserMobileCard({
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
                 <ModelBadge mode={row.billingMode} paid={row.subscriptionPaid} />
+                <Badge tone="yellow">{row.assigned} asignados</Badge>
                 <Badge tone="green">{row.visited} visitas</Badge>
                 <Badge tone="red">{row.rejected} rechazos</Badge>
             </div>
@@ -1853,7 +2364,7 @@ function Legend({
     color,
     label,
 }: {
-    color: "purple" | "red" | "gray";
+    color: "purple" | "red" | "gray" | "orange";
     label: string;
 }) {
     return (
@@ -1864,7 +2375,9 @@ function Legend({
                         ? "h-2 w-2 rounded-full bg-[#7c3aed]"
                         : color === "red"
                             ? "h-2 w-2 rounded-full bg-[#ef4444]"
-                            : "h-2 w-2 rounded-full bg-[#d1d5db]"
+                            : color === "orange"
+                                ? "h-2 w-2 rounded-full bg-orange-400"
+                                : "h-2 w-2 rounded-full bg-[#d1d5db]"
                 }
             />
             {label}
