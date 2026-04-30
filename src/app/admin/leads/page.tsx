@@ -398,7 +398,7 @@ function MobileLeadQueue({
     const [filtersOpen, setFiltersOpen] = useState(false);
 
     return (
-        <div className="-mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] max-w-[100vw] overflow-x-hidden bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.10),transparent_36%),linear-gradient(180deg,#fbfaff_0%,#f6f3ff_52%,#f8fafc_100%)] px-3 pb-[136px] pt-3 text-[#101936]">
+        <div className="-mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] max-w-[100vw] overflow-x-hidden bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.10),transparent_36%),linear-gradient(180deg,#fbfaff_0%,#f6f3ff_52%,#f8fafc_100%)] px-3 pb-6 pt-3 text-[#101936]">
 
             {/* HEADER */}
             <div className="mb-3 flex items-center gap-2">
@@ -428,6 +428,42 @@ function MobileLeadQueue({
                     disabled={loading}
                     icon="users"
                     label="Usuarios"
+                />
+            </div>
+
+            {/* STAT CARDS — FILTRO POR ESTADO */}
+            <div className="mb-3 grid grid-cols-4 gap-2">
+                <LeadStatCard
+                    label="Revisar"
+                    value={stats.pendingReview}
+                    icon="lead"
+                    color="text-blue-500"
+                    active={filters.status === "pending_review"}
+                    onClick={() => onPatchFilters({ status: filters.status === "pending_review" ? "all" : "pending_review" })}
+                />
+                <LeadStatCard
+                    label="Incompl."
+                    value={stats.incomplete}
+                    icon="alert"
+                    color="text-amber-500"
+                    active={filters.status === "incomplete"}
+                    onClick={() => onPatchFilters({ status: filters.status === "incomplete" ? "all" : "incomplete" })}
+                />
+                <LeadStatCard
+                    label="No aptos"
+                    value={stats.notSuitable}
+                    icon="close"
+                    color="text-red-500"
+                    active={filters.status === "not_suitable"}
+                    onClick={() => onPatchFilters({ status: filters.status === "not_suitable" ? "all" : "not_suitable" })}
+                />
+                <LeadStatCard
+                    label="Todos"
+                    value={stats.total}
+                    icon="filter"
+                    color="text-violet-500"
+                    active={filters.status === "all"}
+                    onClick={() => onPatchFilters({ status: "all" })}
                 />
             </div>
 
@@ -566,13 +602,60 @@ function MobileLeadQueue({
                 ) : null}
             </div>
 
-            <LeadMobileStatusBar
-                value={filters.status}
-                stats={stats}
-                total={stats.total}
-                onChange={(status) => onPatchFilters({ status })}
-            />
         </div>
+    );
+}
+
+function LeadStatCard({
+    label,
+    value,
+    icon,
+    color,
+    active,
+    onClick,
+}: {
+    label: string;
+    value: number;
+    icon: "lead" | "alert" | "close" | "filter";
+    color: string;
+    active: boolean;
+    onClick: () => void;
+}) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            className={[
+                "relative min-w-0 rounded-[14px] border px-1.5 py-2.5 text-center transition active:opacity-80",
+                active
+                    ? "border-violet-200 bg-violet-50 shadow-[0_4px_16px_rgba(124,58,237,0.12)]"
+                    : "border-[#E8E7FB] bg-white shadow-[0_4px_16px_rgba(91,33,255,0.06)]",
+            ].join(" ")}
+        >
+            {active && (
+                <span className="absolute inset-x-3 top-0 h-[2px] rounded-full bg-gradient-to-r from-[#7c3aed] to-[#4f46e5]" />
+            )}
+            <div className="flex items-center justify-center gap-1">
+                <AppIcon
+                    name={icon}
+                    tone="slate"
+                    size="sm"
+                    className={`h-4 w-4 bg-transparent ring-0 ${color}`}
+                />
+                <span className={[
+                    "text-[13px] font-black",
+                    active ? "text-violet-700" : "text-[#101936]",
+                ].join(" ")}>
+                    {value}
+                </span>
+            </div>
+            <div className={[
+                "mt-1 truncate text-[9px] font-semibold",
+                active ? "text-violet-600" : "text-[#66739A]",
+            ].join(" ")}>
+                {label}
+            </div>
+        </button>
     );
 }
 
