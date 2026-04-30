@@ -11,7 +11,18 @@ import { LeadEditModal } from "@/features/leads/LeadEditModal";
 import { useAdminLeadQueue } from "@/features/leads/useAdminLeadQueue";
 import type { LeadFilters, LeadReviewStatus, MetaLeadDoc } from "@/types/leads";
 import type { UserDoc } from "@/types/users";
-import { ActionTile, ActionTileButton, AppIcon, Badge, Button, Card, Input, KpiCard, Modal, PageHeader } from "@/components/ui";
+import {
+    ActionTile,
+    ActionTileButton,
+    AppIcon,
+    Badge,
+    Button,
+    Card,
+    Input,
+    KpiCard,
+    Modal,
+    PageHeader,
+} from "@/components/ui";
 
 const STATUS_OPTIONS: { value: LeadReviewStatus; label: string }[] = [
     { value: "pending_review", label: "Por revisar" },
@@ -51,6 +62,14 @@ function formatDate(value?: number | null) {
     }).format(new Date(value));
 }
 
+function formatDateShort(value?: number | null) {
+    if (!value) return "—";
+    return new Intl.DateTimeFormat("es", {
+        day: "2-digit",
+        month: "2-digit",
+    }).format(new Date(value));
+}
+
 function displayName(lead: MetaLeadDoc) {
     return lead.name || lead.phone || "Lead";
 }
@@ -66,7 +85,9 @@ function cityLabel(lead: MetaLeadDoc) {
 }
 
 function quickStatus(lead: MetaLeadDoc) {
-    return typeof lead.raw.quickStatusText === "string" ? lead.raw.quickStatusText : "";
+    return typeof lead.raw.quickStatusText === "string"
+        ? lead.raw.quickStatusText
+        : "";
 }
 
 function hasNewInbound(lead: MetaLeadDoc) {
@@ -79,10 +100,19 @@ function hasNewInbound(lead: MetaLeadDoc) {
     return inbound > seen;
 }
 
+function whatsappUrl(phone?: string | null) {
+    const clean = String(phone ?? "").replace(/\D+/g, "");
+    if (!clean) return "";
+    return `https://wa.me/${clean}?text=${encodeURIComponent(
+        "Olá! Estou entrando em contato sobre seu cadastro 🙌"
+    )}`;
+}
+
 export default function AdminLeadsPage() {
     const [coverageOpen, setCoverageOpen] = useState(false);
     const [editingLead, setEditingLead] = useState<MetaLeadDoc | null>(null);
     const [quickLead, setQuickLead] = useState<MetaLeadDoc | null>(null);
+
     const {
         users,
         filters,
@@ -116,145 +146,221 @@ export default function AdminLeadsPage() {
     }
 
     useEffect(() => {
-        const query = new URLSearchParams(window.location.search).get("search")?.trim();
+        const query = new URLSearchParams(window.location.search)
+            .get("search")
+            ?.trim();
+
         if (!query) return;
         setFilters((prev) => ({ ...prev, search: query }));
     }, [setFilters]);
 
     return (
         <div className="mx-auto w-full max-w-[1220px]">
-            <PageHeader
-                title="Leads"
-                subtitle="Gestiona, valida y asigna leads de forma eficiente."
-                icon={<AppIcon name="lead" tone="purple" size="sm" className="bg-transparent text-white ring-0" />}
-                actions={
-                    <div className="grid w-full grid-cols-[1fr_44px] gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
-                        <Button onClick={() => setCoverageOpen(true)} disabled={loading || !filteredLeads.length} className="w-full sm:w-auto">
-                            <AppIcon name="assign" tone="purple" size="sm" className="h-5 w-5 rounded-md bg-transparent text-current ring-0" />
-                            <span className="sm:inline">Asignar por cobertura</span>
-                        </Button>
-                        <Button
-                            variant="primary"
-                            onClick={reloadUsers}
-                            disabled={loading}
-                            aria-label="Actualizar usuarios"
-                            title="Actualizar usuarios"
-                            className="h-10 w-10 px-0 py-0"
-                        >
-                            <AppIcon name="refresh" tone="purple" size="sm" className="bg-transparent text-white ring-0" />
-                        </Button>
-                    </div>
-                }
-            />
-
-            {err ? (
-                <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] font-semibold text-red-600">
-                    {err}
-                </div>
-            ) : null}
-
-            <div className="hidden xl:block">
-                <LeadQuickAccessCards />
+            <div className="xl:hidden">
+                <MobileLeadQueue
+                    leads={filteredLeads}
+                    users={users}
+                    stats={stats}
+                    filters={filters}
+                    cityOptions={cityOptions}
+                    loading={loading}
+                    loadingMore={loadingMore}
+                    hasMore={hasMore}
+                    savingId={savingId}
+                    activeFiltersCount={activeFiltersCount}
+                    onPatchFilters={patchFilters}
+                    onResetFilters={resetFilters}
+                    onReloadUsers={reloadUsers}
+                    onLoadMore={loadMore}
+                    onOpenCoverage={() => setCoverageOpen(true)}
+                    onOpenEdit={setEditingLead}
+                    onOpenQuick={setQuickLead}
+                />
             </div>
 
-            <section className="mb-3 grid grid-cols-2 gap-2 md:gap-4 xl:mb-4 xl:grid-cols-4">
-                <KpiCard label="Cola activa" value={stats.total} caption="Leads Meta sin asignar" icon="users" tone="blue" />
-                <KpiCard label="Por revisar" value={stats.pendingReview} caption="Listos para validar" icon="lead" tone="purple" />
-                <KpiCard label="Incompletos" value={stats.incomplete} caption="Falta negocio o maps" icon="alert" tone="orange" />
-                <KpiCard label="No aptos" value={stats.notSuitable} caption="Descartados operativos" icon="close" tone="red" />
-            </section>
-
-            <Card className="overflow-hidden xl:overflow-hidden">
-                <div className="flex flex-col gap-3 bg-[#111827] px-3 py-3 xl:bg-gradient-to-b xl:from-white xl:to-[#fbfaff] xl:px-4 xl:py-4">
-                    <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                        <div className="hidden xl:block">
-                            <h2 className="text-[14px] font-semibold text-[#171717]">
-                                Cola de revision
-                            </h2>
-                            <p className="mt-0.5 text-[12px] font-medium text-[#9ca3af]">
-                                {filteredLeads.length} visibles de {stats.total}
-                            </p>
-                        </div>
-
-                        <Input
-                            value={filters.search}
-                            onChange={(e) => patchFilters({ search: e.target.value })}
-                            placeholder="Buscar lead, telefono, negocio, ciudad..."
-                            className="xl:w-[360px]"
+            <div className="hidden xl:block">
+                <PageHeader
+                    title="Leads"
+                    subtitle="Gestiona, valida y asigna leads de forma eficiente."
+                    icon={
+                        <AppIcon
+                            name="lead"
+                            tone="purple"
+                            size="sm"
+                            className="bg-transparent text-white ring-0"
                         />
-                    </div>
+                    }
+                    actions={
+                        <div className="grid w-full grid-cols-[1fr_44px] gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
+                            <Button
+                                onClick={() => setCoverageOpen(true)}
+                                disabled={loading || !filteredLeads.length}
+                                className="w-full sm:w-auto"
+                            >
+                                <AppIcon
+                                    name="assign"
+                                    tone="purple"
+                                    size="sm"
+                                    className="h-5 w-5 rounded-md bg-transparent text-current ring-0"
+                                />
+                                <span className="sm:inline">Asignar por cobertura</span>
+                            </Button>
 
-                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                        <FilterSelect
-                            label="Estado"
-                            value={filters.status}
-                            onChange={(value) => patchFilters({ status: value as LeadFilters["status"] })}
-                        >
-                            <option value="all">Todos los estados</option>
-                            {STATUS_OPTIONS.filter((status) => status.value !== "verified").map((status) => (
-                                <option key={status.value} value={status.value}>
-                                    {status.label}
-                                </option>
-                            ))}
-                        </FilterSelect>
-
-                        <FilterSelect
-                            label="Ciudad"
-                            value={filters.city}
-                            onChange={(value) => patchFilters({ city: value })}
-                        >
-                            <option value="all">Todas las ciudades</option>
-                            {cityOptions.map((city) => (
-                                <option key={city.value} value={city.value}>
-                                    {city.label}
-                                </option>
-                            ))}
-                        </FilterSelect>
-
-                        <FilterSelect
-                            label="Asignacion"
-                            value={filters.assignment}
-                            onChange={(value) =>
-                                patchFilters({ assignment: value as LeadFilters["assignment"] })
-                            }
-                        >
-                            <option value="all">Manual y auto</option>
-                            <option value="auto">Auto-asignados</option>
-                            <option value="manual">Manuales</option>
-                        </FilterSelect>
-                    </div>
-                    {activeFiltersCount > 0 ? (
-                        <div className="flex justify-end">
-                            <Button onClick={resetFilters}>Limpiar filtros</Button>
+                            <Button
+                                variant="primary"
+                                onClick={reloadUsers}
+                                disabled={loading}
+                                aria-label="Actualizar usuarios"
+                                title="Actualizar usuarios"
+                                className="h-10 w-10 px-0 py-0"
+                            >
+                                <AppIcon
+                                    name="refresh"
+                                    tone="purple"
+                                    size="sm"
+                                    className="bg-transparent text-white ring-0"
+                                />
+                            </Button>
                         </div>
-                    ) : null}
-                </div>
-
-                <LeadsTable
-                    leads={filteredLeads}
-                    loading={loading}
-                    savingId={savingId}
-                    onQuickActions={setQuickLead}
+                    }
                 />
 
-                <div className="flex flex-col gap-3 border-t border-white/[0.08] px-3 py-3 sm:flex-row sm:items-center sm:justify-between xl:border-[#f0f1f2] xl:px-4">
-                    <p className="text-[12px] font-extrabold text-[#9CA3AF] xl:font-medium xl:text-[#9ca3af]">
-                        {filteredLeads.length} leads cargados en esta vista
-                    </p>
-                    {hasMore ? (
-                        <Button onClick={loadMore} disabled={loadingMore} className="w-full sm:w-auto">
-                            {loadingMore ? "Cargando..." : "Cargar mas"}
-                        </Button>
-                    ) : null}
-                </div>
-            </Card>
+                {err ? (
+                    <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] font-semibold text-red-600">
+                        {err}
+                    </div>
+                ) : null}
 
-            <LeadMobileStatusBar
-                value={filters.status}
-                stats={stats}
-                total={stats.total}
-                onChange={(status) => patchFilters({ status })}
-            />
+                <LeadQuickAccessCards />
+
+                <section className="mb-4 grid grid-cols-4 gap-4">
+                    <KpiCard
+                        label="Cola activa"
+                        value={stats.total}
+                        caption="Leads Meta sin asignar"
+                        icon="users"
+                        tone="blue"
+                    />
+                    <KpiCard
+                        label="Por revisar"
+                        value={stats.pendingReview}
+                        caption="Listos para validar"
+                        icon="lead"
+                        tone="purple"
+                    />
+                    <KpiCard
+                        label="Incompletos"
+                        value={stats.incomplete}
+                        caption="Falta negocio o maps"
+                        icon="alert"
+                        tone="orange"
+                    />
+                    <KpiCard
+                        label="No aptos"
+                        value={stats.notSuitable}
+                        caption="Descartados operativos"
+                        icon="close"
+                        tone="red"
+                    />
+                </section>
+
+                <Card className="overflow-hidden">
+                    <div className="flex flex-col gap-3 bg-gradient-to-b from-white to-[#fbfaff] px-4 py-4">
+                        <div className="flex flex-row items-center justify-between gap-3">
+                            <div>
+                                <h2 className="text-[14px] font-semibold text-[#171717]">
+                                    Cola de revisión
+                                </h2>
+                                <p className="mt-0.5 text-[12px] font-medium text-[#9ca3af]">
+                                    {filteredLeads.length} visibles de {stats.total}
+                                </p>
+                            </div>
+
+                            <Input
+                                value={filters.search}
+                                onChange={(e) =>
+                                    patchFilters({ search: e.target.value })
+                                }
+                                placeholder="Buscar lead, teléfono, negocio, ciudad..."
+                                className="w-[360px]"
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2">
+                            <FilterSelect
+                                label="Estado"
+                                value={filters.status}
+                                onChange={(value) =>
+                                    patchFilters({
+                                        status: value as LeadFilters["status"],
+                                    })
+                                }
+                            >
+                                <option value="all">Todos los estados</option>
+                                {STATUS_OPTIONS.filter(
+                                    (status) => status.value !== "verified"
+                                ).map((status) => (
+                                    <option key={status.value} value={status.value}>
+                                        {status.label}
+                                    </option>
+                                ))}
+                            </FilterSelect>
+
+                            <FilterSelect
+                                label="Ciudad"
+                                value={filters.city}
+                                onChange={(value) => patchFilters({ city: value })}
+                            >
+                                <option value="all">Todas las ciudades</option>
+                                {cityOptions.map((city) => (
+                                    <option key={city.value} value={city.value}>
+                                        {city.label}
+                                    </option>
+                                ))}
+                            </FilterSelect>
+
+                            <FilterSelect
+                                label="Asignación"
+                                value={filters.assignment}
+                                onChange={(value) =>
+                                    patchFilters({
+                                        assignment:
+                                            value as LeadFilters["assignment"],
+                                    })
+                                }
+                            >
+                                <option value="all">Manual y auto</option>
+                                <option value="auto">Auto-asignados</option>
+                                <option value="manual">Manuales</option>
+                            </FilterSelect>
+                        </div>
+
+                        {activeFiltersCount > 0 ? (
+                            <div className="flex justify-end">
+                                <Button onClick={resetFilters}>Limpiar filtros</Button>
+                            </div>
+                        ) : null}
+                    </div>
+
+                    <LeadsTable
+                        leads={filteredLeads}
+                        loading={loading}
+                        savingId={savingId}
+                        onQuickActions={setQuickLead}
+                    />
+
+                    <div className="flex items-center justify-between gap-3 border-t border-[#f0f1f2] px-4 py-3">
+                        <p className="text-[12px] font-medium text-[#9ca3af]">
+                            {filteredLeads.length} leads cargados en esta vista
+                        </p>
+                        {hasMore ? (
+                            <Button onClick={loadMore} disabled={loadingMore}>
+                                {loadingMore ? "Cargando..." : "Cargar más"}
+                            </Button>
+                        ) : null}
+                    </div>
+                </Card>
+            </div>
 
             <CoverageAssignModal
                 open={coverageOpen}
@@ -286,33 +392,581 @@ export default function AdminLeadsPage() {
     );
 }
 
-// Kept temporarily while the lead section access cards are being consolidated.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function LeadAccessCard({
-    href,
-    title,
-    body,
+function MobileLeadQueue({
+    leads,
+    users,
+    stats,
+    filters,
+    cityOptions,
+    loading,
+    loadingMore,
+    hasMore,
+    savingId,
+    activeFiltersCount,
+    onPatchFilters,
+    onResetFilters,
+    onReloadUsers,
+    onLoadMore,
+    onOpenCoverage,
+    onOpenEdit,
+    onOpenQuick,
+}: {
+    leads: MetaLeadDoc[];
+    users: UserDoc[];
+    stats: ReturnType<typeof useAdminLeadQueue>["stats"];
+    filters: LeadFilters;
+    cityOptions: { value: string; label: string }[];
+    loading: boolean;
+    loadingMore: boolean;
+    hasMore: boolean;
+    savingId: string | null;
+    activeFiltersCount: number;
+    onPatchFilters: (patch: Partial<LeadFilters>) => void;
+    onResetFilters: () => void;
+    onReloadUsers: () => void;
+    onLoadMore: () => void;
+    onOpenCoverage: () => void;
+    onOpenEdit: (lead: MetaLeadDoc) => void;
+    onOpenQuick: (lead: MetaLeadDoc) => void;
+}) {
+    const [filtersOpen, setFiltersOpen] = useState(false);
+
+    return (
+        <div className="-mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] bg-[#0B1220] bg-[linear-gradient(rgba(3,10,20,0.62),rgba(3,10,20,0.62)),url('/brand/trackgo-bg-map.png')] bg-cover bg-center px-4 pb-[156px] pt-3 text-[#F9FAFB]">
+            <div className="mb-3 flex items-center gap-2">
+                <div className="min-w-0 flex-1">
+                    <h1 className="truncate text-[19px] font-black text-white">
+                        Leads Meta
+                    </h1>
+                    <p className="mt-0.5 truncate text-[12px] font-extrabold text-[#9CA3AF]">
+                        Cola activa · visibles{" "}
+                        <span className="font-black text-white">{leads.length}</span>{" "}
+                        · total{" "}
+                        <span className="font-black text-white">{stats.total}</span>
+                    </p>
+                </div>
+
+                <MobileHeaderButton
+                    onClick={onOpenCoverage}
+                    disabled={loading || !leads.length}
+                    icon="assign"
+                    label="Cobertura"
+                />
+                <MobileHeaderLink
+                    href="/admin/leads/history"
+                    icon="history"
+                    label="Historial"
+                />
+                <MobileHeaderButton
+                    onClick={onReloadUsers}
+                    disabled={loading}
+                    icon="users"
+                    label="Usuarios"
+                />
+            </div>
+
+            <div className="mb-2 flex h-[46px] items-center gap-2 rounded-[15px] border border-[#1F2937] bg-[#0F172A] px-3">
+                <AppIcon
+                    name="search"
+                    tone="slate"
+                    size="sm"
+                    className="h-5 w-5 bg-transparent text-[#9CA3AF] ring-0"
+                />
+                <input
+                    value={filters.search}
+                    onChange={(e) => onPatchFilters({ search: e.target.value })}
+                    placeholder="Buscar..."
+                    className="min-w-0 flex-1 bg-transparent text-[14px] font-bold text-white outline-none placeholder:text-[#9CA3AF]"
+                />
+                {filters.search ? (
+                    <button
+                        type="button"
+                        onClick={() => onPatchFilters({ search: "" })}
+                        className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-white/[0.06] text-white"
+                    >
+                        ×
+                    </button>
+                ) : null}
+            </div>
+
+            <div className="mb-3 rounded-[16px] border border-[#1F2937] bg-[#0F172A]/90 p-3">
+                <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                        <AppIcon
+                            name="activity"
+                            tone="blue"
+                            size="sm"
+                            className="h-5 w-5 bg-transparent text-[#93C5FD] ring-0"
+                        />
+                        <p className="truncate text-[12px] font-black text-[#CBD5E1]">
+                            Filtros operativos
+                        </p>
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={() => setFiltersOpen((v) => !v)}
+                        className="rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-[11px] font-black text-[#DDEAFE]"
+                    >
+                        {filtersOpen ? "Ocultar" : "Filtros"}
+                    </button>
+                </div>
+
+                {filtersOpen ? (
+                    <div className="mt-3 grid gap-2">
+                        <MobileFilterSelect
+                            label="Ciudad"
+                            value={filters.city}
+                            onChange={(value) => onPatchFilters({ city: value })}
+                        >
+                            <option value="all">Todas las ciudades</option>
+                            {cityOptions.map((city) => (
+                                <option key={city.value} value={city.value}>
+                                    {city.label}
+                                </option>
+                            ))}
+                        </MobileFilterSelect>
+
+                        <MobileFilterSelect
+                            label="Asignación"
+                            value={filters.assignment}
+                            onChange={(value) =>
+                                onPatchFilters({
+                                    assignment:
+                                        value as LeadFilters["assignment"],
+                                })
+                            }
+                        >
+                            <option value="all">Manual y auto</option>
+                            <option value="auto">Auto-asignados</option>
+                            <option value="manual">Manuales</option>
+                        </MobileFilterSelect>
+
+                        {activeFiltersCount > 0 ? (
+                            <Button onClick={onResetFilters}>Limpiar filtros</Button>
+                        ) : null}
+                    </div>
+                ) : null}
+            </div>
+
+            <div className="grid gap-2">
+                {loading ? (
+                    <MobileState
+                        icon="refresh"
+                        title="Cargando leads"
+                        body="Estamos preparando la cola operativa."
+                    />
+                ) : leads.length === 0 ? (
+                    <MobileState
+                        icon="filter"
+                        title="Sin resultados"
+                        body="No hay leads Meta en la cola activa para ese filtro."
+                    />
+                ) : (
+                    leads.map((lead) => (
+                        <MobileLeadCard
+                            key={lead.id}
+                            lead={lead}
+                            saving={savingId === lead.id}
+                            onQuickActions={onOpenQuick}
+                            onEdit={onOpenEdit}
+                        />
+                    ))
+                )}
+
+                {hasMore ? (
+                    <button
+                        type="button"
+                        onClick={onLoadMore}
+                        disabled={loadingMore}
+                        className="mt-1 min-h-12 rounded-[16px] border border-white/[0.08] bg-[#0F172A] px-4 text-[13px] font-black text-white disabled:opacity-60"
+                    >
+                        {loadingMore ? "Cargando..." : "Cargar más"}
+                    </button>
+                ) : null}
+            </div>
+
+            <LeadMobileStatusBar
+                value={filters.status}
+                stats={stats}
+                total={stats.total}
+                onChange={(status) => onPatchFilters({ status })}
+            />
+        </div>
+    );
+}
+
+function MobileLeadCard({
+    lead,
+    saving,
+    onQuickActions,
+    onEdit,
+}: {
+    lead: MetaLeadDoc;
+    saving: boolean;
+    onQuickActions: (lead: MetaLeadDoc) => void;
+    onEdit: (lead: MetaLeadDoc) => void;
+}) {
+    const status = lead.verificationStatus;
+
+    const statusBox =
+        status === "pending_review"
+            ? "border-blue-400/20 bg-blue-500/[0.08] text-[#93C5FD]"
+            : status === "not_suitable"
+                ? "border-red-400/20 bg-red-400/[0.08] text-[#FCA5A5]"
+                : "border-yellow-300/20 bg-yellow-300/[0.08] text-[#FDE68A]";
+
+    return (
+        <article className="rounded-[18px] border border-[#1F2937] bg-[#111827] p-3">
+            <div className="flex items-start justify-between gap-3">
+                <button
+                    type="button"
+                    onClick={() => onQuickActions(lead)}
+                    disabled={saving}
+                    className="min-w-0 flex-1 text-left disabled:opacity-60"
+                >
+                    <div className="flex items-center gap-2">
+                        <p className="truncate text-[14px] font-black text-white">
+                            {lead.phone || displayName(lead)}
+                        </p>
+                        {hasNewInbound(lead) ? <Badge tone="green">NEW</Badge> : null}
+                    </div>
+
+                    {lead.name ? (
+                        <p className="mt-1 truncate text-[13px] font-black text-[#D7DCE5]">
+                            {lead.name}
+                        </p>
+                    ) : null}
+
+                    {lead.business ? (
+                        <p className="mt-0.5 truncate text-[12px] font-extrabold text-[#9CA3AF]">
+                            {lead.business}
+                        </p>
+                    ) : null}
+                </button>
+
+                <button
+                    type="button"
+                    onClick={() => onQuickActions(lead)}
+                    className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[11px] border border-[#1F2937] bg-[#0F172A] text-white"
+                >
+                    ···
+                </button>
+            </div>
+
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span
+                    className={[
+                        "inline-flex min-h-6 max-w-full items-center gap-1 rounded-full border px-2.5 text-[11px] font-black",
+                        lead.location.outOfCoverage
+                            ? "border-yellow-300/25 bg-yellow-300/10 text-[#FDE68A]"
+                            : "border-blue-400/25 bg-blue-500/10 text-[#93C5FD]",
+                    ].join(" ")}
+                >
+                    {lead.location.outOfCoverage ? "⚠" : "⌖"} {cityLabel(lead)}
+                </span>
+            </div>
+
+            <div
+                className={[
+                    "mt-3 flex items-center gap-2 rounded-[12px] border px-3 py-2 text-[12px] font-black",
+                    statusBox,
+                ].join(" ")}
+            >
+                <span>
+                    {status === "pending_review"
+                        ? "⌕"
+                        : status === "not_suitable"
+                            ? "⊘"
+                            : "!"}
+                </span>
+                <span className="min-w-0 flex-1 truncate">
+                    {quickStatus(lead) || statusLabel[status]}
+                </span>
+            </div>
+
+            {lead.location.address ? (
+                <p className="mt-2 line-clamp-2 text-[12px] font-bold text-[#CBD5E1]">
+                    📍 {lead.location.address}
+                </p>
+            ) : null}
+
+            <p className="mt-2 truncate text-[11px] font-extrabold text-[#9CA3AF]">
+                Creado: {formatDateShort(lead.createdAt)} · Relevante:{" "}
+                {formatDateShort(
+                    lead.lastInboundMessageAt || lead.updatedAt || lead.createdAt
+                )}
+            </p>
+
+            {lead.lastInboundText ? (
+                <Link
+                    href={`/admin/leads/${lead.id}`}
+                    className="mt-3 block rounded-[12px] border border-white/[0.08] bg-white/[0.03] p-3"
+                >
+                    <div className="flex items-center gap-2">
+                        <span className="text-[12px] text-[#9CA3AF]">💬</span>
+                        <span className="min-w-0 flex-1 text-[11px] font-black text-[#9CA3AF]">
+                            Último mensaje recibido
+                        </span>
+                        <span className="rounded-full border border-blue-400/20 bg-blue-500/10 px-2 py-0.5 text-[10px] font-black text-[#93C5FD]">
+                            Ir al chat
+                        </span>
+                    </div>
+                    <p className="mt-1 line-clamp-2 text-[12px] font-bold text-white/90">
+                        {lead.lastInboundText}
+                    </p>
+                </Link>
+            ) : (
+                <Link
+                    href={`/admin/leads/${lead.id}`}
+                    className="mt-3 flex min-h-[38px] items-center justify-center gap-2 rounded-[12px] border border-blue-400/25 bg-blue-500/[0.08] px-3 text-[12px] font-black text-[#93C5FD]"
+                >
+                    💬 Abrir chat
+                </Link>
+            )}
+
+            <div className="mt-3 flex items-center gap-2">
+                {lead.location.mapsUrl ? (
+                    <a
+                        href={lead.location.mapsUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex h-9 w-9 items-center justify-center rounded-[12px] border border-[#1F2937] bg-[#0F172A] text-white"
+                    >
+                        🗺️
+                    </a>
+                ) : null}
+
+                {whatsappUrl(lead.phone) ? (
+                    <a
+                        href={whatsappUrl(lead.phone)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex h-9 w-9 items-center justify-center rounded-[12px] border border-[#1F2937] bg-[#0F172A] text-white"
+                    >
+                        ☎
+                    </a>
+                ) : null}
+
+                <button
+                    type="button"
+                    onClick={() => onEdit(lead)}
+                    className="ml-auto rounded-[12px] border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-[11px] font-black text-white"
+                >
+                    Editar
+                </button>
+            </div>
+
+            {saving ? (
+                <p className="mt-2 text-[12px] font-black text-[#9CA3AF]">
+                    Procesando…
+                </p>
+            ) : null}
+        </article>
+    );
+}
+
+function MobileHeaderButton({
     icon,
-    tone,
+    label,
+    onClick,
+    disabled,
+}: {
+    icon: "assign" | "users";
+    label: string;
+    onClick: () => void;
+    disabled?: boolean;
+}) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            disabled={disabled}
+            title={label}
+            aria-label={label}
+            className="flex h-10 w-10 items-center justify-center rounded-[13px] border border-[#1F2937] bg-[#0F172A] text-white disabled:opacity-50"
+        >
+            <AppIcon
+                name={icon}
+                tone="slate"
+                size="sm"
+                className="h-5 w-5 bg-transparent text-white ring-0"
+            />
+        </button>
+    );
+}
+
+function MobileHeaderLink({
+    href,
+    icon,
+    label,
 }: {
     href: string;
-    title: string;
-    body: string;
-    icon: "history" | "assign";
-    tone: "slate" | "green";
+    icon: "history";
+    label: string;
 }) {
     return (
         <Link
             href={href}
-            className="group flex items-center gap-4 rounded-2xl border border-[#e7e8f0] bg-white px-4 py-4 shadow-[0_16px_42px_rgba(16,25,54,0.06)] transition hover:border-[#c4b5fd] hover:bg-[#fbfaff]"
+            title={label}
+            aria-label={label}
+            className="flex h-10 w-10 items-center justify-center rounded-[13px] border border-violet-400/25 bg-violet-500/10 text-white"
         >
-            <AppIcon name={icon} tone={tone} size="lg" />
-            <div className="min-w-0">
-                <div className="text-[14px] font-bold text-[#101936]">{title}</div>
-                <div className="mt-1 max-w-[360px] text-[12px] font-medium leading-snug text-[#66739a]">{body}</div>
-            </div>
-            <span className="ml-auto text-[18px] font-bold text-[#a78bfa] transition group-hover:translate-x-0.5">›</span>
+            <AppIcon
+                name={icon}
+                tone="purple"
+                size="sm"
+                className="h-5 w-5 bg-transparent text-white ring-0"
+            />
         </Link>
+    );
+}
+
+function MobileFilterSelect({
+    label,
+    value,
+    onChange,
+    children,
+}: {
+    label: string;
+    value: string;
+    onChange: (value: string) => void;
+    children: React.ReactNode;
+}) {
+    return (
+        <label className="grid gap-1">
+            <span className="text-[11px] font-black text-[#9CA3AF]">{label}</span>
+            <select
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                className="h-10 rounded-[13px] border border-[#1F2937] bg-[#111827] px-3 text-[12px] font-black text-white outline-none"
+            >
+                {children}
+            </select>
+        </label>
+    );
+}
+
+function MobileState({
+    icon,
+    title,
+    body,
+}: {
+    icon: "filter" | "refresh";
+    title: string;
+    body: string;
+}) {
+    return (
+        <div className="mt-8 flex flex-col items-center gap-2 px-4 text-center">
+            <AppIcon
+                name={icon}
+                tone="slate"
+                size="lg"
+                className="bg-[#0F172A] text-[#9CA3AF]"
+            />
+            <p className="text-[13px] font-black text-[#9CA3AF]">{title}</p>
+            <p className="text-[12px] font-bold text-[#64748B]">{body}</p>
+        </div>
+    );
+}
+
+function LeadMobileStatusBar({
+    value,
+    stats,
+    total,
+    onChange,
+}: {
+    value: LeadFilters["status"];
+    stats: ReturnType<typeof useAdminLeadQueue>["stats"];
+    total: number;
+    onChange: (status: LeadFilters["status"]) => void;
+}) {
+    const items: {
+        value: LeadFilters["status"];
+        label: string;
+        count: number;
+        icon: "lead" | "alert" | "close" | "filter";
+        color: string;
+    }[] = [
+            {
+                value: "pending_review",
+                label: "Revisar",
+                count: stats.pendingReview,
+                icon: "lead",
+                color: "text-[#93C5FD]",
+            },
+            {
+                value: "incomplete",
+                label: "Incompletos",
+                count: stats.incomplete,
+                icon: "alert",
+                color: "text-[#FDE68A]",
+            },
+            {
+                value: "not_suitable",
+                label: "No aptos",
+                count: stats.notSuitable,
+                icon: "close",
+                color: "text-[#FCA5A5]",
+            },
+            {
+                value: "all",
+                label: "Todos",
+                count: total,
+                icon: "filter",
+                color: "text-[#C4B5FD]",
+            },
+        ];
+
+    return (
+        <div className="fixed bottom-[72px] left-0 right-0 z-30 border-t border-white/[0.06] bg-[#0B1220]/94 px-3 pb-2 pt-2 backdrop-blur-xl xl:hidden">
+            <div className="grid grid-cols-4 gap-2">
+                {items.map((item) => {
+                    const active = value === item.value;
+
+                    return (
+                        <button
+                            key={item.value}
+                            type="button"
+                            onClick={() => onChange(item.value)}
+                            className={[
+                                "min-h-[62px] rounded-[18px] border px-2 py-2 text-left transition",
+                                active
+                                    ? "border-white/18 bg-blue-500/16"
+                                    : "border-white/[0.08] bg-[#0F172A]",
+                            ].join(" ")}
+                        >
+                            <div className="flex items-center justify-between gap-1">
+                                <AppIcon
+                                    name={item.icon}
+                                    tone="slate"
+                                    size="sm"
+                                    className={`h-5 w-5 rounded-lg bg-transparent ring-0 ${item.color}`}
+                                />
+                                <span
+                                    className={
+                                        active
+                                            ? "rounded-full bg-white/15 px-1.5 py-0.5 text-[10px] font-black text-[#F9FAFB]"
+                                            : "rounded-full bg-white/[0.08] px-1.5 py-0.5 text-[10px] font-black text-[#CBD5E1]"
+                                    }
+                                >
+                                    {item.count}
+                                </span>
+                            </div>
+                            <div
+                                className={
+                                    active
+                                        ? "mt-2 truncate text-[10px] font-black text-[#F9FAFB]"
+                                        : "mt-2 truncate text-[10px] font-black text-[#9CA3AF]"
+                                }
+                            >
+                                {item.label}
+                            </div>
+                        </button>
+                    );
+                })}
+            </div>
+        </div>
     );
 }
 
@@ -341,64 +995,6 @@ function FilterSelect({
     );
 }
 
-function LeadMobileStatusBar({
-    value,
-    stats,
-    total,
-    onChange,
-}: {
-    value: LeadFilters["status"];
-    stats: ReturnType<typeof useAdminLeadQueue>["stats"];
-    total: number;
-    onChange: (status: LeadFilters["status"]) => void;
-}) {
-    const items: {
-        value: LeadFilters["status"];
-        label: string;
-        count: number;
-        icon: "lead" | "alert" | "close" | "filter";
-        color: string;
-    }[] = [
-        { value: "pending_review", label: "Revisar", count: stats.pendingReview, icon: "lead", color: "text-[#93C5FD]" },
-        { value: "incomplete", label: "Incompletos", count: stats.incomplete, icon: "alert", color: "text-[#FDE68A]" },
-        { value: "not_suitable", label: "No aptos", count: stats.notSuitable, icon: "close", color: "text-[#FCA5A5]" },
-        { value: "all", label: "Todos", count: total, icon: "filter", color: "text-[#C4B5FD]" },
-    ];
-
-    return (
-        <div className="fixed bottom-[72px] left-0 right-0 z-30 border-t border-white/[0.06] bg-[#0B1220]/94 px-3 pb-2 pt-2 backdrop-blur-xl xl:hidden">
-            <div className="grid grid-cols-4 gap-2">
-                {items.map((item) => {
-                    const active = value === item.value;
-                    return (
-                        <button
-                            key={item.value}
-                            type="button"
-                            onClick={() => onChange(item.value)}
-                            className={[
-                                "min-h-[62px] rounded-[18px] border px-2 py-2 text-left transition",
-                                active
-                                    ? "border-white/18 bg-blue-500/16"
-                                    : "border-white/[0.08] bg-[#0F172A]",
-                            ].join(" ")}
-                        >
-                            <div className="flex items-center justify-between gap-1">
-                                <AppIcon name={item.icon} tone="slate" size="sm" className={`h-5 w-5 rounded-lg bg-transparent ring-0 ${item.color}`} />
-                                <span className={active ? "rounded-full bg-white/15 px-1.5 py-0.5 text-[10px] font-black text-[#F9FAFB]" : "rounded-full bg-white/[0.08] px-1.5 py-0.5 text-[10px] font-black text-[#CBD5E1]"}>
-                                    {item.count}
-                                </span>
-                            </div>
-                            <div className={active ? "mt-2 truncate text-[10px] font-black text-[#F9FAFB]" : "mt-2 truncate text-[10px] font-black text-[#9CA3AF]"}>
-                                {item.label}
-                            </div>
-                        </button>
-                    );
-                })}
-            </div>
-        </div>
-    );
-}
-
 function LeadsTable({
     leads,
     loading,
@@ -412,121 +1008,53 @@ function LeadsTable({
 }) {
     return (
         <div className="border-t border-[#f0f1f2]">
-            <div className="divide-y divide-[#f0f1f2] lg:hidden">
-                {loading ? (
-                    <TableState icon="refresh" title="Cargando leads" body="Estamos preparando la cola operativa." />
-                ) : leads.length === 0 ? (
-                    <TableState icon="filter" title="Sin resultados" body="No hay leads con esos filtros." />
-                ) : (
-                    leads.map((lead) => (
-                        <LeadMobileCard
-                            key={lead.id}
-                            lead={lead}
-                            saving={savingId === lead.id}
-                            onQuickActions={onQuickActions}
-                        />
-                    ))
-                )}
-            </div>
-
             <div className="hidden overflow-x-auto lg:block">
-            <table className="w-full min-w-[960px] border-collapse">
-                <thead>
-                    <tr className="border-b border-[#f0f1f2] bg-[#fcfcff] text-left text-[10px] font-bold uppercase tracking-[0.06em] text-[#8a93ad]">
-                        <th className="px-3 py-2.5">Lead</th>
-                        <th className="px-3 py-2.5">Estado</th>
-                        <th className="px-3 py-2.5">Ciudad</th>
-                        <th className="px-3 py-2.5">Ultimo mensaje</th>
-                        <th className="px-3 py-2.5 text-right">Actividad</th>
-                    </tr>
-                </thead>
+                <table className="w-full min-w-[960px] border-collapse">
+                    <thead>
+                        <tr className="border-b border-[#f0f1f2] bg-[#fcfcff] text-left text-[10px] font-bold uppercase tracking-[0.06em] text-[#8a93ad]">
+                            <th className="px-3 py-2.5">Lead</th>
+                            <th className="px-3 py-2.5">Estado</th>
+                            <th className="px-3 py-2.5">Ciudad</th>
+                            <th className="px-3 py-2.5">Último mensaje</th>
+                            <th className="px-3 py-2.5 text-right">Actividad</th>
+                        </tr>
+                    </thead>
 
-                <tbody>
-                    {loading ? (
-                        <tr>
-                            <td colSpan={5}>
-                                <TableState icon="refresh" title="Cargando leads" body="Estamos preparando la cola operativa." />
-                            </td>
-                        </tr>
-                    ) : leads.length === 0 ? (
-                        <tr>
-                            <td colSpan={5}>
-                                <TableState icon="filter" title="Sin resultados" body="No hay leads con esos filtros." />
-                            </td>
-                        </tr>
-                    ) : (
-                        leads.map((lead) => (
-                            <LeadRow
-                                key={lead.id}
-                                lead={lead}
-                                saving={savingId === lead.id}
-                                onQuickActions={onQuickActions}
-                            />
-                        ))
-                    )}
-                </tbody>
-            </table>
+                    <tbody>
+                        {loading ? (
+                            <tr>
+                                <td colSpan={5}>
+                                    <TableState
+                                        icon="refresh"
+                                        title="Cargando leads"
+                                        body="Estamos preparando la cola operativa."
+                                    />
+                                </td>
+                            </tr>
+                        ) : leads.length === 0 ? (
+                            <tr>
+                                <td colSpan={5}>
+                                    <TableState
+                                        icon="filter"
+                                        title="Sin resultados"
+                                        body="No hay leads con esos filtros."
+                                    />
+                                </td>
+                            </tr>
+                        ) : (
+                            leads.map((lead) => (
+                                <LeadRow
+                                    key={lead.id}
+                                    lead={lead}
+                                    saving={savingId === lead.id}
+                                    onQuickActions={onQuickActions}
+                                />
+                            ))
+                        )}
+                    </tbody>
+                </table>
             </div>
         </div>
-    );
-}
-
-function LeadMobileCard({
-    lead,
-    saving,
-    onQuickActions,
-}: {
-    lead: MetaLeadDoc;
-    saving: boolean;
-    onQuickActions: (lead: MetaLeadDoc) => void;
-}) {
-    return (
-        <button
-            type="button"
-            onClick={() => {
-                if (!saving) onQuickActions(lead);
-            }}
-            className="block w-full bg-[#111827] px-3 py-3 text-left transition active:bg-[#0F172A] disabled:opacity-60 sm:px-4 xl:bg-white xl:hover:bg-[#f8f7ff]"
-            disabled={saving}
-        >
-            <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                        <span className="truncate text-[14px] font-black text-[#F9FAFB] xl:text-[13px] xl:font-bold xl:text-[#101936]">
-                            {displayName(lead)}
-                        </span>
-                        {hasNewInbound(lead) ? <Badge tone="green">NEW</Badge> : null}
-                    </div>
-                    <div className="mt-0.5 truncate text-[12px] font-extrabold text-[#9CA3AF] xl:text-[11px] xl:font-semibold xl:text-[#8a93ad]">
-                        {[lead.phone, lead.business].filter(Boolean).join(" - ") || "Sin datos de contacto"}
-                    </div>
-                </div>
-                <Badge tone={statusTone[lead.verificationStatus]}>
-                    {statusLabel[lead.verificationStatus]}
-                </Badge>
-            </div>
-
-            <div className="mt-3 grid grid-cols-[1fr_auto] gap-3 text-[11px] font-medium text-[#66739a]">
-                <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                        <span className="truncate text-[12px] font-black text-[#93C5FD] xl:font-bold xl:text-[#344054]">{cityLabel(lead)}</span>
-                        {lead.location.outOfCoverage ? <Badge tone="yellow">Fuera</Badge> : null}
-                    </div>
-                    <div className="mt-0.5 truncate text-[11px] font-bold text-[#CBD5E1] xl:font-medium xl:text-[#98a2b3]">
-                        {lead.lastInboundText || quickStatus(lead) || "Sin mensaje reciente"}
-                    </div>
-                </div>
-                <div className="text-right text-[11px] font-black text-[#9CA3AF] xl:font-bold xl:text-[#66739a]">
-                    {formatDate(lead.lastInboundMessageAt || lead.updatedAt || lead.createdAt)}
-                </div>
-            </div>
-
-            {quickStatus(lead) ? (
-                <div className="mt-2 truncate rounded-xl border border-white/[0.08] bg-[#0F172A] px-3 py-2 text-[11px] font-black text-[#CBD5E1] xl:border-[#eef1f5] xl:bg-[#fbfaff] xl:font-semibold xl:text-[#66739a]">
-                    {quickStatus(lead)}
-                </div>
-            ) : null}
-        </button>
     );
 }
 
@@ -555,18 +1083,16 @@ function LeadRow({
                         {hasNewInbound(lead) ? <Badge tone="green">NEW</Badge> : null}
                     </div>
                     <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-1 text-[11px] font-medium text-[#9ca3af]">
-                        <span>{lead.phone || "Sin telefono"}</span>
+                        <span>{lead.phone || "Sin teléfono"}</span>
                         {lead.business ? <span>{lead.business}</span> : null}
                     </div>
                 </div>
             </td>
 
             <td className="px-3 py-2.5">
-                <div className="flex items-center gap-2">
-                    <Badge tone={statusTone[lead.verificationStatus]}>
-                        {statusLabel[lead.verificationStatus]}
-                    </Badge>
-                </div>
+                <Badge tone={statusTone[lead.verificationStatus]}>
+                    {statusLabel[lead.verificationStatus]}
+                </Badge>
                 <div className="mt-1 max-w-[210px] truncate text-[11px] font-medium text-[#9ca3af]">
                     {quickStatus(lead)}
                 </div>
@@ -577,10 +1103,12 @@ function LeadRow({
                     <span className="max-w-[190px] truncate text-[12px] font-semibold text-[#171717]">
                         {cityLabel(lead)}
                     </span>
-                    {lead.location.outOfCoverage ? <Badge tone="yellow">Fuera</Badge> : null}
+                    {lead.location.outOfCoverage ? (
+                        <Badge tone="yellow">Fuera</Badge>
+                    ) : null}
                 </div>
                 <div className="mt-0.5 max-w-[220px] truncate text-[11px] font-medium text-[#9ca3af]">
-                    {lead.location.address || "Direccion no informada"}
+                    {lead.location.address || "Dirección no informada"}
                 </div>
             </td>
 
@@ -591,7 +1119,9 @@ function LeadRow({
             </td>
 
             <td className="px-3 py-2.5 text-right text-[12px] font-semibold text-[#71717a]">
-                {formatDate(lead.lastInboundMessageAt || lead.updatedAt || lead.createdAt)}
+                {formatDate(
+                    lead.lastInboundMessageAt || lead.updatedAt || lead.createdAt
+                )}
             </td>
         </tr>
     );
@@ -608,7 +1138,11 @@ function TableState({
 }) {
     return (
         <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
-            <AppIcon name={icon} tone={icon === "refresh" ? "purple" : "slate"} size="lg" />
+            <AppIcon
+                name={icon}
+                tone={icon === "refresh" ? "purple" : "slate"}
+                size="lg"
+            />
             <div className="mt-3 text-[13px] font-bold text-[#101936]">{title}</div>
             <div className="mt-1 text-[12px] font-medium text-[#66739a]">{body}</div>
         </div>
@@ -631,13 +1165,33 @@ function LeadQuickActionsModal({
             open={!!lead}
             onClose={onClose}
             title={displayName(lead)}
-            subtitle={lead.business || lead.location.address || lead.phone || "Acciones rapidas"}
+            subtitle={lead.business || lead.location.address || lead.phone || "Acciones rápidas"}
             size="sm"
         >
             <div className="grid gap-2">
-                <ActionTile href={`/admin/leads/${lead.id}`} icon="chat" label="Chat" tone="purple" />
+                <ActionTile
+                    href={`/admin/leads/${lead.id}`}
+                    icon="chat"
+                    label="Chat"
+                    tone="purple"
+                />
                 {lead.location.mapsUrl ? (
-                    <ActionTile href={lead.location.mapsUrl} icon="map" label="Maps" tone="green" external />
+                    <ActionTile
+                        href={lead.location.mapsUrl}
+                        icon="map"
+                        label="Maps"
+                        tone="green"
+                        external
+                    />
+                ) : null}
+                {whatsappUrl(lead.phone) ? (
+                    <ActionTile
+                        href={whatsappUrl(lead.phone)}
+                        icon="chat"
+                        label="WhatsApp"
+                        tone="green"
+                        external
+                    />
                 ) : null}
                 <ActionTileButton
                     onClick={() => onEdit(lead)}
@@ -699,7 +1253,9 @@ function CoverageAssignModal({
 
                 return {
                     ...match,
-                    leads: userHaystack.includes(q) ? match.leads : filteredLeads,
+                    leads: userHaystack.includes(q)
+                        ? match.leads
+                        : filteredLeads,
                 };
             })
             .filter((match) => match.leads.length > 0);
@@ -750,7 +1306,11 @@ function CoverageAssignModal({
                         onChange={(e) => setQuery(e.target.value)}
                         placeholder="Buscar usuario, ciudad o lead..."
                     />
-                    <Button variant="primary" onClick={assignAll} disabled={running || !plan.length}>
+                    <Button
+                        variant="primary"
+                        onClick={assignAll}
+                        disabled={running || !plan.length}
+                    >
                         {running ? "Asignando..." : "Asignar visibles"}
                     </Button>
                 </div>
@@ -769,7 +1329,9 @@ function CoverageAssignModal({
                                 <div className="flex items-center justify-between gap-3 border-b border-[#f0f1f2] px-3 py-3">
                                     <div className="min-w-0">
                                         <div className="truncate text-[12px] font-semibold text-[#171717]">
-                                            {match.user.name || match.user.email || match.user.id}
+                                            {match.user.name ||
+                                                match.user.email ||
+                                                match.user.id}
                                         </div>
                                         <div className="mt-0.5 truncate text-[11px] font-medium text-[#9ca3af]">
                                             {userCoverageLabel(match.user)}
@@ -789,11 +1351,14 @@ function CoverageAssignModal({
                                                     {displayName(lead)}
                                                 </div>
                                                 <div className="mt-0.5 truncate text-[11px] font-medium text-[#9ca3af]">
-                                                    {cityLabel(lead)} - {lead.business || lead.phone}
+                                                    {cityLabel(lead)} -{" "}
+                                                    {lead.business || lead.phone}
                                                 </div>
                                             </div>
                                             <Button
-                                                onClick={() => onAssign(lead, match.user.id)}
+                                                onClick={() =>
+                                                    onAssign(lead, match.user.id)
+                                                }
                                                 disabled={running || savingId === lead.id}
                                             >
                                                 Asignar
@@ -803,7 +1368,7 @@ function CoverageAssignModal({
 
                                     {match.leads.length > 8 ? (
                                         <div className="px-3 py-2 text-[11px] font-medium text-[#9ca3af]">
-                                            +{match.leads.length - 8} mas
+                                            +{match.leads.length - 8} más
                                         </div>
                                     ) : null}
                                 </div>
