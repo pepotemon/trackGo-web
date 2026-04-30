@@ -308,9 +308,9 @@ function MobileAdminHome({
                     href="/admin/settings/users"
                     aria-label="Usuarios"
                     title="Usuarios"
-                    className="flex h-10 w-10 items-center justify-center rounded-xl border border-red-400/20 bg-red-400/10 text-[#FCA5A5]"
+                    className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.12] bg-white/[0.08] text-[#D7E2EE] transition active:bg-white/[0.15]"
                 >
-                    <MobileLineIcon name="logOut" />
+                    <MobileLineIcon name="users" />
                 </Link>
             </div>
 

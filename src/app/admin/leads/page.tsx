@@ -430,24 +430,25 @@ function MobileLeadQueue({
                 />
             </div>
 
-            <div className="mb-2 flex h-[40px] items-center gap-2 rounded-[13px] border border-[#1F2937] bg-[#0F172A] px-3">
+            <div className="mb-2 flex h-[46px] items-center gap-2 rounded-[14px] border border-[#1F2937] bg-[#0F172A] px-3">
                 <AppIcon
                     name="search"
                     tone="slate"
                     size="sm"
-                    className="h-5 w-5 bg-transparent text-[#9CA3AF] ring-0"
+                    className="h-5 w-5 shrink-0 bg-transparent text-[#9CA3AF] ring-0"
                 />
                 <input
                     value={filters.search}
                     onChange={(e) => onPatchFilters({ search: e.target.value })}
-                    placeholder="Buscar..."
-                    className="min-w-0 flex-1 bg-transparent text-[13px] font-bold text-white outline-none placeholder:text-[#9CA3AF]"
+                    placeholder="Buscar lead, teléfono..."
+                    className="min-w-0 flex-1 bg-transparent text-[14px] font-bold text-white outline-none placeholder:text-[#6B7280]"
+                    style={{ fontSize: "16px" }}
                 />
                 {filters.search ? (
                     <button
                         type="button"
                         onClick={() => onPatchFilters({ search: "" })}
-                        className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-white/[0.06] text-white"
+                        className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-white/[0.06] text-[18px] text-white transition active:bg-white/[0.12]"
                     >
                         ×
                     </button>
@@ -612,7 +613,7 @@ function MobileLeadCard({
                 <button
                     type="button"
                     onClick={() => onQuickActions(lead)}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-[#1F2937] bg-[#0F172A] text-[12px] font-black text-white"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-[#1F2937] bg-[#0F172A] text-[14px] font-black text-white transition active:bg-[#1F2937]"
                 >
                     ···
                 </button>
@@ -666,7 +667,7 @@ function MobileLeadCard({
             {lead.lastInboundText ? (
                 <Link
                     href={`/admin/leads/${lead.id}`}
-                    className="mt-2 block rounded-[11px] border border-white/[0.08] bg-white/[0.03] p-2.5"
+                    className="mt-2 block rounded-[13px] border border-white/[0.08] bg-white/[0.04] p-2.5 transition active:bg-white/[0.08]"
                 >
                     <div className="flex items-center gap-2">
                         <span className="text-[11px] text-[#9CA3AF]">💬</span>
@@ -684,7 +685,7 @@ function MobileLeadCard({
             ) : (
                 <Link
                     href={`/admin/leads/${lead.id}`}
-                    className="mt-2 flex min-h-[34px] items-center justify-center gap-2 rounded-[11px] border border-blue-400/25 bg-blue-500/[0.08] px-3 text-[11px] font-black text-[#93C5FD]"
+                    className="mt-2 flex min-h-[44px] items-center justify-center gap-2 rounded-[13px] border border-blue-400/25 bg-blue-500/[0.08] px-3 text-[12px] font-black text-[#93C5FD] transition active:bg-blue-500/[0.15]"
                 >
                     💬 Abrir chat
                 </Link>
@@ -696,7 +697,7 @@ function MobileLeadCard({
                         href={lead.location.mapsUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="flex h-8 w-8 items-center justify-center rounded-[11px] border border-[#1F2937] bg-[#0F172A] text-[14px] text-white"
+                        className="flex h-10 w-10 items-center justify-center rounded-[13px] border border-[#1F2937] bg-[#0F172A] text-[15px] text-white transition active:bg-[#1F2937]"
                     >
                         🗺️
                     </a>
@@ -707,7 +708,7 @@ function MobileLeadCard({
                         href={whatsappUrl(lead.phone)}
                         target="_blank"
                         rel="noreferrer"
-                        className="flex h-8 w-8 items-center justify-center rounded-[11px] border border-[#1F2937] bg-[#0F172A] text-[13px] text-white"
+                        className="flex h-10 w-10 items-center justify-center rounded-[13px] border border-[#1F2937] bg-[#0F172A] text-[15px] text-white transition active:bg-[#1F2937]"
                     >
                         ☎
                     </a>
@@ -716,7 +717,7 @@ function MobileLeadCard({
                 <button
                     type="button"
                     onClick={() => onEdit(lead)}
-                    className="ml-auto rounded-[11px] border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-[10px] font-black text-white"
+                    className="ml-auto min-h-[36px] rounded-[13px] border border-white/[0.08] bg-white/[0.05] px-3 py-1.5 text-[11px] font-black text-white transition active:bg-white/[0.1]"
                 >
                     Editar
                 </button>
@@ -749,13 +750,13 @@ function MobileHeaderButton({
             disabled={disabled}
             title={label}
             aria-label={label}
-            className="flex h-9 w-9 items-center justify-center rounded-[12px] border border-[#1F2937] bg-[#0F172A] text-white disabled:opacity-50"
+            className="flex h-10 w-10 items-center justify-center rounded-[13px] border border-[#1F2937] bg-[#0F172A] text-white transition active:bg-[#1F2937] disabled:opacity-50"
         >
             <AppIcon
                 name={icon}
                 tone="slate"
                 size="sm"
-                className="h-4 w-4 bg-transparent text-white ring-0"
+                className="h-[18px] w-[18px] bg-transparent text-white ring-0"
             />
         </button>
     );
@@ -775,13 +776,13 @@ function MobileHeaderLink({
             href={href}
             title={label}
             aria-label={label}
-            className="flex h-9 w-9 items-center justify-center rounded-[12px] border border-violet-400/25 bg-violet-500/10 text-white"
+            className="flex h-10 w-10 items-center justify-center rounded-[13px] border border-violet-400/25 bg-violet-500/10 text-white transition active:bg-violet-500/20"
         >
             <AppIcon
                 name={icon}
                 tone="purple"
                 size="sm"
-                className="h-4 w-4 bg-transparent text-white ring-0"
+                className="h-[18px] w-[18px] bg-transparent text-white ring-0"
             />
         </Link>
     );
@@ -895,12 +896,15 @@ function LeadMobileStatusBar({
                             type="button"
                             onClick={() => onChange(item.value)}
                             className={[
-                                "min-h-[54px] rounded-[15px] border px-2 py-1.5 text-left transition",
+                                "relative min-h-[52px] rounded-[15px] border px-2 py-1.5 text-left transition active:opacity-80",
                                 active
-                                    ? "border-white/18 bg-blue-500/16"
+                                    ? "border-white/[0.14] bg-[#1a2744]"
                                     : "border-white/[0.08] bg-[#0F172A]",
                             ].join(" ")}
                         >
+                            {active && (
+                                <span className="absolute inset-x-3 top-0 h-[2px] rounded-full bg-gradient-to-r from-[#7c3aed] to-[#3b82f6]" />
+                            )}
                             <div className="flex items-center justify-between gap-1">
                                 <AppIcon
                                     name={item.icon}
@@ -911,7 +915,7 @@ function LeadMobileStatusBar({
                                 <span
                                     className={
                                         active
-                                            ? "rounded-full bg-white/15 px-1.5 py-0.5 text-[9px] font-black text-[#F9FAFB]"
+                                            ? "rounded-full bg-white/20 px-1.5 py-0.5 text-[9px] font-black text-white"
                                             : "rounded-full bg-white/[0.08] px-1.5 py-0.5 text-[9px] font-black text-[#CBD5E1]"
                                     }
                                 >
@@ -921,7 +925,7 @@ function LeadMobileStatusBar({
                             <div
                                 className={
                                     active
-                                        ? "mt-1.5 truncate text-[9px] font-black text-[#F9FAFB]"
+                                        ? "mt-1.5 truncate text-[9px] font-black text-white"
                                         : "mt-1.5 truncate text-[9px] font-black text-[#9CA3AF]"
                                 }
                             >

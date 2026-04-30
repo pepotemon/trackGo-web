@@ -399,8 +399,8 @@ function MobileNavSection({
 
 function MobileBottomNav({ pathname }: { pathname: string }) {
     return (
-        <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#e8e7fb] bg-white/92 px-3 pb-[max(env(safe-area-inset-bottom),0.55rem)] pt-2 shadow-[0_-18px_45px_rgba(82,63,169,0.13)] backdrop-blur-xl xl:hidden">
-            <div className="mx-auto grid max-w-md grid-cols-4 gap-1">
+        <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#e8e7fb] bg-white/95 px-2 pb-[max(env(safe-area-inset-bottom),0.65rem)] pt-1 shadow-[0_-20px_56px_rgba(82,63,169,0.15)] backdrop-blur-xl xl:hidden">
+            <div className="mx-auto grid max-w-md grid-cols-4">
                 {MOBILE_NAV.map((item) => {
                     const active = pathname === item.href || pathname.startsWith(item.href);
 
@@ -409,16 +409,22 @@ function MobileBottomNav({ pathname }: { pathname: string }) {
                             key={item.href}
                             href={item.href}
                             className={[
-                                "flex flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[10px] font-black transition",
-                                active
-                                    ? "bg-[#f3f0ff] text-[#4f46e5]"
-                                    : "text-[#98a2b3] active:bg-[#f6f3ff]",
+                                "relative flex flex-col items-center justify-center gap-0.5 px-1 pb-1 pt-2.5 text-[10px] font-black transition-colors active:opacity-70",
+                                active ? "text-[#4f46e5]" : "text-[#98a2b3]",
                             ].join(" ")}
                         >
-                            <span className={active ? "text-[#7c3aed]" : "text-[#98a2b3]"}>
-                                <NavIcon name={item.icon} />
+                            {active && (
+                                <span className="absolute inset-x-4 top-0 h-[3px] rounded-full bg-gradient-to-r from-[#7c3aed] to-[#4f46e5]" />
+                            )}
+                            <span
+                                className={[
+                                    "flex h-9 w-9 items-center justify-center rounded-[14px] transition-colors",
+                                    active ? "bg-[#f3f0ff]" : "",
+                                ].join(" ")}
+                            >
+                                <NavIcon name={item.icon} size="md" />
                             </span>
-                            <span className="max-w-full truncate">{item.label}</span>
+                            <span className="max-w-full truncate leading-none">{item.label}</span>
                         </Link>
                     );
                 })}
@@ -427,7 +433,7 @@ function MobileBottomNav({ pathname }: { pathname: string }) {
     );
 }
 
-function NavIcon({ name }: { name: NavIconName }) {
+function NavIcon({ name, size = "sm" }: { name: NavIconName; size?: "sm" | "md" }) {
     const common = {
         fill: "none",
         stroke: "currentColor",
@@ -437,7 +443,7 @@ function NavIcon({ name }: { name: NavIconName }) {
     };
 
     return (
-        <svg aria-hidden="true" viewBox="0 0 24 24" className="h-3.5 w-3.5">
+        <svg aria-hidden="true" viewBox="0 0 24 24" className={size === "md" ? "h-[18px] w-[18px]" : "h-3.5 w-3.5"}>
             {name === "dashboard" ? (
                 <>
                     <rect {...common} x="3" y="3" width="7" height="7" rx="1.5" />
