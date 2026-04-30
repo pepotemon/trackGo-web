@@ -96,7 +96,6 @@ function hasNewInbound(lead: MetaLeadDoc) {
         lead.adminQueueLastSeenMessageAt ?? 0,
         lead.adminQueueSeenAt ?? 0
     );
-
     return inbound > seen;
 }
 
@@ -149,7 +148,6 @@ export default function AdminLeadsPage() {
         const query = new URLSearchParams(window.location.search)
             .get("search")
             ?.trim();
-
         if (!query) return;
         setFilters((prev) => ({ ...prev, search: query }));
     }, [setFilters]);
@@ -173,7 +171,6 @@ export default function AdminLeadsPage() {
                     onLoadMore={loadMore}
                     onOpenCoverage={() => setCoverageOpen(true)}
                     onOpenEdit={setEditingLead}
-                    onOpenQuick={setQuickLead}
                 />
             </div>
 
@@ -376,7 +373,6 @@ function MobileLeadQueue({
     onLoadMore,
     onOpenCoverage,
     onOpenEdit,
-    onOpenQuick,
 }: {
     leads: MetaLeadDoc[];
     stats: ReturnType<typeof useAdminLeadQueue>["stats"];
@@ -393,179 +389,137 @@ function MobileLeadQueue({
     onLoadMore: () => void;
     onOpenCoverage: () => void;
     onOpenEdit: (lead: MetaLeadDoc) => void;
-    onOpenQuick: (lead: MetaLeadDoc) => void;
 }) {
-    const [filtersOpen, setFiltersOpen] = useState(false);
+    const [filterModalOpen, setFilterModalOpen] = useState(false);
+
+    const modalFiltersCount = useMemo(
+        () => (filters.city !== "all" ? 1 : 0) + (filters.assignment !== "all" ? 1 : 0),
+        [filters.city, filters.assignment]
+    );
 
     return (
-        <div className="-mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] max-w-[100vw] overflow-x-hidden bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.10),transparent_36%),linear-gradient(180deg,#fbfaff_0%,#f6f3ff_52%,#f8fafc_100%)] px-3 pb-6 pt-3 text-[#101936]">
+        <div className="-mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] max-w-[100vw] bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.10),transparent_36%),linear-gradient(180deg,#fbfaff_0%,#f6f3ff_52%,#f8fafc_100%)] pb-6 text-[#101936]">
 
-            {/* HEADER */}
-            <div className="mb-3 flex items-center gap-2">
-                <div className="min-w-0 flex-1">
-                    <h1 className="truncate text-[20px] font-black tracking-[-0.03em] text-[#101936]">
-                        Leads Meta
-                    </h1>
-                    <p className="mt-0.5 truncate text-[11px] font-semibold text-[#66739A]">
-                        <span className="font-black text-[#7C3AED]">{leads.length}</span> visibles
-                        {" · "}total <span className="font-black text-[#101936]">{stats.total}</span>
-                    </p>
+            {/* STICKY HEADER: title + stats + search */}
+            <div className="sticky top-0 z-20 bg-[#fbfaff]/96 px-3 pb-3 pt-3 backdrop-blur-md">
+
+                {/* TITLE ROW */}
+                <div className="mb-3 flex items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                        <h1 className="truncate text-[20px] font-black tracking-[-0.03em] text-[#101936]">
+                            Leads Meta
+                        </h1>
+                        <p className="mt-0.5 truncate text-[11px] font-semibold text-[#66739A]">
+                            <span className="font-black text-[#7C3AED]">{leads.length}</span> visibles
+                            {" · "}total <span className="font-black text-[#101936]">{stats.total}</span>
+                        </p>
+                    </div>
+
+                    <MobileHeaderButton
+                        onClick={onOpenCoverage}
+                        disabled={loading || !leads.length}
+                        icon="assign"
+                        label="Cobertura"
+                    />
+                    <MobileHeaderLink
+                        href="/admin/leads/history"
+                        icon="history"
+                        label="Historial"
+                    />
+                    <MobileHeaderButton
+                        onClick={onReloadUsers}
+                        disabled={loading}
+                        icon="users"
+                        label="Usuarios"
+                    />
                 </div>
 
-                <MobileHeaderButton
-                    onClick={onOpenCoverage}
-                    disabled={loading || !leads.length}
-                    icon="assign"
-                    label="Cobertura"
-                />
-                <MobileHeaderLink
-                    href="/admin/leads/history"
-                    icon="history"
-                    label="Historial"
-                />
-                <MobileHeaderButton
-                    onClick={onReloadUsers}
-                    disabled={loading}
-                    icon="users"
-                    label="Usuarios"
-                />
-            </div>
+                {/* STAT CARDS */}
+                <div className="mb-3 grid grid-cols-4 gap-2">
+                    <LeadStatCard
+                        label="Revisar"
+                        value={stats.pendingReview}
+                        icon="lead"
+                        color="text-blue-500"
+                        active={filters.status === "pending_review"}
+                        onClick={() => onPatchFilters({ status: filters.status === "pending_review" ? "all" : "pending_review" })}
+                    />
+                    <LeadStatCard
+                        label="Incompl."
+                        value={stats.incomplete}
+                        icon="alert"
+                        color="text-amber-500"
+                        active={filters.status === "incomplete"}
+                        onClick={() => onPatchFilters({ status: filters.status === "incomplete" ? "all" : "incomplete" })}
+                    />
+                    <LeadStatCard
+                        label="No aptos"
+                        value={stats.notSuitable}
+                        icon="close"
+                        color="text-red-500"
+                        active={filters.status === "not_suitable"}
+                        onClick={() => onPatchFilters({ status: filters.status === "not_suitable" ? "all" : "not_suitable" })}
+                    />
+                    <LeadStatCard
+                        label="Todos"
+                        value={stats.total}
+                        icon="filter"
+                        color="text-violet-500"
+                        active={filters.status === "all"}
+                        onClick={() => onPatchFilters({ status: "all" })}
+                    />
+                </div>
 
-            {/* STAT CARDS — FILTRO POR ESTADO */}
-            <div className="mb-3 grid grid-cols-4 gap-2">
-                <LeadStatCard
-                    label="Revisar"
-                    value={stats.pendingReview}
-                    icon="lead"
-                    color="text-blue-500"
-                    active={filters.status === "pending_review"}
-                    onClick={() => onPatchFilters({ status: filters.status === "pending_review" ? "all" : "pending_review" })}
-                />
-                <LeadStatCard
-                    label="Incompl."
-                    value={stats.incomplete}
-                    icon="alert"
-                    color="text-amber-500"
-                    active={filters.status === "incomplete"}
-                    onClick={() => onPatchFilters({ status: filters.status === "incomplete" ? "all" : "incomplete" })}
-                />
-                <LeadStatCard
-                    label="No aptos"
-                    value={stats.notSuitable}
-                    icon="close"
-                    color="text-red-500"
-                    active={filters.status === "not_suitable"}
-                    onClick={() => onPatchFilters({ status: filters.status === "not_suitable" ? "all" : "not_suitable" })}
-                />
-                <LeadStatCard
-                    label="Todos"
-                    value={stats.total}
-                    icon="filter"
-                    color="text-violet-500"
-                    active={filters.status === "all"}
-                    onClick={() => onPatchFilters({ status: "all" })}
-                />
-            </div>
+                {/* SEARCH + FILTER BUTTON */}
+                <div className="flex gap-2">
+                    <div className="flex h-[46px] flex-1 items-center gap-2 rounded-[14px] border border-[#E8E7FB] bg-white px-3 shadow-[0_2px_12px_rgba(91,33,255,0.07)]">
+                        <AppIcon
+                            name="search"
+                            tone="purple"
+                            size="sm"
+                            className="h-5 w-5 shrink-0 bg-transparent text-[#98A2B3] ring-0"
+                        />
+                        <input
+                            value={filters.search}
+                            onChange={(e) => onPatchFilters({ search: e.target.value })}
+                            placeholder="Buscar lead, teléfono, negocio..."
+                            className="min-w-0 flex-1 bg-transparent font-semibold text-[#101936] outline-none placeholder:text-[#98A2B3]"
+                            style={{ fontSize: "16px" }}
+                        />
+                        {filters.search ? (
+                            <button
+                                type="button"
+                                onClick={() => onPatchFilters({ search: "" })}
+                                className="flex h-7 w-7 items-center justify-center rounded-full bg-[#f3f0ff] text-[16px] text-[#7C3AED] transition active:bg-violet-200"
+                            >
+                                ×
+                            </button>
+                        ) : null}
+                    </div>
 
-            {/* BÚSQUEDA */}
-            <div className="mb-3 flex h-[46px] items-center gap-2 rounded-[14px] border border-[#E8E7FB] bg-white px-3 shadow-[0_2px_12px_rgba(91,33,255,0.07)]">
-                <AppIcon
-                    name="search"
-                    tone="purple"
-                    size="sm"
-                    className="h-5 w-5 shrink-0 bg-transparent text-[#98A2B3] ring-0"
-                />
-                <input
-                    value={filters.search}
-                    onChange={(e) => onPatchFilters({ search: e.target.value })}
-                    placeholder="Buscar lead, teléfono, negocio..."
-                    className="min-w-0 flex-1 bg-transparent font-semibold text-[#101936] outline-none placeholder:text-[#98A2B3]"
-                    style={{ fontSize: "16px" }}
-                />
-                {filters.search ? (
                     <button
                         type="button"
-                        onClick={() => onPatchFilters({ search: "" })}
-                        className="flex h-7 w-7 items-center justify-center rounded-full bg-[#f3f0ff] text-[16px] text-[#7C3AED] transition active:bg-violet-200"
+                        onClick={() => setFilterModalOpen(true)}
+                        className="relative flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-[14px] border border-[#E8E7FB] bg-white shadow-[0_2px_12px_rgba(91,33,255,0.07)] transition active:bg-[#f3f0ff]"
+                        aria-label="Filtros"
                     >
-                        ×
-                    </button>
-                ) : null}
-            </div>
-
-            {/* FILTROS */}
-            <div className="mb-3 rounded-[14px] border border-[#E8E7FB] bg-white p-3 shadow-[0_2px_12px_rgba(91,33,255,0.05)]">
-                <div className="flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 items-center gap-2">
                         <AppIcon
                             name="filter"
                             tone="purple"
                             size="sm"
                             className="h-5 w-5 bg-transparent text-[#7C3AED] ring-0"
                         />
-                        <p className="truncate text-[12px] font-bold text-[#66739A]">
-                            Filtros operativos
-                            {activeFiltersCount > 0 && (
-                                <span className="ml-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-[#7C3AED] text-[9px] font-black text-white">
-                                    {activeFiltersCount}
-                                </span>
-                            )}
-                        </p>
-                    </div>
-
-                    <button
-                        type="button"
-                        onClick={() => setFiltersOpen((v) => !v)}
-                        className="rounded-full border border-[#E8E7FB] bg-[#f8f7ff] px-3 py-1.5 text-[11px] font-bold text-[#7C3AED] transition active:bg-[#f3f0ff]"
-                    >
-                        {filtersOpen ? "Ocultar" : "Mostrar"}
+                        {modalFiltersCount > 0 ? (
+                            <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#7C3AED] text-[9px] font-black text-white">
+                                {modalFiltersCount}
+                            </span>
+                        ) : null}
                     </button>
                 </div>
-
-                {filtersOpen ? (
-                    <div className="mt-3 grid gap-2.5">
-                        <MobileFilterSelect
-                            label="Ciudad"
-                            value={filters.city}
-                            onChange={(value) => onPatchFilters({ city: value })}
-                        >
-                            <option value="all">Todas las ciudades</option>
-                            {cityOptions.map((city) => (
-                                <option key={city.value} value={city.value}>
-                                    {city.label}
-                                </option>
-                            ))}
-                        </MobileFilterSelect>
-
-                        <MobileFilterSelect
-                            label="Asignación"
-                            value={filters.assignment}
-                            onChange={(value) =>
-                                onPatchFilters({
-                                    assignment: value as LeadFilters["assignment"],
-                                })
-                            }
-                        >
-                            <option value="all">Manual y auto</option>
-                            <option value="auto">Auto-asignados</option>
-                            <option value="manual">Manuales</option>
-                        </MobileFilterSelect>
-
-                        {activeFiltersCount > 0 ? (
-                            <button
-                                type="button"
-                                onClick={onResetFilters}
-                                className="h-9 rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] text-[12px] font-bold text-[#66739A] transition active:bg-[#f3f0ff]"
-                            >
-                                Limpiar filtros
-                            </button>
-                        ) : null}
-                    </div>
-                ) : null}
             </div>
 
-            {/* LISTA */}
-            <div className="grid min-w-0 gap-2 overflow-x-hidden">
+            {/* LEAD LIST */}
+            <div className="grid min-w-0 gap-2 overflow-x-hidden px-3 pt-3">
                 {loading ? (
                     <MobileState
                         icon="refresh"
@@ -584,8 +538,7 @@ function MobileLeadQueue({
                             key={lead.id}
                             lead={lead}
                             saving={savingId === lead.id}
-                            onQuickActions={onOpenQuick}
-                            onEdit={onOpenEdit}
+                            onOpenEdit={onOpenEdit}
                         />
                     ))
                 )}
@@ -602,6 +555,15 @@ function MobileLeadQueue({
                 ) : null}
             </div>
 
+            <MobileFiltersModal
+                open={filterModalOpen}
+                onClose={() => setFilterModalOpen(false)}
+                filters={filters}
+                cityOptions={cityOptions}
+                onPatchFilters={onPatchFilters}
+                onResetFilters={onResetFilters}
+                activeFiltersCount={modalFiltersCount}
+            />
         </div>
     );
 }
@@ -662,175 +624,324 @@ function LeadStatCard({
 function MobileLeadCard({
     lead,
     saving,
-    onQuickActions,
-    onEdit,
+    onOpenEdit,
 }: {
     lead: MetaLeadDoc;
     saving: boolean;
-    onQuickActions: (lead: MetaLeadDoc) => void;
-    onEdit: (lead: MetaLeadDoc) => void;
+    onOpenEdit: (lead: MetaLeadDoc) => void;
 }) {
+    const [sheetOpen, setSheetOpen] = useState(false);
     const status = lead.verificationStatus;
-
-    const statusBox =
-        status === "pending_review"
-            ? "border-blue-200 bg-blue-50 text-blue-700"
-            : status === "not_suitable"
-                ? "border-red-200 bg-red-50 text-red-600"
-                : "border-amber-200 bg-amber-50 text-amber-700";
-
-    const statusIcon =
-        status === "pending_review" ? "🔍"
-            : status === "not_suitable" ? "⊘"
-                : "!";
+    const city = cityLabel(lead);
+    const hasCity = city !== "Sin ciudad";
+    const hasBusiness = !!lead.business;
+    const hasMaps = !!lead.location.mapsUrl;
+    const isPendingReview = status === "pending_review";
 
     return (
-        <article className="min-w-0 max-w-full overflow-hidden rounded-[16px] border border-[#E8E7FB] bg-white p-3 shadow-[0_4px_18px_rgba(91,33,255,0.07)]">
+        <>
+            <article className="min-w-0 max-w-full overflow-hidden rounded-[16px] border border-[#E8E7FB] bg-white p-3 shadow-[0_4px_18px_rgba(91,33,255,0.07)]">
 
-            {/* FILA SUPERIOR */}
-            <div className="flex items-start justify-between gap-2">
-                <button
-                    type="button"
-                    onClick={() => onQuickActions(lead)}
-                    disabled={saving}
-                    className="min-w-0 flex-1 text-left disabled:opacity-60"
-                >
-                    <div className="flex min-w-0 items-center gap-2">
-                        <p className="min-w-0 flex-1 truncate text-[14px] font-black tracking-[-0.01em] text-[#101936]">
-                            {lead.phone || displayName(lead)}
-                        </p>
-                        {hasNewInbound(lead) ? <Badge tone="green">NEW</Badge> : null}
-                    </div>
-                    {lead.name ? (
-                        <p className="mt-0.5 truncate text-[12px] font-semibold text-[#344054]">
-                            {lead.name}
-                        </p>
-                    ) : null}
-                    {lead.business ? (
-                        <p className="mt-0.5 truncate text-[11px] font-medium text-[#66739A]">
-                            {lead.business}
-                        </p>
-                    ) : null}
-                </button>
+                {/* TOP ROW: name/phone + "..." */}
+                <div className="flex items-start justify-between gap-2">
+                    <Link
+                        href={`/admin/leads/${lead.id}`}
+                        className={saving ? "pointer-events-none min-w-0 flex-1 opacity-60" : "min-w-0 flex-1"}
+                    >
+                        <div className="flex min-w-0 items-center gap-2">
+                            <p className="min-w-0 flex-1 truncate text-[14px] font-black tracking-[-0.01em] text-[#101936]">
+                                {lead.phone || displayName(lead)}
+                            </p>
+                            {hasNewInbound(lead) ? <Badge tone="green">Nuevo</Badge> : null}
+                        </div>
+                        {lead.name ? (
+                            <p className="mt-0.5 truncate text-[12px] font-semibold text-[#344054]">
+                                {lead.name}
+                            </p>
+                        ) : null}
+                    </Link>
 
-                <button
-                    type="button"
-                    onClick={() => onQuickActions(lead)}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] text-[15px] font-black text-[#66739A] transition active:bg-[#f3f0ff]"
-                >
-                    ···
-                </button>
-            </div>
+                    <button
+                        type="button"
+                        onClick={() => setSheetOpen(true)}
+                        disabled={saving}
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] transition active:bg-[#f3f0ff] disabled:opacity-60"
+                        aria-label="Acciones"
+                    >
+                        <AppIcon name="more" tone="slate" size="sm" className="h-4 w-4 bg-transparent text-[#98A2B3] ring-0" />
+                    </button>
+                </div>
 
-            {/* CIUDAD */}
-            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
-                <span
-                    className={[
-                        "inline-flex min-h-5 max-w-full items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold",
-                        lead.location.outOfCoverage
-                            ? "border-amber-200 bg-amber-50 text-amber-700"
-                            : "border-violet-200 bg-violet-50 text-violet-700",
-                    ].join(" ")}
-                >
-                    <span>{lead.location.outOfCoverage ? "⚠" : "📍"}</span>
-                    <span className="truncate">{cityLabel(lead)}</span>
-                </span>
-            </div>
+                {/* ICON ROW: city · business · maps · status */}
+                <div className="mt-2.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
 
-            {/* STATUS */}
-            <div
-                className={[
-                    "mt-2 flex items-center gap-2 rounded-[10px] border px-2.5 py-1.5 text-[11px] font-semibold",
-                    statusBox,
-                ].join(" ")}
-            >
-                <span>{statusIcon}</span>
-                <span className="min-w-0 flex-1 truncate">
-                    {quickStatus(lead) || statusLabel[status]}
-                </span>
-            </div>
-
-            {/* DIRECCIÓN */}
-            {lead.location.address ? (
-                <p className="mt-1.5 line-clamp-1 text-[11px] font-medium text-[#66739A]">
-                    {lead.location.address}
-                </p>
-            ) : null}
-
-            {/* META */}
-            <p className="mt-1 truncate text-[10px] font-medium text-[#98A2B3]">
-                Creado {formatDateShort(lead.createdAt)}
-                {" · "}
-                Activo {formatDateShort(lead.lastInboundMessageAt || lead.updatedAt || lead.createdAt)}
-            </p>
-
-            {/* MENSAJE / CTA CHAT */}
-            {lead.lastInboundText ? (
-                <Link
-                    href={`/admin/leads/${lead.id}`}
-                    className="mt-2.5 block rounded-[12px] border border-[#E8E7FB] bg-[#fafafa] p-2.5 transition active:bg-[#f3f0ff]"
-                >
-                    <div className="flex items-center gap-2">
-                        <span className="text-[11px]">💬</span>
-                        <span className="min-w-0 flex-1 truncate text-[10px] font-semibold text-[#66739A]">
-                            Último mensaje
+                    {/* City */}
+                    <div className={["flex items-center gap-1", hasCity ? "text-emerald-600" : "text-red-500"].join(" ")}>
+                        <AppIcon
+                            name="assign"
+                            tone="slate"
+                            size="sm"
+                            className={["h-[14px] w-[14px] bg-transparent ring-0", hasCity ? "text-emerald-600" : "text-red-500"].join(" ")}
+                        />
+                        <span className="text-[11px] font-semibold">
+                            {hasCity ? city : "Sin ciudad"}
                         </span>
-                        <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[9px] font-bold text-violet-700">
-                            Chat
-                        </span>
+                        {hasCity && lead.location.outOfCoverage ? (
+                            <span className="text-[10px] font-semibold text-amber-500">(fuera)</span>
+                        ) : null}
                     </div>
-                    <p className="mt-1 line-clamp-1 text-[11px] font-semibold text-[#101936]">
-                        {lead.lastInboundText}
+
+                    {/* Business */}
+                    <div className={["flex items-center gap-1", hasBusiness ? "text-emerald-600" : "text-red-500"].join(" ")}>
+                        <AppIcon
+                            name="wallet"
+                            tone="slate"
+                            size="sm"
+                            className={["h-[14px] w-[14px] bg-transparent ring-0", hasBusiness ? "text-emerald-600" : "text-red-500"].join(" ")}
+                        />
+                        {hasBusiness ? (
+                            <span className="max-w-[90px] truncate text-[11px] font-semibold">{lead.business}</span>
+                        ) : (
+                            <span className="text-[11px] font-semibold">Sin negocio</span>
+                        )}
+                    </div>
+
+                    {/* Maps */}
+                    {hasMaps ? (
+                        <a
+                            href={lead.location.mapsUrl!}
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-label="Ver en Maps"
+                            className="flex items-center text-emerald-600"
+                        >
+                            <AppIcon name="map" tone="slate" size="sm" className="h-[14px] w-[14px] bg-transparent text-emerald-600 ring-0" />
+                        </a>
+                    ) : (
+                        <span className="flex items-center text-red-400" aria-label="Sin Maps">
+                            <AppIcon name="map" tone="slate" size="sm" className="h-[14px] w-[14px] bg-transparent text-red-400 ring-0" />
+                        </span>
+                    )}
+
+                    {/* Status */}
+                    {isPendingReview ? (
+                        <AppIcon name="search" tone="slate" size="sm" className="h-[14px] w-[14px] bg-transparent text-blue-500 ring-0" />
+                    ) : (
+                        <span className={[
+                            "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                            status === "not_suitable"
+                                ? "border-red-200 bg-red-50 text-red-600"
+                                : "border-amber-200 bg-amber-50 text-amber-700",
+                        ].join(" ")}>
+                            {quickStatus(lead) || statusLabel[status]}
+                        </span>
+                    )}
+                </div>
+
+                {/* ADDRESS */}
+                {lead.location.address ? (
+                    <p className="mt-1.5 line-clamp-1 text-[11px] font-medium text-[#66739A]">
+                        {lead.location.address}
                     </p>
-                </Link>
-            ) : (
-                <Link
-                    href={`/admin/leads/${lead.id}`}
-                    className="mt-2.5 flex min-h-[44px] items-center justify-center gap-2 rounded-[12px] border border-violet-200 bg-violet-50 px-3 text-[12px] font-bold text-violet-700 transition active:bg-violet-100"
-                >
-                    💬 Abrir chat
-                </Link>
-            )}
-
-            {/* ACCIONES */}
-            <div className="mt-2.5 flex items-center gap-2">
-                {lead.location.mapsUrl ? (
-                    <a
-                        href={lead.location.mapsUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex h-10 w-10 items-center justify-center rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] text-[15px] transition active:bg-[#f3f0ff]"
-                    >
-                        🗺️
-                    </a>
                 ) : null}
 
-                {whatsappUrl(lead.phone) ? (
-                    <a
-                        href={whatsappUrl(lead.phone)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex h-10 w-10 items-center justify-center rounded-[12px] border border-emerald-200 bg-emerald-50 text-[15px] transition active:bg-emerald-100"
-                    >
-                        ☎
-                    </a>
+                {/* META */}
+                <p className="mt-1 truncate text-[10px] font-medium text-[#98A2B3]">
+                    {formatDateShort(lead.createdAt)}
+                    {" · "}
+                    {formatDateShort(lead.lastInboundMessageAt || lead.updatedAt || lead.createdAt)}
+                </p>
+
+                {saving ? (
+                    <p className="mt-1.5 text-[11px] font-medium text-[#98A2B3]">Procesando…</p>
                 ) : null}
+            </article>
+
+            <MobileLeadActionSheet
+                lead={lead}
+                open={sheetOpen}
+                onClose={() => setSheetOpen(false)}
+                onEdit={() => { setSheetOpen(false); onOpenEdit(lead); }}
+            />
+        </>
+    );
+}
+
+function MobileLeadActionSheet({
+    lead,
+    open,
+    onClose,
+    onEdit,
+}: {
+    lead: MetaLeadDoc;
+    open: boolean;
+    onClose: () => void;
+    onEdit: () => void;
+}) {
+    if (!open) return null;
+
+    const waUrl = whatsappUrl(lead.phone);
+
+    return (
+        <>
+            <button
+                type="button"
+                onClick={onClose}
+                className="fixed inset-0 z-40 bg-black/40 xl:hidden"
+                aria-label="Cerrar"
+            />
+            <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-[24px] bg-white px-4 pb-8 pt-4 shadow-[0_-8px_40px_rgba(0,0,0,0.18)] xl:hidden">
+                <div className="mx-auto mb-4 h-1 w-12 rounded-full bg-[#E8E7FB]" />
+
+                <div className="mb-4 min-w-0">
+                    <p className="truncate text-[15px] font-black text-[#101936]">
+                        {lead.phone || displayName(lead)}
+                    </p>
+                    {(lead.name || lead.business) ? (
+                        <p className="mt-0.5 truncate text-[12px] font-semibold text-[#66739A]">
+                            {lead.name || lead.business}
+                        </p>
+                    ) : null}
+                </div>
+
+                <div className="grid gap-2">
+                    <Link
+                        href={`/admin/leads/${lead.id}`}
+                        className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#f3f0ff] px-4 text-[14px] font-bold text-[#7C3AED] transition active:bg-violet-200"
+                    >
+                        <AppIcon name="chat" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#7C3AED] ring-0" />
+                        Chat
+                    </Link>
+
+                    <button
+                        type="button"
+                        onClick={onEdit}
+                        className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#fff7ed] px-4 text-[14px] font-bold text-orange-600 transition active:bg-orange-100"
+                    >
+                        <AppIcon name="edit" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-orange-500 ring-0" />
+                        Editar
+                    </button>
+
+                    {lead.location.mapsUrl ? (
+                        <a
+                            href={lead.location.mapsUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-emerald-50 px-4 text-[14px] font-bold text-emerald-700 transition active:bg-emerald-100"
+                        >
+                            <AppIcon name="map" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-emerald-600 ring-0" />
+                            Maps
+                        </a>
+                    ) : null}
+
+                    {waUrl ? (
+                        <a
+                            href={waUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-emerald-50 px-4 text-[14px] font-bold text-emerald-700 transition active:bg-emerald-100"
+                        >
+                            <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 fill-none stroke-emerald-600 stroke-2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.96a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 16.92Z" />
+                            </svg>
+                            WhatsApp
+                        </a>
+                    ) : null}
+                </div>
 
                 <button
                     type="button"
-                    onClick={() => onEdit(lead)}
-                    className="ml-auto min-h-[36px] rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 py-1.5 text-[11px] font-bold text-[#66739A] transition active:bg-[#f3f0ff]"
+                    onClick={onClose}
+                    className="mt-3 min-h-[48px] w-full rounded-[14px] border border-[#E8E7FB] bg-[#f8f7ff] text-[14px] font-bold text-[#66739A] transition active:bg-[#f3f0ff]"
                 >
-                    Editar
+                    Cancelar
                 </button>
             </div>
+        </>
+    );
+}
 
-            {saving ? (
-                <p className="mt-1.5 text-[11px] font-medium text-[#98A2B3]">
-                    Procesando…
-                </p>
-            ) : null}
-        </article>
+function MobileFiltersModal({
+    open,
+    onClose,
+    filters,
+    cityOptions,
+    onPatchFilters,
+    onResetFilters,
+    activeFiltersCount,
+}: {
+    open: boolean;
+    onClose: () => void;
+    filters: LeadFilters;
+    cityOptions: { value: string; label: string }[];
+    onPatchFilters: (patch: Partial<LeadFilters>) => void;
+    onResetFilters: () => void;
+    activeFiltersCount: number;
+}) {
+    if (!open) return null;
+
+    return (
+        <>
+            <button
+                type="button"
+                onClick={onClose}
+                className="fixed inset-0 z-40 bg-black/40 xl:hidden"
+                aria-label="Cerrar filtros"
+            />
+            <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-[24px] bg-white px-4 pb-8 pt-4 shadow-[0_-8px_40px_rgba(0,0,0,0.15)] xl:hidden">
+                <div className="mx-auto mb-4 h-1 w-12 rounded-full bg-[#E8E7FB]" />
+
+                <div className="mb-4 flex items-center justify-between">
+                    <h3 className="text-[15px] font-black text-[#101936]">Filtros</h3>
+                    {activeFiltersCount > 0 ? (
+                        <button
+                            type="button"
+                            onClick={onResetFilters}
+                            className="text-[12px] font-bold text-[#7C3AED] transition active:opacity-70"
+                        >
+                            Limpiar todo
+                        </button>
+                    ) : null}
+                </div>
+
+                <div className="grid gap-3">
+                    <MobileFilterSelect
+                        label="Ciudad"
+                        value={filters.city}
+                        onChange={(value) => onPatchFilters({ city: value })}
+                    >
+                        <option value="all">Todas las ciudades</option>
+                        {cityOptions.map((city) => (
+                            <option key={city.value} value={city.value}>
+                                {city.label}
+                            </option>
+                        ))}
+                    </MobileFilterSelect>
+
+                    <MobileFilterSelect
+                        label="Asignación"
+                        value={filters.assignment}
+                        onChange={(value) =>
+                            onPatchFilters({
+                                assignment: value as LeadFilters["assignment"],
+                            })
+                        }
+                    >
+                        <option value="all">Manual y auto</option>
+                        <option value="auto">Auto-asignados</option>
+                        <option value="manual">Manuales</option>
+                    </MobileFilterSelect>
+                </div>
+
+                <button
+                    type="button"
+                    onClick={onClose}
+                    className="mt-4 min-h-[52px] w-full rounded-[14px] bg-[#7C3AED] text-[14px] font-bold text-white transition active:bg-violet-700"
+                >
+                    Listo
+                </button>
+            </div>
+        </>
     );
 }
 
@@ -935,109 +1046,6 @@ function MobileState({
             />
             <p className="text-[14px] font-black text-[#101936]">{title}</p>
             <p className="text-[12px] font-medium text-[#66739A]">{body}</p>
-        </div>
-    );
-}
-
-function LeadMobileStatusBar({
-    value,
-    stats,
-    total,
-    onChange,
-}: {
-    value: LeadFilters["status"];
-    stats: ReturnType<typeof useAdminLeadQueue>["stats"];
-    total: number;
-    onChange: (status: LeadFilters["status"]) => void;
-}) {
-    const items: {
-        value: LeadFilters["status"];
-        label: string;
-        count: number;
-        icon: "lead" | "alert" | "close" | "filter";
-        color: string;
-    }[] = [
-            {
-                value: "pending_review",
-                label: "Revisar",
-                count: stats.pendingReview,
-                icon: "lead",
-                color: "text-blue-500",
-            },
-            {
-                value: "incomplete",
-                label: "Incompletos",
-                count: stats.incomplete,
-                icon: "alert",
-                color: "text-amber-500",
-            },
-            {
-                value: "not_suitable",
-                label: "No aptos",
-                count: stats.notSuitable,
-                icon: "close",
-                color: "text-red-500",
-            },
-            {
-                value: "all",
-                label: "Todos",
-                count: total,
-                icon: "filter",
-                color: "text-violet-500",
-            },
-        ];
-
-    return (
-        <div className="fixed bottom-[72px] left-0 right-0 z-30 max-w-[100vw] overflow-hidden border-t border-[#E8E7FB] bg-white/95 px-2.5 pb-2 pt-2 shadow-[0_-8px_24px_rgba(91,33,255,0.08)] backdrop-blur-xl xl:hidden">
-            <div className="grid grid-cols-4 gap-1.5">
-                {items.map((item) => {
-                    const active = value === item.value;
-
-                    return (
-                        <button
-                            key={item.value}
-                            type="button"
-                            onClick={() => onChange(item.value)}
-                            className={[
-                                "relative min-h-[52px] rounded-[14px] border px-2 py-1.5 text-left transition active:opacity-80",
-                                active
-                                    ? "border-violet-200 bg-violet-50"
-                                    : "border-[#E8E7FB] bg-[#fafafa]",
-                            ].join(" ")}
-                        >
-                            {active && (
-                                <span className="absolute inset-x-3 top-0 h-[2px] rounded-full bg-gradient-to-r from-[#7c3aed] to-[#4f46e5]" />
-                            )}
-                            <div className="flex items-center justify-between gap-1">
-                                <AppIcon
-                                    name={item.icon}
-                                    tone="slate"
-                                    size="sm"
-                                    className={`h-4 w-4 rounded-lg bg-transparent ring-0 ${item.color}`}
-                                />
-                                <span
-                                    className={
-                                        active
-                                            ? "rounded-full bg-violet-100 px-1.5 py-0.5 text-[9px] font-black text-violet-700"
-                                            : "rounded-full bg-[#f2f4f7] px-1.5 py-0.5 text-[9px] font-semibold text-[#98A2B3]"
-                                    }
-                                >
-                                    {item.count}
-                                </span>
-                            </div>
-                            <div
-                                className={
-                                    active
-                                        ? "mt-1.5 truncate text-[9px] font-bold text-violet-700"
-                                        : "mt-1.5 truncate text-[9px] font-medium text-[#98A2B3]"
-                                }
-                            >
-                                {item.label}
-                            </div>
-                        </button>
-                    );
-                })}
-            </div>
         </div>
     );
 }

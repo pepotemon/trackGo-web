@@ -95,6 +95,17 @@ function norm(value: unknown) {
     return String(value ?? "").toLowerCase().trim();
 }
 
+function stripEmojis(str: string): string {
+    if (!str) return "";
+    return str
+        .replace(/[\u{1F000}-\u{1FFFF}]/gu, "")
+        .replace(/[\u{2600}-\u{27BF}]/gu, "")
+        .replace(/[\u{FE00}-\u{FE0F}]/gu, "")
+        .replace(/[\u{200D}]/gu, "")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
 function money(value: number) {
     return `R$ ${Number(value || 0).toFixed(2)}`;
 }
@@ -111,11 +122,12 @@ function formatDate(value?: number | null) {
 }
 
 function eventTitle(event: ActivityEventRow) {
-    return event.name || event.business || event.phone || event.clientId || "Cliente";
+    const raw = event.name || event.business || event.phone || event.clientId || "Cliente";
+    return stripEmojis(raw);
 }
 
 function eventSubtitle(event: ActivityEventRow) {
-    const business = String(event.business || "").trim();
+    const business = stripEmojis(String(event.business || "").trim());
     const address = String(event.address || "").trim();
     const cleanAddress = /^https?:\/\//i.test(address) ? "" : address;
 
@@ -691,7 +703,7 @@ function MobileActivityView({
                         className={[
                             "h-9 rounded-[13px] text-[12px] font-black transition",
                             viewMode === mode
-                                ? "bg-blue-500 text-white shadow-[0_10px_25px_rgba(37,99,235,0.22)]"
+                                ? "bg-[#7C3AED] text-white shadow-[0_10px_25px_rgba(124,58,237,0.22)]"
                                 : "text-[#66739A]",
                         ].join(" ")}
                     >
@@ -961,29 +973,42 @@ function ActivityMobileCard({
                 <Badge tone={typeTone[row.type]}>{typeLabel[row.type]}</Badge>
             </div>
 
-            <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
-                <div className="min-w-0">
-                    <div className="truncate text-[12px] font-black text-[#7C3AED]">
+            <div className="mt-2 flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                    <span className="truncate text-[12px] font-black text-[#7C3AED]">
                         {row.userName}
-                    </div>
-                    <div className="mt-0.5 truncate text-[10px] font-semibold text-[#98A2B3]">
-                        {row.billingMode === "weekly_subscription" ? "Suscripción" : "Por visita"}
-                    </div>
+                    </span>
+                    {row.mapsUrl ? (
+                        <a
+                            href={row.mapsUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            aria-label="Ver en Maps"
+                            className="shrink-0 text-emerald-600"
+                        >
+                            <AppIcon name="map" tone="slate" size="sm" className="h-[14px] w-[14px] bg-transparent text-emerald-600 ring-0" />
+                        </a>
+                    ) : null}
                 </div>
 
-                <div className="text-right text-[10px] font-semibold text-[#98A2B3]">
+                <div className="shrink-0 text-right text-[10px] font-semibold text-[#98A2B3]">
                     {formatDate(row.createdAt)}
                 </div>
             </div>
 
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                {reason ? (
-                    <span className="max-w-full truncate rounded-full border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-semibold text-red-600">
-                        {reason}
-                    </span>
-                ) : null}
-                {row.source === "pending_client" ? <Badge tone="yellow">Actual</Badge> : null}
-            </div>
+            {(reason || (row.source === "pending_client" && row.type !== "pending")) ? (
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    {reason ? (
+                        <span className="max-w-full truncate rounded-full border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-semibold text-red-600">
+                            {reason}
+                        </span>
+                    ) : null}
+                    {row.source === "pending_client" && row.type !== "pending" ? (
+                        <Badge tone="yellow">Actual</Badge>
+                    ) : null}
+                </div>
+            ) : null}
         </button>
     );
 }
@@ -1108,6 +1133,16 @@ function ActivityListModal({
     onOpenRow: (row: ActivityEventRow) => void;
 }) {
     const [q, setQ] = useState("");
+    const [collapsedUsers, setCollapsedUsers] = useState<Set<string>>(new Set());
+
+    function toggleUser(userId: string) {
+        setCollapsedUsers((prev) => {
+            const next = new Set(prev);
+            if (next.has(userId)) next.delete(userId);
+            else next.add(userId);
+            return next;
+        });
+    }
 
     const visibleRows = useMemo(() => {
         const query = norm(q);
@@ -1130,20 +1165,31 @@ function ActivityListModal({
         );
     }, [q, rows]);
 
+    const groupedRows = useMemo(() => {
+        const map = new Map<string, { userId: string; userName: string; rows: ActivityEventRow[] }>();
+
+        for (const row of visibleRows) {
+            const existing = map.get(row.userId);
+            if (existing) {
+                existing.rows.push(row);
+            } else {
+                map.set(row.userId, { userId: row.userId, userName: row.userName, rows: [row] });
+            }
+        }
+
+        return Array.from(map.values()).sort((a, b) => a.userName.localeCompare(b.userName));
+    }, [visibleRows]);
+
     if (!mode) return null;
+
+    const modalTitle = mode === "visited" ? "Visitados" : mode === "rejected" ? "Rechazados" : "Pendientes";
 
     return (
         <Modal
             open={!!mode}
             onClose={onClose}
-            title={
-                mode === "visited"
-                    ? "Visitados"
-                    : mode === "rejected"
-                        ? "Rechazados"
-                        : "Pendientes"
-            }
-            subtitle={`${visibleRows.length} cliente(s)`}
+            title={modalTitle}
+            subtitle={`${visibleRows.length} cliente(s) · ${groupedRows.length} usuario(s)`}
             size="lg"
         >
             <div className="space-y-3">
@@ -1154,34 +1200,53 @@ function ActivityListModal({
                 />
 
                 <div className="max-h-[58vh] space-y-2 overflow-y-auto pr-1">
-                    {visibleRows.length === 0 ? (
+                    {groupedRows.length === 0 ? (
                         <div className="rounded-xl border border-[#e5e7eb] bg-[#fafafa] p-5 text-center text-[13px] font-semibold text-[#71717a]">
                             No hay clientes aquí.
                         </div>
                     ) : (
-                        visibleRows.map((row) => (
-                            <button
-                                key={row.id}
-                                type="button"
-                                onClick={() => onOpenRow(row)}
-                                className="block w-full rounded-xl border border-[#e5e7eb] bg-white p-3 text-left transition hover:bg-[#fafafa]"
-                            >
-                                <div className="flex items-center justify-between gap-3">
-                                    <div className="min-w-0">
-                                        <div className="truncate text-[13px] font-bold text-[#171717]">
-                                            {eventTitle(row)}
+                        groupedRows.map((group) => {
+                            const isExpanded = !collapsedUsers.has(group.userId);
+
+                            return (
+                                <div key={group.userId} className="overflow-hidden rounded-[14px] border border-[#E8E7FB] bg-white">
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleUser(group.userId)}
+                                        className="flex w-full items-center justify-between gap-3 px-3 py-2.5 transition hover:bg-[#f8f7ff]"
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <AppIcon name="users" tone="purple" size="sm" className="h-4 w-4 bg-transparent text-[#7C3AED] ring-0" />
+                                            <span className="text-[13px] font-black text-[#101936]">
+                                                {group.userName}
+                                            </span>
                                         </div>
-                                        <div className="mt-0.5 truncate text-[11px] font-semibold text-[#66739A]">
-                                            {eventSubtitle(row)}
+                                        <div className="flex items-center gap-2">
+                                            <Badge tone="blue">{group.rows.length}</Badge>
+                                            <AppIcon
+                                                name={isExpanded ? "close" : "plus"}
+                                                tone="slate"
+                                                size="sm"
+                                                className="h-[14px] w-[14px] bg-transparent text-[#98A2B3] ring-0"
+                                            />
                                         </div>
-                                        <div className="mt-1 truncate text-[11px] font-semibold text-[#71717a]">
-                                            {row.userName}
+                                    </button>
+
+                                    {isExpanded ? (
+                                        <div className="divide-y divide-[#f0f1f2] border-t border-[#f0f1f2]">
+                                            {group.rows.map((row) => (
+                                                <ActivityMobileCard
+                                                    key={row.id}
+                                                    row={row}
+                                                    onQuickActions={onOpenRow}
+                                                    compact
+                                                />
+                                            ))}
                                         </div>
-                                    </div>
-                                    <Badge tone={typeTone[row.type]}>{typeLabel[row.type]}</Badge>
+                                    ) : null}
                                 </div>
-                            </button>
-                        ))
+                            );
+                        })
                     )}
                 </div>
             </div>
