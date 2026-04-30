@@ -443,143 +443,165 @@ export default function AccountingPage() {
 
     return (
         <div className="mx-auto w-full max-w-[1220px]">
-            <PageHeader
-                title="Contabilidad"
-                subtitle="Control semanal de ingresos, inversion, suscripciones y resultado real."
-                icon={<AppIcon name="activity" tone="green" size="sm" className="bg-transparent text-white ring-0" />}
-                actions={
-                    <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
-                        <div className="grid grid-cols-5 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-end">
-                            {activeTab === "investment" ? (
+            <div className="xl:hidden">
+                <MobileAccountingPage
+                    week={week}
+                    weekOffset={weekOffset}
+                    setWeekOffset={setWeekOffset}
+                    usersCount={users.length}
+                    eventsCount={events.length}
+                    loading={loading}
+                    summary={summary}
+                    weekStatus={weekStatus}
+                    isClosed={isClosed}
+                    activeTab={activeTab}
+                    setActiveTab={setActiveTab}
+                    onRefresh={() => setRefreshNonce((value) => value + 1)}
+                    onExport={summary ? () => exportAccountingSheet(summary) : undefined}
+                    onCloseWeek={() => setCloseOpen(true)}
+                    onReopenWeek={() => setReopenOpen(true)}
+                    savingWeek={savingWeek}
+                />
+            </div>
+
+            <div className="hidden xl:block">
+                <PageHeader
+                    title="Contabilidad"
+                    subtitle="Control semanal de ingresos, inversion, suscripciones y resultado real."
+                    icon={<AppIcon name="activity" tone="green" size="sm" className="bg-transparent text-white ring-0" />}
+                    actions={
+                        <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
+                            <div className="grid grid-cols-5 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-end">
+                                {activeTab === "investment" ? (
+                                    <IconButton
+                                        icon="activity"
+                                        label="Ver resumen"
+                                        variant="primary"
+                                        onClick={() => setActiveTab("overview")}
+                                    />
+                                ) : null}
+                                {summary ? (
+                                    <IconButton
+                                        icon="download"
+                                        label="Exportar Excel"
+                                        variant="primary"
+                                        onClick={() => exportAccountingSheet(summary)}
+                                    />
+                                ) : null}
                                 <IconButton
-                                    icon="activity"
-                                    label="Ver resumen"
+                                    icon="wallet"
+                                    label="Configurar inversion"
                                     variant="primary"
-                                    onClick={() => setActiveTab("overview")}
+                                    onClick={() => setActiveTab("investment")}
                                 />
-                            ) : null}
-                            {summary ? (
+                                {isClosed ? (
+                                    <IconButton
+                                        icon="unlock"
+                                        label="Reabrir semana"
+                                        onClick={() => setReopenOpen(true)}
+                                        disabled={savingWeek || !investment}
+                                    />
+                                ) : (
+                                    <IconButton
+                                        icon="lock"
+                                        label="Cerrar semana"
+                                        variant="primary"
+                                        onClick={() => setCloseOpen(true)}
+                                        disabled={savingWeek || !summary}
+                                    />
+                                )}
                                 <IconButton
-                                    icon="download"
-                                    label="Exportar Excel"
+                                    icon="refresh"
+                                    label="Actualizar"
                                     variant="primary"
-                                    onClick={() => exportAccountingSheet(summary)}
+                                    onClick={() => setRefreshNonce((value) => value + 1)}
+                                    disabled={loading}
                                 />
-                            ) : null}
-                            <IconButton
-                                icon="wallet"
-                                label="Configurar inversion"
-                                variant="primary"
-                                onClick={() => setActiveTab("investment")}
-                            />
-                            {isClosed ? (
-                                <IconButton
-                                    icon="unlock"
-                                    label="Reabrir semana"
-                                    onClick={() => setReopenOpen(true)}
-                                    disabled={savingWeek || !investment}
-                                />
-                            ) : (
-                                <IconButton
-                                    icon="lock"
-                                    label="Cerrar semana"
-                                    variant="primary"
-                                    onClick={() => setCloseOpen(true)}
-                                    disabled={savingWeek || !summary}
-                                />
-                            )}
-                            <IconButton
-                                icon="refresh"
-                                label="Actualizar"
-                                variant="primary"
-                                onClick={() => setRefreshNonce((value) => value + 1)}
-                                disabled={loading}
-                            />
+                            </div>
+                            <StatusPill status={weekStatus} />
                         </div>
-                        <StatusPill status={weekStatus} />
+                    }
+                />
+
+                <section className="mb-4 flex flex-col gap-3 rounded-2xl border border-[#e4e7ec] bg-white px-3 py-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+                    <div className="grid grid-cols-[40px_1fr_40px] items-center gap-2 sm:flex sm:flex-wrap">
+                        <IconButton
+                            icon="arrowLeft"
+                            label="Semana anterior"
+                            onClick={() => setWeekOffset((v) => v - 1)}
+                        />
+                        <div className="flex h-10 min-w-0 items-center justify-center gap-2 rounded-xl border border-[#e4e7ec] bg-[#f9fafb] px-2 text-[11px] font-bold text-[#344054] sm:h-9 sm:justify-start sm:rounded-md sm:px-3 sm:text-[12px]">
+                            <Icon name="calendar" />
+                            <span className="truncate">{week.startKey}</span>
+                            <span className="text-[#98a2b3]">/</span>
+                            <span className="truncate">{week.endKey}</span>
+                        </div>
+                        <IconButton
+                            icon="arrowRight"
+                            label="Semana siguiente"
+                            onClick={() => setWeekOffset((v) => v + 1)}
+                        />
+                        {weekOffset !== 0 ? (
+                            <Button onClick={() => setWeekOffset(0)} className="col-span-3 sm:col-span-1">
+                                Actual
+                            </Button>
+                        ) : null}
                     </div>
-                }
-            />
 
-            <section className="mb-4 flex flex-col gap-3 rounded-2xl border border-[#e4e7ec] bg-white px-3 py-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-                <div className="grid grid-cols-[40px_1fr_40px] items-center gap-2 sm:flex sm:flex-wrap">
-                    <IconButton
-                        icon="arrowLeft"
-                        label="Semana anterior"
-                        onClick={() => setWeekOffset((v) => v - 1)}
-                    />
-                    <div className="flex h-10 min-w-0 items-center justify-center gap-2 rounded-xl border border-[#e4e7ec] bg-[#f9fafb] px-2 text-[11px] font-bold text-[#344054] sm:h-9 sm:justify-start sm:rounded-md sm:px-3 sm:text-[12px]">
-                        <Icon name="calendar" />
-                        <span className="truncate">{week.startKey}</span>
-                        <span className="text-[#98a2b3]">/</span>
-                        <span className="truncate">{week.endKey}</span>
+                    <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+                        <CounterPill icon="users" label={`${users.length} usuarios`} />
+                        <CounterPill icon="activity" label={`${events.length} eventos`} />
                     </div>
-                    <IconButton
-                        icon="arrowRight"
-                        label="Semana siguiente"
-                        onClick={() => setWeekOffset((v) => v + 1)}
-                    />
-                    {weekOffset !== 0 ? (
-                        <Button onClick={() => setWeekOffset(0)} className="col-span-3 sm:col-span-1">
-                            Actual
-                        </Button>
-                    ) : null}
-                </div>
+                </section>
 
-                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-                    <CounterPill icon="users" label={`${users.length} usuarios`} />
-                    <CounterPill icon="activity" label={`${events.length} eventos`} />
-                </div>
-            </section>
+                {err ? (
+                    <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] font-semibold text-red-600">
+                        {err}
+                    </div>
+                ) : null}
 
-            {err ? (
-                <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] font-semibold text-red-600">
-                    {err}
-                </div>
-            ) : null}
+                {loading || !summary ? (
+                    <Card className="p-6 text-[13px] font-medium text-[#667085]">
+                        Cargando contabilidad...
+                    </Card>
+                ) : (
+                    <div className="space-y-4">
+                        {isClosed && investment?.finalSummary ? (
+                            <ClosedWeekPanel
+                                summary={summary}
+                                finalSummary={investment.finalSummary}
+                            />
+                        ) : null}
 
-            {loading || !summary ? (
-                <Card className="p-6 text-[13px] font-medium text-[#667085]">
-                    Cargando contabilidad...
-                </Card>
-            ) : (
-                <div className="space-y-4">
-                    {isClosed && investment?.finalSummary ? (
-                        <ClosedWeekPanel
-                            summary={summary}
-                            finalSummary={investment.finalSummary}
-                        />
-                    ) : null}
-
-                    {activeTab === "overview" ? (
-                        <DashboardContent
-                            summary={summary}
-                            events={events}
-                            assignments={assignments}
-                            startDate={week.startDate}
-                            endDate={week.endDate}
-                            isClosed={isClosed}
-                            onToggleSubscriptionPayment={toggleSubscriptionPayment}
-                        />
-                    ) : (
-                        <InvestmentContent
-                            weekStartKey={week.startKey}
-                            weekEndKey={week.endKey}
-                            users={users}
-                            investment={investment}
-                            investmentGroups={investmentGroups}
-                            useCatalogDefaults={weekOffset === 0}
-                            isClosed={isClosed}
-                            onSaved={(next) => {
-                                setInvestment(next);
-                            }}
-                            onGroupsSaved={setInvestmentGroups}
-                            onError={setErr}
-                        />
-                    )}
-                </div>
-            )}
-
+                        {activeTab === "overview" ? (
+                            <DashboardContent
+                                summary={summary}
+                                events={events}
+                                assignments={assignments}
+                                startDate={week.startDate}
+                                endDate={week.endDate}
+                                isClosed={isClosed}
+                                onToggleSubscriptionPayment={toggleSubscriptionPayment}
+                            />
+                        ) : (
+                            <InvestmentContent
+                                weekStartKey={week.startKey}
+                                weekEndKey={week.endKey}
+                                users={users}
+                                investment={investment}
+                                investmentGroups={investmentGroups}
+                                useCatalogDefaults={weekOffset === 0}
+                                isClosed={isClosed}
+                                onSaved={(next) => {
+                                    setInvestment(next);
+                                }}
+                                onGroupsSaved={setInvestmentGroups}
+                                onError={setErr}
+                            />
+                        )}
+                    </div>
+                )}
+            </div>
             <Modal
                 open={closeOpen}
                 onClose={() => setCloseOpen(false)}
@@ -646,7 +668,457 @@ export default function AccountingPage() {
         </div>
     );
 }
+function MobileAccountingPage({
+    week,
+    weekOffset,
+    setWeekOffset,
+    usersCount,
+    eventsCount,
+    loading,
+    summary,
+    weekStatus,
+    isClosed,
+    activeTab,
+    setActiveTab,
+    onRefresh,
+    onExport,
+    onCloseWeek,
+    onReopenWeek,
+    savingWeek,
+}: {
+    week: ReturnType<typeof weekRangeKeysMonToSun>;
+    weekOffset: number;
+    setWeekOffset: React.Dispatch<React.SetStateAction<number>>;
+    usersCount: number;
+    eventsCount: number;
+    loading: boolean;
+    summary: AccountingSummary | null;
+    weekStatus: WeeklyInvestmentDoc["status"];
+    isClosed: boolean;
+    activeTab: AccountingTab;
+    setActiveTab: (tab: AccountingTab) => void;
+    onRefresh: () => void;
+    onExport?: () => void;
+    onCloseWeek: () => void;
+    onReopenWeek: () => void;
+    savingWeek: boolean;
+}) {
+    const real = summary?.real ?? 0;
+    const gross = summary?.gross ?? 0;
+    const investmentValue = summary?.investment ?? 0;
+    const roi = summary?.roi ?? null;
 
+    return (
+        <div className="-mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] max-w-[100vw] overflow-x-hidden bg-[#0B1220] bg-[linear-gradient(rgba(3,10,20,0.62),rgba(3,10,20,0.62)),url('/brand/trackgo-bg-map.png')] bg-cover bg-center px-3 pb-6 pt-2 text-[#F9FAFB]">
+            <div className="mb-2 flex items-center gap-2">
+                <div className="min-w-0 flex-1">
+                    <h1 className="truncate text-[18px] font-black text-white">
+                        Contabilidad
+                    </h1>
+                    <p className="mt-0.5 truncate text-[11px] font-extrabold text-[#9CA3AF]">
+                        Semana · <span className="text-white">{week.startKey}</span> /{" "}
+                        <span className="text-white">{week.endKey}</span>
+                    </p>
+                </div>
+
+                {onExport ? (
+                    <MobileAccountingIconButton
+                        icon="download"
+                        label="Exportar"
+                        onClick={onExport}
+                    />
+                ) : null}
+
+                <MobileAccountingIconButton
+                    icon="wallet"
+                    label="Inversión"
+                    active={activeTab === "investment"}
+                    onClick={() =>
+                        setActiveTab(activeTab === "investment" ? "overview" : "investment")
+                    }
+                />
+
+                <MobileAccountingIconButton
+                    icon={isClosed ? "unlock" : "lock"}
+                    label={isClosed ? "Reabrir" : "Cerrar"}
+                    disabled={savingWeek || (!summary && !isClosed)}
+                    onClick={isClosed ? onReopenWeek : onCloseWeek}
+                />
+
+                <MobileAccountingIconButton
+                    icon="refresh"
+                    label="Actualizar"
+                    disabled={loading}
+                    onClick={onRefresh}
+                />
+            </div>
+
+            <div className="mb-2 flex items-center justify-between gap-2 rounded-[14px] border border-[#1F2937] bg-[#0F172A]/90 p-2">
+                <button
+                    type="button"
+                    onClick={() => setWeekOffset((v) => v - 1)}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-white/[0.08] bg-white/[0.04] text-white"
+                >
+                    <MobileAccountingIcon name="arrowLeft" />
+                </button>
+
+                <div className="min-w-0 flex-1 text-center">
+                    <div className="truncate text-[11px] font-black text-[#CBD5E1]">
+                        {week.startKey} · {week.endKey}
+                    </div>
+                    <div className="mt-0.5 text-[10px] font-extrabold text-[#9CA3AF]">
+                        {weekOffset === 0 ? "Semana actual" : "Semana histórica"}
+                    </div>
+                </div>
+
+                <button
+                    type="button"
+                    onClick={() => setWeekOffset((v) => v + 1)}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-white/[0.08] bg-white/[0.04] text-white"
+                >
+                    <MobileAccountingIcon name="arrowRight" />
+                </button>
+
+                {weekOffset !== 0 ? (
+                    <button
+                        type="button"
+                        onClick={() => setWeekOffset(0)}
+                        className="h-9 rounded-[12px] border border-blue-400/20 bg-blue-500/10 px-3 text-[11px] font-black text-[#93C5FD]"
+                    >
+                        Actual
+                    </button>
+                ) : null}
+            </div>
+
+            <div className="mb-2 flex items-center justify-between gap-2">
+                <MobileAccountingPill
+                    icon="users"
+                    label={`${usersCount} usuarios`}
+                />
+                <MobileAccountingPill
+                    icon="activity"
+                    label={`${eventsCount} eventos`}
+                />
+                <MobileStatusPill status={weekStatus} />
+            </div>
+
+            {loading || !summary ? (
+                <div className="mt-8 rounded-[18px] border border-[#1F2937] bg-[#111827] p-5 text-center text-[13px] font-black text-[#9CA3AF]">
+                    Cargando contabilidad...
+                </div>
+            ) : activeTab === "investment" ? (
+                <div className="rounded-[18px] border border-[#1F2937] bg-[#111827] p-4">
+                    <div className="text-[14px] font-black text-white">
+                        Configuración de inversión
+                    </div>
+                    <p className="mt-1 text-[12px] font-bold text-[#9CA3AF]">
+                        Usa desktop para editar grupos con más comodidad. La lógica sigue activa aquí.
+                    </p>
+                    <button
+                        type="button"
+                        onClick={() => setActiveTab("overview")}
+                        className="mt-4 h-11 w-full rounded-[14px] bg-blue-600 text-[13px] font-black text-white"
+                    >
+                        Volver al resumen
+                    </button>
+                </div>
+            ) : (
+                <>
+                    <div className="mb-2 grid grid-cols-2 gap-2">
+                        <MobileMoneyCard
+                            title="Ganancia real"
+                            value={money(real)}
+                            caption={`ROI ${formatPercent(roi)}`}
+                            tone={real >= 0 ? "green" : "red"}
+                            icon="cash"
+                        />
+                        <MobileMoneyCard
+                            title="Ganancia bruta"
+                            value={money(gross)}
+                            caption="Visitas + suscripciones"
+                            tone="blue"
+                            icon="chart"
+                        />
+                    </div>
+
+                    <div className="mb-2 rounded-[18px] border border-[#1F2937] bg-[#111827] p-3">
+                        <div className="mb-3 flex items-center justify-between gap-2">
+                            <div>
+                                <div className="text-[13px] font-black text-white">
+                                    Resultado semanal
+                                </div>
+                                <div className="mt-0.5 text-[11px] font-bold text-[#9CA3AF]">
+                                    Bruta menos inversión
+                                </div>
+                            </div>
+                            <div className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1.5 text-[11px] font-black text-[#86EFAC]">
+                                {money(real)}
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2">
+                            <MobileTinyMetric label="Bruta" value={money(gross)} color="#86EFAC" />
+                            <MobileTinyMetric label="Inversión" value={money(investmentValue)} color="#FDE68A" />
+                            <MobileTinyMetric label="Real" value={money(real)} color={real >= 0 ? "#86EFAC" : "#FCA5A5"} />
+                        </div>
+                    </div>
+
+                    <div className="mb-2 grid grid-cols-3 gap-2">
+                        <MobileStatBox label="Asig." value={summary.assigned} icon="users" color="#FDE68A" />
+                        <MobileStatBox label="Vis." value={summary.visited} icon="check" color="#86EFAC" />
+                        <MobileStatBox label="Rech." value={summary.rejected} icon="close" color="#FCA5A5" />
+                    </div>
+
+                    <div className="rounded-[18px] border border-[#1F2937] bg-[#111827]">
+                        <div className="border-b border-white/[0.08] px-3 py-3">
+                            <div className="text-[13px] font-black text-white">
+                                Usuarios
+                            </div>
+                            <div className="mt-0.5 text-[11px] font-bold text-[#9CA3AF]">
+                                Resultado por usuario
+                            </div>
+                        </div>
+
+                        <div className="divide-y divide-white/[0.08]">
+                            {summary.rows
+                                .filter(
+                                    (row) =>
+                                        row.assigned > 0 ||
+                                        row.visited > 0 ||
+                                        row.rejected > 0 ||
+                                        Math.abs(row.real) > 0
+                                )
+                                .map((row) => (
+                                    <MobileAccountingUserRow key={row.userId} row={row} />
+                                ))}
+                        </div>
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}
+
+function MobileAccountingIconButton({
+    icon,
+    label,
+    onClick,
+    active,
+    disabled,
+}: {
+    icon: MobileAccountingIconName;
+    label: string;
+    onClick: () => void;
+    active?: boolean;
+    disabled?: boolean;
+}) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            disabled={disabled}
+            title={label}
+            aria-label={label}
+            className={[
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border text-white disabled:opacity-50",
+                active
+                    ? "border-blue-400/25 bg-blue-500/15"
+                    : "border-[#1F2937] bg-[#0F172A]",
+            ].join(" ")}
+        >
+            <MobileAccountingIcon name={icon} />
+        </button>
+    );
+}
+
+function MobileAccountingPill({
+    icon,
+    label,
+}: {
+    icon: MobileAccountingIconName;
+    label: string;
+}) {
+    return (
+        <div className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-[12px] border border-white/[0.08] bg-white/[0.04] px-2 py-2 text-[11px] font-black text-[#CBD5E1]">
+            <MobileAccountingIcon name={icon} />
+            <span className="truncate">{label}</span>
+        </div>
+    );
+}
+
+function MobileStatusPill({ status }: { status: WeeklyInvestmentDoc["status"] }) {
+    const label =
+        status === "closed" ? "Cerrada" : status === "review" ? "Revisión" : "Abierta";
+
+    const cls =
+        status === "closed"
+            ? "border-emerald-400/25 bg-emerald-400/10 text-[#86EFAC]"
+            : status === "review"
+                ? "border-yellow-300/25 bg-yellow-300/10 text-[#FDE68A]"
+                : "border-blue-400/25 bg-blue-500/10 text-[#93C5FD]";
+
+    return (
+        <div className={`flex flex-1 items-center justify-center rounded-[12px] border px-2 py-2 text-[11px] font-black ${cls}`}>
+            {label}
+        </div>
+    );
+}
+
+function MobileMoneyCard({
+    title,
+    value,
+    caption,
+    tone,
+    icon,
+}: {
+    title: string;
+    value: string;
+    caption: string;
+    tone: "green" | "red" | "blue";
+    icon: MobileAccountingIconName;
+}) {
+    const color =
+        tone === "green" ? "#86EFAC" : tone === "red" ? "#FCA5A5" : "#93C5FD";
+
+    return (
+        <div className="rounded-[18px] border border-[#1F2937] bg-[#111827] p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-[12px] border border-blue-400/20 bg-blue-500/10 text-[#93C5FD]">
+                    <MobileAccountingIcon name={icon} />
+                </div>
+                <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-1 text-[10px] font-black" style={{ color }}>
+                    SEMANA
+                </span>
+            </div>
+            <div className="truncate text-[12px] font-black text-white">{title}</div>
+            <div className="mt-1 truncate text-[17px] font-black text-white">{value}</div>
+            <div className="mt-1 truncate text-[10px] font-bold text-[#9CA3AF]">{caption}</div>
+        </div>
+    );
+}
+
+function MobileTinyMetric({
+    label,
+    value,
+    color,
+}: {
+    label: string;
+    value: string;
+    color: string;
+}) {
+    return (
+        <div className="rounded-[13px] border border-white/[0.08] bg-white/[0.05] px-2 py-2">
+            <div className="truncate text-[10px] font-black text-[#9CA3AF]">{label}</div>
+            <div className="mt-1 truncate text-[12px] font-black" style={{ color }}>
+                {value}
+            </div>
+        </div>
+    );
+}
+
+function MobileStatBox({
+    label,
+    value,
+    icon,
+    color,
+}: {
+    label: string;
+    value: number;
+    icon: MobileAccountingIconName;
+    color: string;
+}) {
+    return (
+        <div className="flex h-[42px] items-center justify-center gap-2 rounded-[14px] border border-white/[0.08] bg-[#111827] px-2">
+            <span style={{ color }}>
+                <MobileAccountingIcon name={icon} />
+            </span>
+            <span className="text-[13px] font-black text-white">{value}</span>
+            <span className="truncate text-[10px] font-black text-[#9CA3AF]">{label}</span>
+        </div>
+    );
+}
+
+function MobileAccountingUserRow({
+    row,
+}: {
+    row: AccountingSummary["rows"][number];
+}) {
+    return (
+        <div className="px-3 py-3">
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13px] font-black text-white">
+                        {row.name}
+                    </div>
+                    <div className="mt-0.5 truncate text-[11px] font-bold text-[#9CA3AF]">
+                        {row.billingMode === "weekly_subscription"
+                            ? "Suscripción semanal"
+                            : "Por visita"}
+                    </div>
+                </div>
+
+                <div
+                    className={
+                        row.real >= 0
+                            ? "text-right text-[13px] font-black text-[#86EFAC]"
+                            : "text-right text-[13px] font-black text-[#FCA5A5]"
+                    }
+                >
+                    {money(row.real)}
+                </div>
+            </div>
+
+            <div className="mt-2 grid grid-cols-3 gap-1.5">
+                <MobileTinyMetric label="Asig." value={String(row.assigned)} color="#FDE68A" />
+                <MobileTinyMetric label="Vis." value={String(row.visited)} color="#86EFAC" />
+                <MobileTinyMetric label="Rech." value={String(row.rejected)} color="#FCA5A5" />
+            </div>
+        </div>
+    );
+}
+
+type MobileAccountingIconName =
+    | "activity"
+    | "arrowLeft"
+    | "arrowRight"
+    | "cash"
+    | "chart"
+    | "check"
+    | "close"
+    | "download"
+    | "lock"
+    | "refresh"
+    | "unlock"
+    | "users"
+    | "wallet";
+
+function MobileAccountingIcon({ name }: { name: MobileAccountingIconName }) {
+    const common = {
+        fill: "none",
+        stroke: "currentColor",
+        strokeLinecap: "round" as const,
+        strokeLinejoin: "round" as const,
+        strokeWidth: 2,
+    };
+
+    return (
+        <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4">
+            {name === "activity" ? <path {...common} d="M22 12h-4l-3 8L9 4l-3 8H2" /> : null}
+            {name === "arrowLeft" ? <path {...common} d="M19 12H5M12 19l-7-7 7-7" /> : null}
+            {name === "arrowRight" ? <path {...common} d="M5 12h14M12 5l7 7-7 7" /> : null}
+            {name === "cash" ? <path {...common} d="M4 7h15a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h12M16 14h5" /> : null}
+            {name === "chart" ? <path {...common} d="M4 19V5M4 19h16M8 16v-4M12 16V8M16 16v-7" /> : null}
+            {name === "check" ? <path {...common} d="M20 6 9 17l-5-5" /> : null}
+            {name === "close" ? <path {...common} d="M18 6 6 18M6 6l12 12" /> : null}
+            {name === "download" ? <path {...common} d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14" /> : null}
+            {name === "lock" ? <path {...common} d="M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z" /> : null}
+            {name === "unlock" ? <path {...common} d="M7 11V7a5 5 0 0 1 8.5-3.5M5 11h14v10H5z" /> : null}
+            {name === "refresh" ? <path {...common} d="M21 12a9 9 0 0 1-15.4 6.4L3 16m0 5v-5h5M3 12a9 9 0 0 1 15.4-6.4L21 8m0-5v5h-5" /> : null}
+            {name === "users" ? <path {...common} d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM22 21v-2a4 4 0 0 0-3-3.8" /> : null}
+            {name === "wallet" ? <path {...common} d="M4 7h15a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h12M16 14h5" /> : null}
+        </svg>
+    );
+}
 function InvestmentContent({
     weekStartKey,
     weekEndKey,
@@ -1914,65 +2386,65 @@ function DashboardContent({
                     </div>
 
                     <div className="hidden overflow-x-auto lg:block">
-                    <table className="w-full min-w-[920px] border-collapse">
-                        <thead>
-                            <tr className="border-b border-[#eef1f5] bg-[#fcfcff] text-left text-[10px] font-bold uppercase tracking-[0.06em] text-[#8a93ad]">
-                                <th className="px-3 py-2.5">Usuario</th>
-                                <th className="px-3 py-2.5">Modelo</th>
-                                <th className="px-3 py-2.5">Asig. / Vis. / Rech.</th>
-                                <th className="px-3 py-2.5 text-right">Bruta</th>
-                                <th className="px-3 py-2.5 text-right">Costo</th>
-                                <th className="px-3 py-2.5 text-right">Real</th>
-                                <th className="px-3 py-2.5 text-right">Pago</th>
-                            </tr>
-                        </thead>
-
-                        <tbody>
-                            {activeRows.map((row) => (
-                                <tr key={row.userId} className="border-b border-[#eef1f5] last:border-0 hover:bg-[#f9fafb]">
-                                    <td className="px-3 py-2.5">
-                                        <div className="text-[12px] font-semibold text-[#172033]">{row.name}</div>
-                                        <div className="mt-0.5 text-[11px] font-medium text-[#98a2b3]">{row.email || "Sin correo registrado"}</div>
-                                    </td>
-
-                                    <td className="px-3 py-2.5">
-                                        <ModelBadge mode={row.billingMode} paid={row.subscriptionPaid} />
-                                    </td>
-
-                                    <td className="px-3 py-2.5">
-                                        <span className="inline-flex overflow-hidden rounded-lg border border-[#e4e7ec] text-[11px] font-bold">
-                                            <span className="bg-orange-50 px-2 py-1 text-orange-600">{row.assigned}</span>
-                                            <span className="bg-emerald-50 px-2 py-1 text-emerald-700">{row.visited}</span>
-                                            <span className="bg-red-50 px-2 py-1 text-red-600">{row.rejected}</span>
-                                        </span>
-                                    </td>
-
-                                    <td className="px-3 py-2.5 text-right text-[12px] font-semibold text-[#172033]">{money(row.gross)}</td>
-                                    <td className="px-3 py-2.5 text-right text-[12px] font-semibold text-[#667085]">{money(row.cost)}</td>
-                                    <td className={row.real >= 0 ? "px-3 py-2.5 text-right text-[12px] font-semibold text-emerald-600" : "px-3 py-2.5 text-right text-[12px] font-semibold text-red-500"}>
-                                        {money(row.real)}
-                                    </td>
-                                    <td className="px-3 py-2.5 text-right">
-                                        {row.billingMode === "weekly_subscription" ? (
-                                            <Button
-                                                onClick={() => onToggleSubscriptionPayment(row)}
-                                                disabled={isClosed}
-                                                className={
-                                                    row.subscriptionPaid
-                                                        ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                                                        : ""
-                                                }
-                                            >
-                                                {row.subscriptionPaid ? "Pagada" : "Marcar pago"}
-                                            </Button>
-                                        ) : (
-                                            <span className="text-[11px] font-semibold text-[#98a2b3]">-</span>
-                                        )}
-                                    </td>
+                        <table className="w-full min-w-[920px] border-collapse">
+                            <thead>
+                                <tr className="border-b border-[#eef1f5] bg-[#fcfcff] text-left text-[10px] font-bold uppercase tracking-[0.06em] text-[#8a93ad]">
+                                    <th className="px-3 py-2.5">Usuario</th>
+                                    <th className="px-3 py-2.5">Modelo</th>
+                                    <th className="px-3 py-2.5">Asig. / Vis. / Rech.</th>
+                                    <th className="px-3 py-2.5 text-right">Bruta</th>
+                                    <th className="px-3 py-2.5 text-right">Costo</th>
+                                    <th className="px-3 py-2.5 text-right">Real</th>
+                                    <th className="px-3 py-2.5 text-right">Pago</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+
+                            <tbody>
+                                {activeRows.map((row) => (
+                                    <tr key={row.userId} className="border-b border-[#eef1f5] last:border-0 hover:bg-[#f9fafb]">
+                                        <td className="px-3 py-2.5">
+                                            <div className="text-[12px] font-semibold text-[#172033]">{row.name}</div>
+                                            <div className="mt-0.5 text-[11px] font-medium text-[#98a2b3]">{row.email || "Sin correo registrado"}</div>
+                                        </td>
+
+                                        <td className="px-3 py-2.5">
+                                            <ModelBadge mode={row.billingMode} paid={row.subscriptionPaid} />
+                                        </td>
+
+                                        <td className="px-3 py-2.5">
+                                            <span className="inline-flex overflow-hidden rounded-lg border border-[#e4e7ec] text-[11px] font-bold">
+                                                <span className="bg-orange-50 px-2 py-1 text-orange-600">{row.assigned}</span>
+                                                <span className="bg-emerald-50 px-2 py-1 text-emerald-700">{row.visited}</span>
+                                                <span className="bg-red-50 px-2 py-1 text-red-600">{row.rejected}</span>
+                                            </span>
+                                        </td>
+
+                                        <td className="px-3 py-2.5 text-right text-[12px] font-semibold text-[#172033]">{money(row.gross)}</td>
+                                        <td className="px-3 py-2.5 text-right text-[12px] font-semibold text-[#667085]">{money(row.cost)}</td>
+                                        <td className={row.real >= 0 ? "px-3 py-2.5 text-right text-[12px] font-semibold text-emerald-600" : "px-3 py-2.5 text-right text-[12px] font-semibold text-red-500"}>
+                                            {money(row.real)}
+                                        </td>
+                                        <td className="px-3 py-2.5 text-right">
+                                            {row.billingMode === "weekly_subscription" ? (
+                                                <Button
+                                                    onClick={() => onToggleSubscriptionPayment(row)}
+                                                    disabled={isClosed}
+                                                    className={
+                                                        row.subscriptionPaid
+                                                            ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                                                            : ""
+                                                    }
+                                                >
+                                                    {row.subscriptionPaid ? "Pagada" : "Marcar pago"}
+                                                </Button>
+                                            ) : (
+                                                <span className="text-[11px] font-semibold text-[#98a2b3]">-</span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </Card>
