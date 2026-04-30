@@ -159,7 +159,6 @@ export default function AdminLeadsPage() {
             <div className="xl:hidden">
                 <MobileLeadQueue
                     leads={filteredLeads}
-                    users={users}
                     stats={stats}
                     filters={filters}
                     cityOptions={cityOptions}
@@ -234,34 +233,10 @@ export default function AdminLeadsPage() {
                 <LeadQuickAccessCards />
 
                 <section className="mb-4 grid grid-cols-4 gap-4">
-                    <KpiCard
-                        label="Cola activa"
-                        value={stats.total}
-                        caption="Leads Meta sin asignar"
-                        icon="users"
-                        tone="blue"
-                    />
-                    <KpiCard
-                        label="Por revisar"
-                        value={stats.pendingReview}
-                        caption="Listos para validar"
-                        icon="lead"
-                        tone="purple"
-                    />
-                    <KpiCard
-                        label="Incompletos"
-                        value={stats.incomplete}
-                        caption="Falta negocio o maps"
-                        icon="alert"
-                        tone="orange"
-                    />
-                    <KpiCard
-                        label="No aptos"
-                        value={stats.notSuitable}
-                        caption="Descartados operativos"
-                        icon="close"
-                        tone="red"
-                    />
+                    <KpiCard label="Cola activa" value={stats.total} caption="Leads Meta sin asignar" icon="users" tone="blue" />
+                    <KpiCard label="Por revisar" value={stats.pendingReview} caption="Listos para validar" icon="lead" tone="purple" />
+                    <KpiCard label="Incompletos" value={stats.incomplete} caption="Falta negocio o maps" icon="alert" tone="orange" />
+                    <KpiCard label="No aptos" value={stats.notSuitable} caption="Descartados operativos" icon="close" tone="red" />
                 </section>
 
                 <Card className="overflow-hidden">
@@ -278,9 +253,7 @@ export default function AdminLeadsPage() {
 
                             <Input
                                 value={filters.search}
-                                onChange={(e) =>
-                                    patchFilters({ search: e.target.value })
-                                }
+                                onChange={(e) => patchFilters({ search: e.target.value })}
                                 placeholder="Buscar lead, teléfono, negocio, ciudad..."
                                 className="w-[360px]"
                             />
@@ -291,15 +264,11 @@ export default function AdminLeadsPage() {
                                 label="Estado"
                                 value={filters.status}
                                 onChange={(value) =>
-                                    patchFilters({
-                                        status: value as LeadFilters["status"],
-                                    })
+                                    patchFilters({ status: value as LeadFilters["status"] })
                                 }
                             >
                                 <option value="all">Todos los estados</option>
-                                {STATUS_OPTIONS.filter(
-                                    (status) => status.value !== "verified"
-                                ).map((status) => (
+                                {STATUS_OPTIONS.filter((status) => status.value !== "verified").map((status) => (
                                     <option key={status.value} value={status.value}>
                                         {status.label}
                                     </option>
@@ -324,8 +293,7 @@ export default function AdminLeadsPage() {
                                 value={filters.assignment}
                                 onChange={(value) =>
                                     patchFilters({
-                                        assignment:
-                                            value as LeadFilters["assignment"],
+                                        assignment: value as LeadFilters["assignment"],
                                     })
                                 }
                             >
@@ -394,7 +362,6 @@ export default function AdminLeadsPage() {
 
 function MobileLeadQueue({
     leads,
-    users,
     stats,
     filters,
     cityOptions,
@@ -412,7 +379,6 @@ function MobileLeadQueue({
     onOpenQuick,
 }: {
     leads: MetaLeadDoc[];
-    users: UserDoc[];
     stats: ReturnType<typeof useAdminLeadQueue>["stats"];
     filters: LeadFilters;
     cityOptions: { value: string; label: string }[];
@@ -432,17 +398,16 @@ function MobileLeadQueue({
     const [filtersOpen, setFiltersOpen] = useState(false);
 
     return (
-        <div className="-mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] bg-[#0B1220] bg-[linear-gradient(rgba(3,10,20,0.62),rgba(3,10,20,0.62)),url('/brand/trackgo-bg-map.png')] bg-cover bg-center px-4 pb-[156px] pt-3 text-[#F9FAFB]">
-            <div className="mb-3 flex items-center gap-2">
+        <div className="-mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] max-w-[100vw] overflow-x-hidden bg-[#0B1220] bg-[linear-gradient(rgba(3,10,20,0.62),rgba(3,10,20,0.62)),url('/brand/trackgo-bg-map.png')] bg-cover bg-center px-3 pb-[132px] pt-2 text-[#F9FAFB]">
+            <div className="mb-2 flex items-center gap-1.5">
                 <div className="min-w-0 flex-1">
-                    <h1 className="truncate text-[19px] font-black text-white">
+                    <h1 className="truncate text-[17px] font-black text-white">
                         Leads Meta
                     </h1>
-                    <p className="mt-0.5 truncate text-[12px] font-extrabold text-[#9CA3AF]">
+                    <p className="mt-0.5 truncate text-[11px] font-extrabold text-[#9CA3AF]">
                         Cola activa · visibles{" "}
                         <span className="font-black text-white">{leads.length}</span>{" "}
-                        · total{" "}
-                        <span className="font-black text-white">{stats.total}</span>
+                        · total <span className="font-black text-white">{stats.total}</span>
                     </p>
                 </div>
 
@@ -465,7 +430,7 @@ function MobileLeadQueue({
                 />
             </div>
 
-            <div className="mb-2 flex h-[46px] items-center gap-2 rounded-[15px] border border-[#1F2937] bg-[#0F172A] px-3">
+            <div className="mb-2 flex h-[40px] items-center gap-2 rounded-[13px] border border-[#1F2937] bg-[#0F172A] px-3">
                 <AppIcon
                     name="search"
                     tone="slate"
@@ -476,7 +441,7 @@ function MobileLeadQueue({
                     value={filters.search}
                     onChange={(e) => onPatchFilters({ search: e.target.value })}
                     placeholder="Buscar..."
-                    className="min-w-0 flex-1 bg-transparent text-[14px] font-bold text-white outline-none placeholder:text-[#9CA3AF]"
+                    className="min-w-0 flex-1 bg-transparent text-[13px] font-bold text-white outline-none placeholder:text-[#9CA3AF]"
                 />
                 {filters.search ? (
                     <button
@@ -489,7 +454,7 @@ function MobileLeadQueue({
                 ) : null}
             </div>
 
-            <div className="mb-3 rounded-[16px] border border-[#1F2937] bg-[#0F172A]/90 p-3">
+            <div className="mb-2 rounded-[14px] border border-[#1F2937] bg-[#0F172A]/90 p-2.5">
                 <div className="flex items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-2">
                         <AppIcon
@@ -513,7 +478,7 @@ function MobileLeadQueue({
                 </div>
 
                 {filtersOpen ? (
-                    <div className="mt-3 grid gap-2">
+                    <div className="mt-2 grid gap-2">
                         <MobileFilterSelect
                             label="Ciudad"
                             value={filters.city}
@@ -532,8 +497,7 @@ function MobileLeadQueue({
                             value={filters.assignment}
                             onChange={(value) =>
                                 onPatchFilters({
-                                    assignment:
-                                        value as LeadFilters["assignment"],
+                                    assignment: value as LeadFilters["assignment"],
                                 })
                             }
                         >
@@ -549,7 +513,7 @@ function MobileLeadQueue({
                 ) : null}
             </div>
 
-            <div className="grid gap-2">
+            <div className="grid min-w-0 gap-1.5 overflow-x-hidden">
                 {loading ? (
                     <MobileState
                         icon="refresh"
@@ -579,7 +543,7 @@ function MobileLeadQueue({
                         type="button"
                         onClick={onLoadMore}
                         disabled={loadingMore}
-                        className="mt-1 min-h-12 rounded-[16px] border border-white/[0.08] bg-[#0F172A] px-4 text-[13px] font-black text-white disabled:opacity-60"
+                        className="mt-1 min-h-11 rounded-[15px] border border-white/[0.08] bg-[#0F172A] px-4 text-[12px] font-black text-white disabled:opacity-60"
                     >
                         {loadingMore ? "Cargando..." : "Cargar más"}
                     </button>
@@ -617,29 +581,29 @@ function MobileLeadCard({
                 : "border-yellow-300/20 bg-yellow-300/[0.08] text-[#FDE68A]";
 
     return (
-        <article className="rounded-[18px] border border-[#1F2937] bg-[#111827] p-3">
-            <div className="flex items-start justify-between gap-3">
+        <article className="min-w-0 max-w-full overflow-hidden rounded-[15px] border border-[#1F2937] bg-[#111827] p-2.5">
+            <div className="flex items-start justify-between gap-2">
                 <button
                     type="button"
                     onClick={() => onQuickActions(lead)}
                     disabled={saving}
                     className="min-w-0 flex-1 text-left disabled:opacity-60"
                 >
-                    <div className="flex items-center gap-2">
-                        <p className="truncate text-[14px] font-black text-white">
+                    <div className="flex min-w-0 items-center gap-2">
+                        <p className="min-w-0 flex-1 truncate text-[13px] font-black text-white">
                             {lead.phone || displayName(lead)}
                         </p>
                         {hasNewInbound(lead) ? <Badge tone="green">NEW</Badge> : null}
                     </div>
 
                     {lead.name ? (
-                        <p className="mt-1 truncate text-[13px] font-black text-[#D7DCE5]">
+                        <p className="mt-0.5 truncate text-[12px] font-black text-[#D7DCE5]">
                             {lead.name}
                         </p>
                     ) : null}
 
                     {lead.business ? (
-                        <p className="mt-0.5 truncate text-[12px] font-extrabold text-[#9CA3AF]">
+                        <p className="mt-0.5 truncate text-[11px] font-extrabold text-[#9CA3AF]">
                             {lead.business}
                         </p>
                     ) : null}
@@ -648,28 +612,29 @@ function MobileLeadCard({
                 <button
                     type="button"
                     onClick={() => onQuickActions(lead)}
-                    className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[11px] border border-[#1F2937] bg-[#0F172A] text-white"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-[#1F2937] bg-[#0F172A] text-[12px] font-black text-white"
                 >
                     ···
                 </button>
             </div>
 
-            <div className="mt-2 flex flex-wrap items-center gap-2">
+            <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1.5">
                 <span
                     className={[
-                        "inline-flex min-h-6 max-w-full items-center gap-1 rounded-full border px-2.5 text-[11px] font-black",
+                        "inline-flex min-h-5 max-w-full items-center gap-1 rounded-full border px-2 text-[10px] font-black",
                         lead.location.outOfCoverage
                             ? "border-yellow-300/25 bg-yellow-300/10 text-[#FDE68A]"
                             : "border-blue-400/25 bg-blue-500/10 text-[#93C5FD]",
                     ].join(" ")}
                 >
-                    {lead.location.outOfCoverage ? "⚠" : "⌖"} {cityLabel(lead)}
+                    <span>{lead.location.outOfCoverage ? "⚠" : "⌖"}</span>
+                    <span className="truncate">{cityLabel(lead)}</span>
                 </span>
             </div>
 
             <div
                 className={[
-                    "mt-3 flex items-center gap-2 rounded-[12px] border px-3 py-2 text-[12px] font-black",
+                    "mt-2 flex items-center gap-2 rounded-[11px] border px-2.5 py-1.5 text-[11px] font-black",
                     statusBox,
                 ].join(" ")}
             >
@@ -686,12 +651,12 @@ function MobileLeadCard({
             </div>
 
             {lead.location.address ? (
-                <p className="mt-2 line-clamp-2 text-[12px] font-bold text-[#CBD5E1]">
+                <p className="mt-1.5 line-clamp-1 text-[11px] font-bold text-[#CBD5E1]">
                     📍 {lead.location.address}
                 </p>
             ) : null}
 
-            <p className="mt-2 truncate text-[11px] font-extrabold text-[#9CA3AF]">
+            <p className="mt-1.5 truncate text-[10px] font-extrabold text-[#9CA3AF]">
                 Creado: {formatDateShort(lead.createdAt)} · Relevante:{" "}
                 {formatDateShort(
                     lead.lastInboundMessageAt || lead.updatedAt || lead.createdAt
@@ -701,37 +666,37 @@ function MobileLeadCard({
             {lead.lastInboundText ? (
                 <Link
                     href={`/admin/leads/${lead.id}`}
-                    className="mt-3 block rounded-[12px] border border-white/[0.08] bg-white/[0.03] p-3"
+                    className="mt-2 block rounded-[11px] border border-white/[0.08] bg-white/[0.03] p-2.5"
                 >
                     <div className="flex items-center gap-2">
-                        <span className="text-[12px] text-[#9CA3AF]">💬</span>
-                        <span className="min-w-0 flex-1 text-[11px] font-black text-[#9CA3AF]">
+                        <span className="text-[11px] text-[#9CA3AF]">💬</span>
+                        <span className="min-w-0 flex-1 truncate text-[10px] font-black text-[#9CA3AF]">
                             Último mensaje recibido
                         </span>
-                        <span className="rounded-full border border-blue-400/20 bg-blue-500/10 px-2 py-0.5 text-[10px] font-black text-[#93C5FD]">
-                            Ir al chat
+                        <span className="rounded-full border border-blue-400/20 bg-blue-500/10 px-2 py-0.5 text-[9px] font-black text-[#93C5FD]">
+                            Chat
                         </span>
                     </div>
-                    <p className="mt-1 line-clamp-2 text-[12px] font-bold text-white/90">
+                    <p className="mt-1 line-clamp-1 text-[11px] font-bold text-white/90">
                         {lead.lastInboundText}
                     </p>
                 </Link>
             ) : (
                 <Link
                     href={`/admin/leads/${lead.id}`}
-                    className="mt-3 flex min-h-[38px] items-center justify-center gap-2 rounded-[12px] border border-blue-400/25 bg-blue-500/[0.08] px-3 text-[12px] font-black text-[#93C5FD]"
+                    className="mt-2 flex min-h-[34px] items-center justify-center gap-2 rounded-[11px] border border-blue-400/25 bg-blue-500/[0.08] px-3 text-[11px] font-black text-[#93C5FD]"
                 >
                     💬 Abrir chat
                 </Link>
             )}
 
-            <div className="mt-3 flex items-center gap-2">
+            <div className="mt-2 flex items-center gap-2">
                 {lead.location.mapsUrl ? (
                     <a
                         href={lead.location.mapsUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="flex h-9 w-9 items-center justify-center rounded-[12px] border border-[#1F2937] bg-[#0F172A] text-white"
+                        className="flex h-8 w-8 items-center justify-center rounded-[11px] border border-[#1F2937] bg-[#0F172A] text-[14px] text-white"
                     >
                         🗺️
                     </a>
@@ -742,7 +707,7 @@ function MobileLeadCard({
                         href={whatsappUrl(lead.phone)}
                         target="_blank"
                         rel="noreferrer"
-                        className="flex h-9 w-9 items-center justify-center rounded-[12px] border border-[#1F2937] bg-[#0F172A] text-white"
+                        className="flex h-8 w-8 items-center justify-center rounded-[11px] border border-[#1F2937] bg-[#0F172A] text-[13px] text-white"
                     >
                         ☎
                     </a>
@@ -751,14 +716,14 @@ function MobileLeadCard({
                 <button
                     type="button"
                     onClick={() => onEdit(lead)}
-                    className="ml-auto rounded-[12px] border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-[11px] font-black text-white"
+                    className="ml-auto rounded-[11px] border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-[10px] font-black text-white"
                 >
                     Editar
                 </button>
             </div>
 
             {saving ? (
-                <p className="mt-2 text-[12px] font-black text-[#9CA3AF]">
+                <p className="mt-1.5 text-[11px] font-black text-[#9CA3AF]">
                     Procesando…
                 </p>
             ) : null}
@@ -784,13 +749,13 @@ function MobileHeaderButton({
             disabled={disabled}
             title={label}
             aria-label={label}
-            className="flex h-10 w-10 items-center justify-center rounded-[13px] border border-[#1F2937] bg-[#0F172A] text-white disabled:opacity-50"
+            className="flex h-9 w-9 items-center justify-center rounded-[12px] border border-[#1F2937] bg-[#0F172A] text-white disabled:opacity-50"
         >
             <AppIcon
                 name={icon}
                 tone="slate"
                 size="sm"
-                className="h-5 w-5 bg-transparent text-white ring-0"
+                className="h-4 w-4 bg-transparent text-white ring-0"
             />
         </button>
     );
@@ -810,13 +775,13 @@ function MobileHeaderLink({
             href={href}
             title={label}
             aria-label={label}
-            className="flex h-10 w-10 items-center justify-center rounded-[13px] border border-violet-400/25 bg-violet-500/10 text-white"
+            className="flex h-9 w-9 items-center justify-center rounded-[12px] border border-violet-400/25 bg-violet-500/10 text-white"
         >
             <AppIcon
                 name={icon}
                 tone="purple"
                 size="sm"
-                className="h-5 w-5 bg-transparent text-white ring-0"
+                className="h-4 w-4 bg-transparent text-white ring-0"
             />
         </Link>
     );
@@ -835,11 +800,11 @@ function MobileFilterSelect({
 }) {
     return (
         <label className="grid gap-1">
-            <span className="text-[11px] font-black text-[#9CA3AF]">{label}</span>
+            <span className="text-[10px] font-black text-[#9CA3AF]">{label}</span>
             <select
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
-                className="h-10 rounded-[13px] border border-[#1F2937] bg-[#111827] px-3 text-[12px] font-black text-white outline-none"
+                className="h-9 rounded-[12px] border border-[#1F2937] bg-[#111827] px-3 text-[11px] font-black text-white outline-none"
             >
                 {children}
             </select>
@@ -919,8 +884,8 @@ function LeadMobileStatusBar({
         ];
 
     return (
-        <div className="fixed bottom-[72px] left-0 right-0 z-30 border-t border-white/[0.06] bg-[#0B1220]/94 px-3 pb-2 pt-2 backdrop-blur-xl xl:hidden">
-            <div className="grid grid-cols-4 gap-2">
+        <div className="fixed bottom-[72px] left-0 right-0 z-30 max-w-[100vw] overflow-hidden border-t border-white/[0.06] bg-[#0B1220]/94 px-2.5 pb-2 pt-2 backdrop-blur-xl xl:hidden">
+            <div className="grid grid-cols-4 gap-1.5">
                 {items.map((item) => {
                     const active = value === item.value;
 
@@ -930,7 +895,7 @@ function LeadMobileStatusBar({
                             type="button"
                             onClick={() => onChange(item.value)}
                             className={[
-                                "min-h-[62px] rounded-[18px] border px-2 py-2 text-left transition",
+                                "min-h-[54px] rounded-[15px] border px-2 py-1.5 text-left transition",
                                 active
                                     ? "border-white/18 bg-blue-500/16"
                                     : "border-white/[0.08] bg-[#0F172A]",
@@ -941,13 +906,13 @@ function LeadMobileStatusBar({
                                     name={item.icon}
                                     tone="slate"
                                     size="sm"
-                                    className={`h-5 w-5 rounded-lg bg-transparent ring-0 ${item.color}`}
+                                    className={`h-4 w-4 rounded-lg bg-transparent ring-0 ${item.color}`}
                                 />
                                 <span
                                     className={
                                         active
-                                            ? "rounded-full bg-white/15 px-1.5 py-0.5 text-[10px] font-black text-[#F9FAFB]"
-                                            : "rounded-full bg-white/[0.08] px-1.5 py-0.5 text-[10px] font-black text-[#CBD5E1]"
+                                            ? "rounded-full bg-white/15 px-1.5 py-0.5 text-[9px] font-black text-[#F9FAFB]"
+                                            : "rounded-full bg-white/[0.08] px-1.5 py-0.5 text-[9px] font-black text-[#CBD5E1]"
                                     }
                                 >
                                     {item.count}
@@ -956,8 +921,8 @@ function LeadMobileStatusBar({
                             <div
                                 className={
                                     active
-                                        ? "mt-2 truncate text-[10px] font-black text-[#F9FAFB]"
-                                        : "mt-2 truncate text-[10px] font-black text-[#9CA3AF]"
+                                        ? "mt-1.5 truncate text-[9px] font-black text-[#F9FAFB]"
+                                        : "mt-1.5 truncate text-[9px] font-black text-[#9CA3AF]"
                                 }
                             >
                                 {item.label}
@@ -1103,9 +1068,7 @@ function LeadRow({
                     <span className="max-w-[190px] truncate text-[12px] font-semibold text-[#171717]">
                         {cityLabel(lead)}
                     </span>
-                    {lead.location.outOfCoverage ? (
-                        <Badge tone="yellow">Fuera</Badge>
-                    ) : null}
+                    {lead.location.outOfCoverage ? <Badge tone="yellow">Fuera</Badge> : null}
                 </div>
                 <div className="mt-0.5 max-w-[220px] truncate text-[11px] font-medium text-[#9ca3af]">
                     {lead.location.address || "Dirección no informada"}
@@ -1119,9 +1082,7 @@ function LeadRow({
             </td>
 
             <td className="px-3 py-2.5 text-right text-[12px] font-semibold text-[#71717a]">
-                {formatDate(
-                    lead.lastInboundMessageAt || lead.updatedAt || lead.createdAt
-                )}
+                {formatDate(lead.lastInboundMessageAt || lead.updatedAt || lead.createdAt)}
             </td>
         </tr>
     );
@@ -1253,9 +1214,7 @@ function CoverageAssignModal({
 
                 return {
                     ...match,
-                    leads: userHaystack.includes(q)
-                        ? match.leads
-                        : filteredLeads,
+                    leads: userHaystack.includes(q) ? match.leads : filteredLeads,
                 };
             })
             .filter((match) => match.leads.length > 0);
@@ -1356,9 +1315,7 @@ function CoverageAssignModal({
                                                 </div>
                                             </div>
                                             <Button
-                                                onClick={() =>
-                                                    onAssign(lead, match.user.id)
-                                                }
+                                                onClick={() => onAssign(lead, match.user.id)}
                                                 disabled={running || savingId === lead.id}
                                             >
                                                 Asignar
