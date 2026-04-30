@@ -147,9 +147,9 @@ export default function AdminDashboardPage() {
                 subtitle="Pulso operativo de leads, asignaciones y cobertura."
                 icon={<AppIcon name="activity" tone="purple" size="sm" className="bg-transparent text-white ring-0" />}
                 actions={
-                    <>
+                    <div className="grid w-full grid-cols-[1fr_1fr_1fr_44px] gap-2 sm:w-auto sm:flex sm:flex-wrap sm:justify-end">
                         <QuickLink href="/admin/leads" icon="lead">Leads</QuickLink>
-                        <QuickLink href="/admin/leads/assignments" icon="assign">Asignaciones</QuickLink>
+                        <QuickLink href="/admin/leads/assignments" icon="assign">Asign.</QuickLink>
                         <QuickLink href="/admin/settings/users" icon="users">Usuarios</QuickLink>
                         <Button
                             variant="primary"
@@ -161,7 +161,7 @@ export default function AdminDashboardPage() {
                         >
                             <AppIcon name="refresh" tone="purple" size="sm" className="bg-transparent text-white ring-0" />
                         </Button>
-                    </>
+                    </div>
                 }
             />
 
@@ -171,21 +171,21 @@ export default function AdminDashboardPage() {
                 </div>
             ) : null}
 
-            <section className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <section className="mb-3 grid grid-cols-2 gap-2 md:gap-4 xl:mb-4 xl:grid-cols-4">
                 <KpiCard label="Cola activa" value={snapshot.stats.queueTotal} caption="Leads Meta sin asignar" icon="users" tone="blue" />
                 <KpiCard label="Por revisar" value={snapshot.stats.pendingReview} caption="Listos para validar" icon="lead" tone="purple" />
                 <KpiCard label="Asignaciones hoy" value={snapshot.stats.autoAssignmentsToday} caption="Auto-asignacion" icon="assign" tone="green" />
                 <KpiCard label="Usuarios activos" value={snapshot.stats.activeUsers} caption={`${snapshot.stats.autoAssignUsers} con auto ON`} icon="check" tone="orange" />
             </section>
 
-            <section className="mb-4 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+            <section className="mb-3 grid gap-3 xl:mb-4 xl:grid-cols-[1.1fr_0.9fr] xl:gap-4">
                 <Card className="overflow-hidden">
                     <PanelHeader
                         title="Actividad reciente"
                         caption={`${snapshot.recentLeads.length} leads recientes cargados`}
                         href="/admin/leads"
                     />
-                    <div className="divide-y divide-[#f0f1f2]">
+                    <div className="divide-y divide-white/[0.08] xl:divide-[#f0f1f2]">
                         {loading ? (
                             <EmptyRow text="Cargando actividad..." />
                         ) : snapshot.recentLeads.length ? (
@@ -204,7 +204,7 @@ export default function AdminDashboardPage() {
                         caption={`${pendingReviewLeads.length} leads listos para validar`}
                         href="/admin/leads"
                     />
-                    <div className="divide-y divide-[#f0f1f2]">
+                    <div className="divide-y divide-white/[0.08] xl:divide-[#f0f1f2]">
                         {loading ? (
                             <EmptyRow text="Cargando leads por revisar..." />
                         ) : pendingReviewLeads.length ? (
@@ -218,7 +218,7 @@ export default function AdminDashboardPage() {
                 </Card>
             </section>
 
-            <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+            <section className="grid gap-3 xl:grid-cols-[0.9fr_1.1fr] xl:gap-4">
                 <Card className="overflow-hidden">
                     <PanelHeader
                         title="Estado de cola"
@@ -231,7 +231,7 @@ export default function AdminDashboardPage() {
                             />
                         }
                     />
-                    <div className="grid gap-3 p-4 sm:grid-cols-3">
+                    <div className="grid grid-cols-3 gap-2 p-3 sm:gap-3 sm:p-4">
                         <MiniMetric label="Incompletos" value={snapshot.queueRangeStats.incomplete} tone="gray" />
                         <MiniMetric label="No aptos" value={snapshot.queueRangeStats.notSuitable} tone="red" />
                         <MiniMetric label="Fuera cobertura" value={snapshot.queueRangeStats.outOfCoverage} tone="yellow" />
@@ -244,7 +244,7 @@ export default function AdminDashboardPage() {
                         caption={`${snapshot.recentAssignments.length} logs recientes de hoy`}
                         href="/admin/leads/assignments"
                     />
-                    <div className="divide-y divide-[#f0f1f2]">
+                    <div className="divide-y divide-white/[0.08] xl:divide-[#f0f1f2]">
                         {loading ? (
                             <EmptyRow text="Cargando asignaciones..." />
                         ) : snapshot.recentAssignments.length ? (
@@ -273,10 +273,10 @@ function QuickLink({
     return (
         <Link
             href={href}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#e4e7ec] bg-white px-3 py-2 text-[12px] font-semibold text-[#344054] shadow-sm transition hover:border-[#c4b5fd] hover:bg-[#f8f7ff] hover:text-[#4f46e5]"
+            className="inline-flex min-w-0 items-center justify-center gap-1.5 rounded-[13px] border border-white/[0.08] bg-[#0F172A] px-2 py-2 text-[11px] font-black text-[#F9FAFB] shadow-sm transition active:bg-white/[0.06] sm:gap-2 sm:px-3 sm:text-[12px] xl:border-[#e4e7ec] xl:bg-white xl:font-semibold xl:text-[#344054] xl:hover:border-[#c4b5fd] xl:hover:bg-[#f8f7ff] xl:hover:text-[#4f46e5]"
         >
             <AppIcon name={icon} tone={icon === "assign" ? "green" : icon === "users" ? "blue" : "purple"} size="sm" className="h-5 w-5 rounded-lg" />
-            {children}
+            <span className="truncate">{children}</span>
         </Link>
     );
 }
@@ -293,14 +293,14 @@ function PanelHeader({
     controls?: React.ReactNode;
 }) {
     return (
-        <div className="flex flex-col gap-3 border-b border-[#f0f1f2] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-b border-white/[0.08] px-3 py-3 sm:flex-row sm:items-center sm:justify-between xl:border-[#f0f1f2] xl:px-4">
             <div>
-                <h2 className="text-[14px] font-semibold text-[#171717]">{title}</h2>
-                <p className="mt-0.5 text-[12px] font-medium text-[#9ca3af]">{caption}</p>
+                <h2 className="text-[14px] font-black text-[#F9FAFB] xl:font-semibold xl:text-[#171717]">{title}</h2>
+                <p className="mt-0.5 text-[12px] font-extrabold text-[#9CA3AF] xl:font-medium xl:text-[#9ca3af]">{caption}</p>
             </div>
             <div className="flex items-center gap-2">
                 {controls}
-                <Link href={href} className="text-[12px] font-semibold text-[#52525b] hover:underline">
+                <Link href={href} className="text-[12px] font-black text-[#93C5FD] hover:underline xl:font-semibold xl:text-[#52525b]">
                     Ver
                 </Link>
             </div>
@@ -316,7 +316,7 @@ function RangeSelector({
     onChange: (value: AdminDashboardRange) => void;
 }) {
     return (
-        <div className="inline-flex rounded-lg border border-[#e5e7eb] bg-[#f4f5f6] p-1">
+        <div className="inline-flex rounded-xl border border-white/[0.08] bg-[#0F172A] p-1 xl:rounded-lg xl:border-[#e5e7eb] xl:bg-[#f4f5f6]">
             {RANGE_OPTIONS.map((item) => (
                 <button
                     key={item.value}
@@ -324,8 +324,8 @@ function RangeSelector({
                     onClick={() => onChange(item.value)}
                     className={
                         value === item.value
-                            ? "rounded-md bg-white px-2.5 py-1 text-[11px] font-semibold text-[#171717] shadow-sm"
-                            : "rounded-md px-2.5 py-1 text-[11px] font-semibold text-[#71717a] transition hover:bg-white/70 hover:text-[#171717]"
+                            ? "rounded-lg bg-blue-500/16 px-2.5 py-1 text-[11px] font-black text-[#F9FAFB] shadow-sm xl:rounded-md xl:bg-white xl:font-semibold xl:text-[#171717]"
+                            : "rounded-lg px-2.5 py-1 text-[11px] font-black text-[#9CA3AF] transition hover:bg-white/10 hover:text-[#F9FAFB] xl:rounded-md xl:font-semibold xl:text-[#71717a] xl:hover:bg-white/70 xl:hover:text-[#171717]"
                     }
                 >
                     {item.label}
@@ -337,7 +337,7 @@ function RangeSelector({
 
 function EmptyRow({ text }: { text: string }) {
     return (
-        <div className="px-4 py-8 text-center text-[13px] font-medium text-[#71717a]">
+        <div className="px-4 py-8 text-center text-[13px] font-bold text-[#9CA3AF] xl:font-medium xl:text-[#71717a]">
             {text}
         </div>
     );
@@ -345,13 +345,13 @@ function EmptyRow({ text }: { text: string }) {
 
 function RecentLeadRow({ lead, compact = false }: { lead: MetaLeadDoc; compact?: boolean }) {
     return (
-        <Link href={`/admin/leads/${lead.id}`} className={compact ? "block px-4 py-2.5 transition hover:bg-[#fafafa]" : "block px-4 py-3 transition hover:bg-[#fafafa]"}>
+        <Link href={`/admin/leads/${lead.id}`} className={compact ? "block px-3 py-2.5 transition active:bg-[#0F172A] xl:px-4 xl:hover:bg-[#fafafa]" : "block px-3 py-3 transition active:bg-[#0F172A] xl:px-4 xl:hover:bg-[#fafafa]"}>
             <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                    <div className="truncate text-[12px] font-semibold text-[#171717]">
+                    <div className="truncate text-[13px] font-black text-[#F9FAFB] xl:text-[12px] xl:font-semibold xl:text-[#171717]">
                         {displayName(lead)}
                     </div>
-                    <div className="mt-0.5 truncate text-[11px] font-medium text-[#9ca3af]">
+                    <div className="mt-0.5 truncate text-[11px] font-bold text-[#9CA3AF] xl:font-medium xl:text-[#9ca3af]">
                         {lead.business || lead.phone || "Sin negocio"} - {cityLabel(lead)}
                     </div>
                 </div>
@@ -359,7 +359,7 @@ function RecentLeadRow({ lead, compact = false }: { lead: MetaLeadDoc; compact?:
                     <Badge tone={statusTone(lead.verificationStatus)}>
                         {statusLabel(lead.verificationStatus)}
                     </Badge>
-                    <span className="hidden text-[11px] font-semibold text-[#9ca3af] sm:inline">
+                    <span className="hidden text-[11px] font-semibold text-[#9CA3AF] sm:inline xl:text-[#9ca3af]">
                         {formatDate(lead.lastInboundMessageAt || lead.updatedAt || lead.createdAt)}
                     </span>
                 </div>
@@ -374,14 +374,14 @@ function RecentAssignmentRow({ log }: { log: AutoAssignLogDoc }) {
     return (
         <Link
             href={log.leadId ? `/admin/leads/${log.leadId}` : "/admin/leads/assignments"}
-            className="block px-4 py-3 transition hover:bg-[#fafafa]"
+            className="block px-3 py-3 transition active:bg-[#0F172A] xl:px-4 xl:hover:bg-[#fafafa]"
         >
             <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                    <div className="truncate text-[12px] font-semibold text-[#171717]">
+                    <div className="truncate text-[13px] font-black text-[#F9FAFB] xl:text-[12px] xl:font-semibold xl:text-[#171717]">
                         {assignmentLeadTitle(log)}
                     </div>
-                    <div className="mt-0.5 truncate text-[11px] font-medium text-[#9ca3af]">
+                    <div className="mt-0.5 truncate text-[11px] font-bold text-[#9CA3AF] xl:font-medium xl:text-[#9ca3af]">
                         {log.userName || "Usuario"} - {log.userCoverageLabel || "Sin cobertura visible"}
                     </div>
                 </div>
@@ -391,7 +391,7 @@ function RecentAssignmentRow({ log }: { log: AutoAssignLogDoc }) {
                     ) : (
                         <Badge tone="gray">Match</Badge>
                     )}
-                    <span className="text-[11px] font-semibold text-[#9ca3af]">
+                    <span className="text-[11px] font-semibold text-[#9CA3AF] xl:text-[#9ca3af]">
                         {formatDate(log.createdAt)}
                     </span>
                 </div>
@@ -410,11 +410,11 @@ function MiniMetric({
     tone: "gray" | "red" | "yellow";
 }) {
     return (
-        <div className="rounded-xl border border-[#e5e7eb] bg-[#fafafa] p-3">
+        <div className="rounded-[14px] border border-white/[0.08] bg-[#0F172A] p-2.5 xl:rounded-xl xl:border-[#e5e7eb] xl:bg-[#fafafa] xl:p-3">
             <div className="mb-2">
                 <Badge tone={tone}>{label}</Badge>
             </div>
-            <div className="text-[22px] font-semibold text-[#171717]">{value}</div>
+            <div className="text-[20px] font-black text-[#F9FAFB] xl:text-[22px] xl:font-semibold xl:text-[#171717]">{value}</div>
         </div>
     );
 }

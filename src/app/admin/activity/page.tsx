@@ -47,7 +47,7 @@ const rejectReasonLabel: Record<string, string> = {
 
 function selectClassName(extra = "") {
     return [
-        "h-10 rounded-xl border border-[#e5e7eb] bg-white px-3 text-[13px] font-semibold text-[#52525b] outline-none transition focus:border-[#7c3aed] focus:ring-2 focus:ring-violet-100 sm:h-9 sm:rounded-lg sm:text-[12px]",
+        "h-10 rounded-[15px] border border-white/[0.08] bg-[#0F172A] px-3 text-[13px] font-bold text-[#F9FAFB] outline-none transition focus:border-blue-400/35 focus:ring-2 focus:ring-blue-400/10 sm:h-9 sm:rounded-lg sm:text-[12px] xl:border-[#e5e7eb] xl:bg-white xl:font-semibold xl:text-[#52525b] xl:focus:border-[#7c3aed] xl:focus:ring-violet-100",
         extra,
     ].join(" ");
 }
@@ -280,7 +280,7 @@ export default function ActivityPage() {
                 subtitle="Auditoria de visitas, rechazos y pendientes del equipo."
                 icon={<AppIcon name="activity" tone="purple" size="sm" className="bg-transparent text-white ring-0" />}
                 actions={
-                    <>
+                    <div className="grid w-full grid-cols-[1fr_44px] gap-2 sm:w-auto sm:flex sm:flex-wrap sm:justify-end">
                         {activeFiltersCount > 0 ? (
                             <Button onClick={resetFilters}>Limpiar</Button>
                         ) : null}
@@ -294,7 +294,7 @@ export default function ActivityPage() {
                         >
                             <AppIcon name="refresh" tone="purple" size="sm" className="bg-transparent text-white ring-0" />
                         </Button>
-                    </>
+                    </div>
                 }
             />
 
@@ -304,7 +304,7 @@ export default function ActivityPage() {
                 </div>
             ) : null}
 
-            <section className="mb-4 grid grid-cols-2 gap-2 md:gap-4 xl:grid-cols-5">
+            <section className="mb-3 grid grid-cols-2 gap-2 md:gap-4 xl:mb-4 xl:grid-cols-5">
                 <KpiCard label="Actividad" value={stats.total} caption="Eventos + pendientes" icon="activity" tone="purple" />
                 <KpiCard label="Visitados" value={stats.visited} caption="Clientes trabajados" icon="check" tone="green" />
                 <KpiCard label="Rechazados" value={stats.rejected} caption="No concretados" icon="close" tone="red" />
@@ -313,9 +313,9 @@ export default function ActivityPage() {
             </section>
 
             <Card className="overflow-hidden">
-                <div className="flex flex-col gap-3 bg-gradient-to-b from-white to-[#fbfaff] px-3 py-3 sm:px-4 sm:py-4">
+                <div className="flex flex-col gap-3 bg-[#111827] px-3 py-3 xl:bg-gradient-to-b xl:from-white xl:to-[#fbfaff] xl:px-4 xl:py-4">
                     <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                        <div>
+                        <div className="hidden xl:block">
                             <h2 className="text-[14px] font-semibold text-[#171717]">
                                 Auditoria diaria
                             </h2>
@@ -389,8 +389,8 @@ export default function ActivityPage() {
 
                 <ActivityTable rows={filteredRows} loading={loading} onQuickActions={setQuickRow} />
 
-                <div className="flex flex-col gap-3 border-t border-[#f0f1f2] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-[12px] font-medium text-[#9ca3af]">
+                <div className="flex flex-col gap-3 border-t border-white/[0.08] px-3 py-3 sm:flex-row sm:items-center sm:justify-between xl:border-[#f0f1f2] xl:px-4">
+                    <p className="text-[12px] font-extrabold text-[#9CA3AF] xl:font-medium xl:text-[#9ca3af]">
                         Consulta paginada en bloques de {PAGE_SIZE}
                     </p>
                     {hasMore ? (
@@ -419,8 +419,8 @@ function ActivityTable({
     onQuickActions: (row: ActivityEventRow) => void;
 }) {
     return (
-        <div className="border-t border-[#f0f1f2]">
-            <div className="divide-y divide-[#f0f1f2] lg:hidden">
+        <div className="border-t border-white/[0.08] xl:border-[#f0f1f2]">
+            <div className="divide-y divide-white/[0.08] lg:hidden">
                 {loading ? (
                     <ActivityTableState icon="refresh" title="Cargando actividad" body="Estamos consultando eventos y pendientes." />
                 ) : rows.length === 0 ? (
@@ -481,14 +481,14 @@ function ActivityMobileCard({
         <button
             type="button"
             onClick={() => onQuickActions(row)}
-            className="block w-full bg-white px-3 py-3 text-left transition active:bg-[#f8f7ff] sm:px-4"
+            className="block w-full bg-[#111827] px-3 py-3 text-left transition active:bg-[#0F172A] sm:px-4 xl:bg-white xl:active:bg-[#f8f7ff]"
         >
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                    <div className="truncate text-[13px] font-bold text-[#101936]">
+                    <div className="truncate text-[14px] font-black text-[#F9FAFB] xl:text-[13px] xl:font-bold xl:text-[#101936]">
                         {eventTitle(row)}
                     </div>
-                    <div className="mt-0.5 truncate text-[11px] font-semibold text-[#8a93ad]">
+                    <div className="mt-0.5 truncate text-[12px] font-extrabold text-[#9CA3AF] xl:text-[11px] xl:font-semibold xl:text-[#8a93ad]">
                         {eventSubtitle(row)}
                     </div>
                 </div>
@@ -499,21 +499,21 @@ function ActivityMobileCard({
 
             <div className="mt-3 grid grid-cols-[1fr_auto] gap-3">
                 <div className="min-w-0">
-                    <div className="truncate text-[12px] font-bold text-[#344054]">
+                    <div className="truncate text-[12px] font-black text-[#93C5FD] xl:font-bold xl:text-[#344054]">
                         {row.userName}
                     </div>
-                    <div className="mt-0.5 truncate text-[11px] font-medium text-[#98a2b3]">
+                    <div className="mt-0.5 truncate text-[11px] font-bold text-[#CBD5E1] xl:font-medium xl:text-[#98a2b3]">
                         {row.billingMode === "weekly_subscription" ? "Suscripcion" : "Por visita"}
                     </div>
                 </div>
-                <div className="text-right text-[11px] font-bold text-[#66739a]">
+                <div className="text-right text-[11px] font-black text-[#9CA3AF] xl:font-bold xl:text-[#66739a]">
                     {formatDate(row.createdAt)}
                 </div>
             </div>
 
             <div className="mt-2 flex flex-wrap items-center gap-2">
                 {reason ? (
-                    <span className="max-w-full truncate rounded-md bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-600">
+                    <span className="max-w-full truncate rounded-md bg-red-400/10 px-2 py-1 text-[11px] font-bold text-[#FCA5A5] xl:bg-red-50 xl:font-semibold xl:text-red-600">
                         {reason}
                     </span>
                 ) : null}
@@ -598,8 +598,8 @@ function ActivityTableState({
     return (
         <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
             <AppIcon name={icon} tone={icon === "refresh" ? "purple" : "slate"} size="lg" />
-            <div className="mt-3 text-[13px] font-bold text-[#101936]">{title}</div>
-            <div className="mt-1 text-[12px] font-medium text-[#66739a]">{body}</div>
+            <div className="mt-3 text-[13px] font-black text-[#F9FAFB] xl:font-bold xl:text-[#101936]">{title}</div>
+            <div className="mt-1 text-[12px] font-bold text-[#9CA3AF] xl:font-medium xl:text-[#66739a]">{body}</div>
         </div>
     );
 }
