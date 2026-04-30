@@ -448,8 +448,8 @@ export default function AccountingPage() {
                 subtitle="Control semanal de ingresos, inversion, suscripciones y resultado real."
                 icon={<AppIcon name="activity" tone="green" size="sm" className="bg-transparent text-white ring-0" />}
                 actions={
-                    <div className="flex flex-col items-end gap-2">
-                        <div className="flex flex-wrap items-center justify-end gap-2">
+                    <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
+                        <div className="grid grid-cols-5 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-end">
                             {activeTab === "investment" ? (
                                 <IconButton
                                     icon="activity"
@@ -501,18 +501,18 @@ export default function AccountingPage() {
                 }
             />
 
-            <section className="mb-4 flex flex-col gap-3 rounded-lg border border-[#e4e7ec] bg-white px-3 py-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex flex-wrap items-center gap-2">
+            <section className="mb-4 flex flex-col gap-3 rounded-2xl border border-[#e4e7ec] bg-white px-3 py-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+                <div className="grid grid-cols-[40px_1fr_40px] items-center gap-2 sm:flex sm:flex-wrap">
                     <IconButton
                         icon="arrowLeft"
                         label="Semana anterior"
                         onClick={() => setWeekOffset((v) => v - 1)}
                     />
-                    <div className="flex h-9 items-center gap-2 rounded-md border border-[#e4e7ec] bg-[#f9fafb] px-3 text-[12px] font-semibold text-[#344054]">
+                    <div className="flex h-10 min-w-0 items-center justify-center gap-2 rounded-xl border border-[#e4e7ec] bg-[#f9fafb] px-2 text-[11px] font-bold text-[#344054] sm:h-9 sm:justify-start sm:rounded-md sm:px-3 sm:text-[12px]">
                         <Icon name="calendar" />
-                        <span>{week.startKey}</span>
+                        <span className="truncate">{week.startKey}</span>
                         <span className="text-[#98a2b3]">/</span>
-                        <span>{week.endKey}</span>
+                        <span className="truncate">{week.endKey}</span>
                     </div>
                     <IconButton
                         icon="arrowRight"
@@ -520,13 +520,13 @@ export default function AccountingPage() {
                         onClick={() => setWeekOffset((v) => v + 1)}
                     />
                     {weekOffset !== 0 ? (
-                        <Button onClick={() => setWeekOffset(0)}>
+                        <Button onClick={() => setWeekOffset(0)} className="col-span-3 sm:col-span-1">
                             Actual
                         </Button>
                     ) : null}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
                     <CounterPill icon="users" label={`${users.length} usuarios`} />
                     <CounterPill icon="activity" label={`${events.length} eventos`} />
                 </div>
@@ -1773,11 +1773,11 @@ function DashboardContent({
                         title="Resultado semanal"
                         subtitle={`Analisis por ${chartMeta.label.toLowerCase()}.`}
                         action={
-                            <div className="flex flex-wrap items-center justify-end gap-2">
+                            <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:justify-end">
                                 <select
                                     value={chartMetric}
                                     onChange={(event) => setChartMetric(event.target.value as AccountingMetric)}
-                                    className="h-9 rounded-lg border border-[#e4e7ec] bg-white px-3 text-[12px] font-semibold text-[#344054] outline-none"
+                                    className="h-10 min-w-0 rounded-xl border border-[#e4e7ec] bg-white px-2 text-[12px] font-semibold text-[#344054] outline-none sm:h-9 sm:rounded-lg sm:px-3"
                                 >
                                     <option value="real">Ganancia real</option>
                                     <option value="gross">Ganancia bruta</option>
@@ -1789,7 +1789,7 @@ function DashboardContent({
                                 <select
                                     value={chartMode}
                                     onChange={(event) => setChartMode(event.target.value as ChartMode)}
-                                    className="h-9 rounded-lg border border-[#e4e7ec] bg-white px-3 text-[12px] font-semibold text-[#344054] outline-none"
+                                    className="h-10 min-w-0 rounded-xl border border-[#e4e7ec] bg-white px-2 text-[12px] font-semibold text-[#344054] outline-none sm:h-9 sm:rounded-lg sm:px-3"
                                 >
                                     <option value="trend">Linea semanal</option>
                                     <option value="bars">Barras</option>
@@ -1800,8 +1800,8 @@ function DashboardContent({
                         }
                     />
 
-                    <div className="border-t border-[#eef1f5] p-5">
-                        <div className="grid gap-4 sm:grid-cols-3">
+                    <div className="border-t border-[#eef1f5] p-3 sm:p-5">
+                        <div className="grid grid-cols-3 gap-2 sm:gap-4">
                             <Metric label="Ganancia bruta" value={money(summary.gross)} delta="+ semana" tone="green" />
                             <Metric
                                 label="Inversion"
@@ -1835,7 +1835,7 @@ function DashboardContent({
                             <select
                                 value={rankingMetric}
                                 onChange={(event) => setRankingMetric(event.target.value as AccountingMetric)}
-                                className="h-9 rounded-lg border border-[#e4e7ec] bg-white px-3 text-[12px] font-semibold text-[#344054] outline-none"
+                                className="h-10 w-full rounded-xl border border-[#e4e7ec] bg-white px-3 text-[12px] font-semibold text-[#344054] outline-none sm:h-9 sm:w-auto sm:rounded-lg"
                             >
                                 <option value="real">Ganancia real</option>
                                 <option value="assigned">Asignados</option>
@@ -1848,14 +1848,14 @@ function DashboardContent({
                     />
 
                     <div className="border-t border-[#eef1f5]">
-                        <div className="grid grid-cols-[42px_1fr_90px] px-4 py-3 text-[11px] font-medium text-[#98a2b3]">
+                        <div className="grid grid-cols-[32px_1fr_82px] px-3 py-3 text-[10px] font-bold uppercase tracking-[0.06em] text-[#98a2b3] sm:grid-cols-[42px_1fr_90px] sm:px-4 sm:text-[11px] sm:font-medium sm:normal-case sm:tracking-normal">
                             <span>#</span>
                             <span>Usuario</span>
                             <span className="text-right">{rankingMeta.shortLabel}</span>
                         </div>
 
                         {rankedRows.slice(0, 7).map((row, index) => (
-                            <div key={row.userId} className="grid grid-cols-[42px_1fr_90px] items-center border-t border-[#eef1f5] px-4 py-3">
+                            <div key={row.userId} className="grid grid-cols-[32px_1fr_82px] items-center border-t border-[#eef1f5] px-3 py-3 sm:grid-cols-[42px_1fr_90px] sm:px-4">
                                 <span className="text-[12px] font-medium text-[#98a2b3]">{index + 1}.</span>
 
                                 <div className="min-w-0">
@@ -1874,7 +1874,7 @@ function DashboardContent({
                 </Card>
             </section>
 
-            <section className="grid gap-2 md:grid-cols-3 xl:grid-cols-5">
+            <section className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
                 <AccountingMiniKpi label="Asignados" value={String(summary.assigned)} caption="Asignados semana" icon="assign" tone="orange" />
                 <AccountingMiniKpi label="Visitados" value={String(summary.visited)} caption="Clientes visitados" icon="check" tone="green" />
                 <AccountingMiniKpi label="Rechazados" value={String(summary.rejected)} caption="Clientes rechazados" icon="close" tone="red" />
@@ -2004,19 +2004,19 @@ function AccountingMiniKpi({
     tone: Parameters<typeof AppIcon>[0]["tone"];
 }) {
     return (
-        <div className="rounded-xl border border-[#e8e7fb] bg-white px-3 py-2.5 shadow-[0_10px_28px_rgba(16,25,54,0.045)]">
+        <div className="rounded-2xl border border-[#e8e7fb] bg-white px-3 py-2.5 shadow-[0_10px_28px_rgba(16,25,54,0.045)]">
             <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                    <div className="truncate text-[10px] font-black uppercase tracking-[0.08em] text-[#8a93ad]">
+                    <div className="truncate text-[9px] font-black uppercase tracking-[0.08em] text-[#8a93ad] sm:text-[10px]">
                         {label}
                     </div>
-                    <div className="mt-1 truncate text-[20px] font-black leading-none tracking-[-0.04em] text-[#101936]">
+                    <div className="mt-1 truncate text-[18px] font-black leading-none tracking-[-0.04em] text-[#101936] sm:text-[20px]">
                         {value}
                     </div>
                 </div>
-                <AppIcon name={icon} tone={tone} size="sm" className="h-7 w-7 rounded-lg" />
+                <AppIcon name={icon} tone={tone} size="sm" className="h-7 w-7 rounded-xl" />
             </div>
-            <div className="mt-1 truncate text-[11px] font-semibold text-[#66739a]">
+            <div className="mt-1 truncate text-[10px] font-semibold text-[#66739a] sm:text-[11px]">
                 {caption}
             </div>
         </div>
@@ -2051,7 +2051,7 @@ function AccountingChart({
 
     if (!rows.length) {
         return (
-            <div className="mt-6 flex h-[210px] items-center justify-center rounded-2xl border border-dashed border-[#d8ddea] bg-[#fbfaff] text-[12px] font-semibold text-[#98a2b3]">
+            <div className="mt-4 flex h-[150px] items-center justify-center rounded-2xl border border-dashed border-[#d8ddea] bg-[#fbfaff] text-[12px] font-semibold text-[#98a2b3] sm:mt-6 sm:h-[210px]">
                 Sin datos para graficar esta semana.
             </div>
         );
@@ -2078,13 +2078,13 @@ function AccountingChart({
         }, null);
 
         return (
-            <div className="mt-6 rounded-2xl border border-[#eef1f5] bg-gradient-to-b from-white to-[#fbfaff] p-4">
+            <div className="mt-4 rounded-2xl border border-[#eef1f5] bg-gradient-to-b from-white to-[#fbfaff] p-3 sm:mt-6 sm:p-4">
                 <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
                     <div>
-                        <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#8a93ad]">
+                        <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#8a93ad] sm:text-[11px]">
                             Tendencia semanal
                         </div>
-                        <div className="mt-1 text-[22px] font-black tracking-[-0.04em] text-[#101936]">
+                        <div className="mt-1 text-[18px] font-black tracking-[-0.04em] text-[#101936] sm:text-[22px]">
                             {meta.format(series.reduce((sum, point) => sum + point.value, 0))}
                         </div>
                     </div>
@@ -2098,7 +2098,7 @@ function AccountingChart({
                     </div>
                 </div>
 
-                <svg viewBox={`0 0 ${width} ${height}`} className="h-[240px] w-full overflow-visible">
+                <svg viewBox={`0 0 ${width} ${height}`} className="h-[170px] w-full overflow-visible sm:h-[240px]">
                     <defs>
                         <linearGradient id={`accounting-area-${metric}`} x1="0" y1="0" x2="0" y2="1">
                             <stop offset="0%" stopColor="#7c3aed" stopOpacity="0.24" />
@@ -2150,7 +2150,7 @@ function AccountingChart({
 
     if (mode === "share") {
         return (
-            <div className="mt-6 space-y-3">
+            <div className="mt-4 space-y-3 sm:mt-6">
                 {rows.map((row, index) => {
                     const value = accountingMetricValue(row, metric);
                     const pct = total > 0 ? Math.max(4, Math.round((Math.abs(value) / total) * 100)) : 0;
@@ -2180,7 +2180,7 @@ function AccountingChart({
 
     if (mode === "mix") {
         return (
-            <div className="mt-6 grid gap-3 md:grid-cols-2">
+            <div className="mt-4 grid gap-3 md:grid-cols-2 sm:mt-6">
                 {rows.map((row, index) => {
                     const value = accountingMetricValue(row, metric);
                     const visitPct = row.assigned > 0 ? Math.round((row.visited / row.assigned) * 100) : 0;
@@ -2226,8 +2226,8 @@ function AccountingChart({
 
     return (
         <>
-            <div className="mt-8 h-[230px]">
-                <div className="flex h-full items-stretch gap-3 border-b border-l border-[#eef0f2] px-3 pb-0">
+            <div className="mt-5 h-[170px] sm:mt-8 sm:h-[230px]">
+                <div className="flex h-full items-stretch gap-2 border-b border-l border-[#eef0f2] px-2 pb-0 sm:gap-3 sm:px-3">
                     {rows.map((row, index) => {
                         const value = accountingMetricValue(row, metric);
                         const pct = Math.max(8, Math.min(100, (Math.abs(value) / maxValue) * 100));
@@ -2241,7 +2241,7 @@ function AccountingChart({
                                         title={`${row.name}: ${meta.format(value)}`}
                                     />
                                 </div>
-                                <span className="max-w-[70px] truncate text-[10px] font-medium text-[#98a2b3]">
+                                <span className="max-w-[44px] truncate text-[9px] font-medium text-[#98a2b3] sm:max-w-[70px] sm:text-[10px]">
                                     {row.name}
                                 </span>
                             </div>
@@ -2270,13 +2270,13 @@ function Metric({
     tone: "green" | "red" | "neutral";
 }) {
     return (
-        <div>
-            <div className="flex items-center gap-1 text-[12px] font-medium text-[#667085]">
+        <div className="min-w-0 rounded-2xl border border-[#eef1f5] bg-white/70 p-2 sm:border-0 sm:bg-transparent sm:p-0">
+            <div className="truncate text-[10px] font-black uppercase tracking-[0.06em] text-[#667085] sm:flex sm:items-center sm:gap-1 sm:text-[12px] sm:font-medium sm:normal-case sm:tracking-normal">
                 {label}
             </div>
 
-            <div className="mt-2 flex items-end gap-2">
-                <span className="text-[28px] font-semibold leading-none tracking-[-0.04em] text-[#172033]">
+            <div className="mt-1 flex items-end gap-2 sm:mt-2">
+                <span className="truncate text-[clamp(14px,4.8vw,20px)] font-black leading-none tracking-[-0.04em] text-[#172033] sm:text-[28px] sm:font-semibold">
                     {value}
                 </span>
             </div>
@@ -2284,10 +2284,10 @@ function Metric({
             <div
                 className={
                     tone === "green"
-                        ? "mt-1 text-[12px] font-semibold text-emerald-600"
+                        ? "mt-1 truncate text-[10px] font-semibold text-emerald-600 sm:text-[12px]"
                         : tone === "red"
-                            ? "mt-1 text-[12px] font-semibold text-red-500"
-                            : "mt-1 text-[12px] font-semibold text-[#98a2b3]"
+                            ? "mt-1 truncate text-[10px] font-semibold text-red-500 sm:text-[12px]"
+                            : "mt-1 truncate text-[10px] font-semibold text-[#98a2b3] sm:text-[12px]"
                 }
             >
                 {delta}
@@ -2306,27 +2306,39 @@ function AccountingUserMobileCard({
     onToggleSubscriptionPayment: (row: AccountingSummary["rows"][number]) => void;
 }) {
     return (
-        <div className="px-4 py-3">
+        <div className="px-3 py-3 sm:px-4">
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                     <div className="truncate text-[13px] font-bold text-[#101936]">{row.name}</div>
-                    <div className="mt-1 truncate text-[11px] font-medium text-[#8a93ad]">
+                    <div className="mt-0.5 truncate text-[11px] font-medium text-[#8a93ad]">
                         {row.email || "Sin correo registrado"}
                     </div>
                 </div>
-                <div className={row.real >= 0 ? "text-right text-[13px] font-bold text-emerald-600" : "text-right text-[13px] font-bold text-red-500"}>
+                <div className={row.real >= 0 ? "text-right text-[14px] font-black text-emerald-600" : "text-right text-[14px] font-black text-red-500"}>
                     {money(row.real)}
                 </div>
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-2">
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
                 <ModelBadge mode={row.billingMode} paid={row.subscriptionPaid} />
-                <Badge tone="yellow">{row.assigned} asignados</Badge>
-                <Badge tone="green">{row.visited} visitas</Badge>
-                <Badge tone="red">{row.rejected} rechazos</Badge>
             </div>
 
-            <div className="mt-3 grid grid-cols-3 gap-2 rounded-2xl border border-[#eef1f5] bg-[#fbfaff] p-3 text-[11px] font-semibold">
+            <div className="mt-3 grid grid-cols-3 overflow-hidden rounded-2xl border border-[#eef1f5] text-center text-[11px] font-black">
+                <div className="bg-orange-50 px-2 py-2 text-orange-600">
+                    <div>{row.assigned}</div>
+                    <div className="mt-0.5 text-[9px] uppercase tracking-[0.05em]">Asig.</div>
+                </div>
+                <div className="bg-emerald-50 px-2 py-2 text-emerald-700">
+                    <div>{row.visited}</div>
+                    <div className="mt-0.5 text-[9px] uppercase tracking-[0.05em]">Vis.</div>
+                </div>
+                <div className="bg-red-50 px-2 py-2 text-red-600">
+                    <div>{row.rejected}</div>
+                    <div className="mt-0.5 text-[9px] uppercase tracking-[0.05em]">Rech.</div>
+                </div>
+            </div>
+
+            <div className="mt-2 grid grid-cols-3 gap-2 rounded-2xl border border-[#eef1f5] bg-[#fbfaff] p-2 text-[10px] font-semibold sm:p-3 sm:text-[11px]">
                 <div>
                     <div className="text-[#98a2b3]">Bruta</div>
                     <div className="mt-1 text-[#172033]">{money(row.gross)}</div>
