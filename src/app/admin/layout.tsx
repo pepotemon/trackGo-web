@@ -27,6 +27,13 @@ const NAV_SETTINGS: { href: string; label: string; icon: NavIconName }[] = [
     { href: "/admin/settings/users", label: "Usuarios", icon: "users" },
 ];
 
+const MOBILE_NAV: { href: string; label: string; icon: NavIconName }[] = [
+    { href: "/admin/leads", label: "Leads", icon: "inbox" },
+    { href: "/admin/activity", label: "Actividad", icon: "activity" },
+    { href: "/admin/accounting", label: "Conta", icon: "wallet" },
+    { href: "/admin/settings/users", label: "Usuarios", icon: "users" },
+];
+
 export default function AdminLayout({ children }: { children: ReactNode }) {
     const router = useRouter();
     const pathname = usePathname();
@@ -80,11 +87,11 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     }, []);
 
     if (loading) {
-        return <AdminAccessState title="Validando acceso" body="Estamos revisando tu sesion administrativa." />;
+        return <AdminAccessState title="Validando acceso" body="Estamos revisando tu sesión administrativa." />;
     }
 
     if (!firebaseUser) {
-        return <AdminAccessState title="Redirigiendo" body="Necesitas iniciar sesion para entrar al panel." />;
+        return <AdminAccessState title="Redirigiendo" body="Necesitas iniciar sesión para entrar al panel." />;
     }
 
     if (!isAdmin) {
@@ -92,14 +99,14 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     }
 
     return (
-        <div className="min-h-screen bg-[#0B1220] text-[#F9FAFB] xl:bg-[linear-gradient(180deg,#fbfaff_0%,#f7f8ff_48%,#f3f0ff_100%)] xl:text-[#101936]">
-            <aside className="fixed left-0 top-0 hidden h-screen w-[244px] border-r border-[#c8c0ff] bg-[linear-gradient(180deg,#eee8ff_0%,#ddd5ff_46%,#f2f0ff_100%)] px-3 py-4 text-[#172033] shadow-[18px_0_55px_rgba(82,63,169,0.15)] xl:block">
-                <div className="mb-5 flex justify-center border-b border-[#c8c0ff] px-2 pb-4">
+        <div className="min-h-screen bg-[#fbfaff] text-[#172033]">
+            <aside className="fixed left-0 top-0 hidden h-screen w-[244px] border-r border-[#d9d2ff] bg-[linear-gradient(180deg,#f4f0ff_0%,#e9e4ff_48%,#fbfaff_100%)] px-3 py-4 text-[#172033] shadow-[18px_0_55px_rgba(82,63,169,0.13)] xl:block">
+                <div className="mb-5 flex justify-center border-b border-[#d9d2ff] px-2 pb-4">
                     <TrackGoLogo size="lg" />
                 </div>
 
                 <form className="mb-4" onSubmit={handleSidebarSearch}>
-                    <label className="flex h-9 items-center gap-2 rounded-xl border border-[#c8c0ff] bg-white/62 px-2 text-[#5b4ea6] shadow-sm shadow-violet-200/70">
+                    <label className="flex h-9 items-center gap-2 rounded-xl border border-[#d9d2ff] bg-white/80 px-2 text-[#5b4ea6] shadow-sm shadow-violet-200/60">
                         <NavIcon name="search" />
                         <input
                             value={sidebarSearch}
@@ -110,8 +117,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                         <button
                             type="submit"
                             className="rounded border border-[#e4e7ec] bg-white px-1.5 py-0.5 text-[10px] font-bold text-[#6d5fb4]"
-                            aria-label="Buscar en leads"
-                            title="Buscar en leads"
                         >
                             Ir
                         </button>
@@ -119,19 +124,19 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                 </form>
 
                 <nav className="space-y-5">
-                    <NavSection title="Navegacion" items={NAV_MAIN} />
+                    <NavSection title="Navegación" items={NAV_MAIN} />
                     <NavSection title="Configurar" items={NAV_SETTINGS} />
                 </nav>
 
                 <div className="absolute bottom-4 left-3 right-3 space-y-1">
-                    <SidebarFooterAction label="Cerrar sesion" icon="logOut" onClick={handleLogout} />
+                    <SidebarFooterAction label="Cerrar sesión" icon="logOut" onClick={handleLogout} />
 
-                    <div className="mt-3 flex items-center gap-2 rounded-xl border border-[#c8c0ff] bg-white/62 px-2 py-2 shadow-sm shadow-violet-200/70">
+                    <div className="mt-3 flex items-center gap-2 rounded-xl border border-[#d9d2ff] bg-white/80 px-2 py-2 shadow-sm shadow-violet-200/60">
                         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-[#7c3aed] to-[#4f46e5] text-[12px] font-bold text-white">
                             C
                         </div>
-                        <div>
-                            <span className="block text-[12px] font-semibold text-[#101936]">
+                        <div className="min-w-0">
+                            <span className="block truncate text-[12px] font-semibold text-[#101936]">
                                 {adminLabel}
                             </span>
                             <span className="block text-[10px] font-medium text-[#7c70ba]">
@@ -155,11 +160,11 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                     pathname={pathname}
                 />
 
-                <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(37,99,235,0.22),_transparent_32%),linear-gradient(180deg,#0B1220_0%,#0B1220_55%,#111827_100%)] px-3 pb-24 pt-4 sm:px-5 lg:px-7 xl:bg-none xl:pb-6 xl:pt-5">
+                <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.12),transparent_34%),linear-gradient(180deg,#fbfaff_0%,#f6f3ff_52%,#f8fafc_100%)] px-3 pb-24 pt-4 text-[#172033] sm:px-5 lg:px-7 xl:bg-none xl:pb-6 xl:pt-5">
                     {children}
                 </main>
 
-                <MobileBottomNav pathname={pathname} onOpenMore={() => setMobileMenuOpen(true)} />
+                <MobileBottomNav pathname={pathname} />
             </div>
         </div>
     );
@@ -208,12 +213,27 @@ function NavItem({
     label: string;
     icon: NavIconName;
 }) {
+    const pathname = usePathname();
+    const active = pathname === href || (href !== "/admin" && pathname.startsWith(href));
+
     return (
         <Link
             href={href}
-            className="group flex h-9 items-center gap-2 rounded-xl px-2 text-[12px] font-semibold text-[#364260] transition hover:bg-white/85 hover:text-[#4f46e5] hover:shadow-sm"
+            className={[
+                "group flex h-9 items-center gap-2 rounded-xl px-2 text-[12px] font-semibold transition",
+                active
+                    ? "bg-white text-[#4f46e5] shadow-sm"
+                    : "text-[#364260] hover:bg-white/85 hover:text-[#4f46e5] hover:shadow-sm",
+            ].join(" ")}
         >
-            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/65 text-[#5b4ea6] ring-1 ring-[#c8c0ff] transition group-hover:bg-[#f3f0ff] group-hover:text-[#5b21ff]">
+            <span
+                className={[
+                    "flex h-6 w-6 items-center justify-center rounded-lg ring-1 transition",
+                    active
+                        ? "bg-[#f3f0ff] text-[#5b21ff] ring-[#c8c0ff]"
+                        : "bg-white/65 text-[#5b4ea6] ring-[#d9d2ff] group-hover:bg-[#f3f0ff] group-hover:text-[#5b21ff]",
+                ].join(" ")}
+            >
                 <NavIcon name={icon} />
             </span>
             <span>{label}</span>
@@ -271,54 +291,54 @@ function MobileDrawer({
         <div className="fixed inset-0 z-50 xl:hidden">
             <button
                 type="button"
-                className="absolute inset-0 bg-[#101936]/35 backdrop-blur-sm"
-                aria-label="Cerrar menu"
+                className="absolute inset-0 bg-[#101936]/22 backdrop-blur-sm"
+                aria-label="Cerrar menú"
                 onClick={onClose}
             />
 
-            <aside className="absolute bottom-0 right-0 top-0 flex w-[min(86vw,340px)] flex-col border-l border-white/[0.08] bg-[linear-gradient(180deg,#0B1220_0%,#111827_48%,#0F172A_100%)] p-4 text-[#F9FAFB] shadow-[-24px_0_70px_rgba(0,0,0,0.36)]">
+            <aside className="absolute bottom-0 right-0 top-0 flex w-[min(86vw,340px)] flex-col border-l border-[#e4e7ec] bg-[linear-gradient(180deg,#ffffff_0%,#fbfaff_52%,#f3f0ff_100%)] p-4 text-[#172033] shadow-[-24px_0_70px_rgba(82,63,169,0.20)]">
                 <div className="mb-4 flex items-center justify-between">
                     <TrackGoLogo size="md" />
                     <button
                         type="button"
                         onClick={onClose}
-                        className="flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.04] text-[20px] leading-none text-[#F9FAFB] shadow-sm"
-                        aria-label="Cerrar menu"
+                        className="flex h-9 w-9 items-center justify-center rounded-full border border-[#e4e7ec] bg-white text-[20px] leading-none text-[#172033] shadow-sm"
+                        aria-label="Cerrar menú"
                     >
-                        x
+                        ×
                     </button>
                 </div>
 
                 <form className="mb-5" onSubmit={onSearch}>
-                    <label className="flex h-11 items-center gap-2 rounded-2xl border border-white/[0.08] bg-[#0F172A] px-3 text-[#9CA3AF] shadow-sm">
+                    <label className="flex h-11 items-center gap-2 rounded-2xl border border-[#e4e7ec] bg-white px-3 text-[#7c3aed] shadow-sm">
                         <NavIcon name="search" />
                         <input
                             value={search}
                             onChange={(event) => setSearch(event.target.value)}
-                            placeholder="Buscar lead, telefono..."
-                            className="min-w-0 flex-1 bg-transparent text-[13px] font-semibold text-[#F9FAFB] outline-none placeholder:text-[#9CA3AF]"
+                            placeholder="Buscar lead, teléfono..."
+                            className="min-w-0 flex-1 bg-transparent text-[13px] font-semibold text-[#172033] outline-none placeholder:text-[#98a2b3]"
                         />
                     </label>
                 </form>
 
                 <nav className="space-y-5">
-                    <MobileNavSection title="Navegacion" items={NAV_MAIN} pathname={pathname} onClose={onClose} />
+                    <MobileNavSection title="Navegación" items={NAV_MAIN} pathname={pathname} onClose={onClose} />
                     <MobileNavSection title="Configurar" items={NAV_SETTINGS} pathname={pathname} onClose={onClose} />
                 </nav>
 
                 <div className="mt-auto space-y-3">
-                    <div className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-3 shadow-sm">
-                        <span className="block truncate text-[13px] font-bold text-[#F9FAFB]">{adminLabel}</span>
-                        <span className="mt-0.5 block text-[11px] font-semibold text-[#9CA3AF]">{liveDate}</span>
+                    <div className="rounded-2xl border border-[#e4e7ec] bg-white p-3 shadow-sm">
+                        <span className="block truncate text-[13px] font-bold text-[#172033]">{adminLabel}</span>
+                        <span className="mt-0.5 block text-[11px] font-semibold text-[#667085]">{liveDate}</span>
                     </div>
 
                     <button
                         type="button"
                         onClick={onLogout}
-                        className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-red-400/20 bg-red-400/10 text-[13px] font-bold text-[#FCA5A5] shadow-sm"
+                        className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-red-200 bg-red-50 text-[13px] font-bold text-red-600 shadow-sm"
                     >
                         <NavIcon name="logOut" />
-                        Cerrar sesion
+                        Cerrar sesión
                     </button>
                 </div>
             </aside>
@@ -345,6 +365,7 @@ function MobileNavSection({
             <div className="grid gap-2">
                 {items.map((item) => {
                     const active = pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href));
+
                     return (
                         <Link
                             key={item.href}
@@ -353,11 +374,18 @@ function MobileNavSection({
                             className={[
                                 "flex h-12 items-center gap-3 rounded-2xl border px-3 text-[13px] font-bold shadow-sm transition",
                                 active
-                                    ? "border-white/18 bg-blue-500/16 text-[#F9FAFB]"
-                                    : "border-white/[0.08] bg-white/[0.04] text-[#CBD5E1]",
+                                    ? "border-[#d9d2ff] bg-[#f3f0ff] text-[#4f46e5]"
+                                    : "border-[#e4e7ec] bg-white text-[#344054]",
                             ].join(" ")}
                         >
-                            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#0F172A] text-[#93C5FD] ring-1 ring-white/[0.08]">
+                            <span
+                                className={[
+                                    "flex h-8 w-8 items-center justify-center rounded-xl ring-1",
+                                    active
+                                        ? "bg-white text-[#7c3aed] ring-[#d9d2ff]"
+                                        : "bg-[#f9fafb] text-[#667085] ring-[#eef1f5]",
+                                ].join(" ")}
+                            >
                                 <NavIcon name={item.icon} />
                             </span>
                             {item.label}
@@ -369,44 +397,31 @@ function MobileNavSection({
     );
 }
 
-function MobileBottomNav({
-    pathname,
-    onOpenMore,
-}: {
-    pathname: string;
-    onOpenMore: () => void;
-}) {
+function MobileBottomNav({ pathname }: { pathname: string }) {
     return (
-        <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/[0.06] bg-[#0B1220]/92 px-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-2 shadow-[0_-18px_45px_rgba(0,0,0,0.24)] backdrop-blur-xl xl:hidden">
-            <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
-                {NAV_MAIN.map((item) => {
-                    const active = pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href));
+        <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#e8e7fb] bg-white/92 px-3 pb-[max(env(safe-area-inset-bottom),0.55rem)] pt-2 shadow-[0_-18px_45px_rgba(82,63,169,0.13)] backdrop-blur-xl xl:hidden">
+            <div className="mx-auto grid max-w-md grid-cols-4 gap-1">
+                {MOBILE_NAV.map((item) => {
+                    const active = pathname === item.href || pathname.startsWith(item.href);
+
                     return (
                         <Link
                             key={item.href}
                             href={item.href}
                             className={[
-                                "flex flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[10px] font-bold transition",
-                                active ? "bg-white/[0.06] text-[#F9FAFB]" : "text-[#9CA3AF]",
+                                "flex flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[10px] font-black transition",
+                                active
+                                    ? "bg-[#f3f0ff] text-[#4f46e5]"
+                                    : "text-[#98a2b3] active:bg-[#f6f3ff]",
                             ].join(" ")}
                         >
-                            <span className={active ? "text-[#93C5FD]" : "text-[#9CA3AF]"}>
+                            <span className={active ? "text-[#7c3aed]" : "text-[#98a2b3]"}>
                                 <NavIcon name={item.icon} />
                             </span>
-                            <span className="max-w-full truncate">{item.label === "Contabilidad" ? "Conta" : item.label}</span>
+                            <span className="max-w-full truncate">{item.label}</span>
                         </Link>
                     );
                 })}
-                <button
-                    type="button"
-                    onClick={onOpenMore}
-                    className="flex flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[10px] font-bold text-[#9CA3AF] transition active:bg-white/[0.06]"
-                >
-                    <span className="text-[#9CA3AF]">
-                        <NavIcon name="more" />
-                    </span>
-                    <span className="max-w-full truncate">Mas</span>
-                </button>
             </div>
         </nav>
     );
@@ -431,6 +446,7 @@ function NavIcon({ name }: { name: NavIconName }) {
                     <path {...common} d="M14 17.5h7M17.5 14v7" />
                 </>
             ) : null}
+
             {name === "inbox" ? (
                 <>
                     <path {...common} d="M4 4h16l-2 9H6L4 4Z" />
@@ -438,14 +454,17 @@ function NavIcon({ name }: { name: NavIconName }) {
                     <path {...common} d="M9 16h6" />
                 </>
             ) : null}
+
             {name === "more" ? <path {...common} d="M5 12h.01M12 12h.01M19 12h.01" /> : null}
             {name === "activity" ? <path {...common} d="M22 12h-4l-3 8L9 4l-3 8H2" /> : null}
+
             {name === "wallet" ? (
                 <>
                     <path {...common} d="M4 7h15a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h12" />
                     <path {...common} d="M16 14h5" />
                 </>
             ) : null}
+
             {name === "logOut" ? (
                 <>
                     <path {...common} d="M10 17l5-5-5-5" />
@@ -453,6 +472,7 @@ function NavIcon({ name }: { name: NavIconName }) {
                     <path {...common} d="M21 19V5a2 2 0 0 0-2-2h-6" />
                 </>
             ) : null}
+
             {name === "users" ? (
                 <>
                     <path {...common} d="M16 20v-1.5a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V20" />
@@ -461,6 +481,7 @@ function NavIcon({ name }: { name: NavIconName }) {
                     <path {...common} d="M16 3.3a4 4 0 0 1 0 7.4" />
                 </>
             ) : null}
+
             {name === "search" ? <path {...common} d="m21 21-4.3-4.3M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16Z" /> : null}
         </svg>
     );

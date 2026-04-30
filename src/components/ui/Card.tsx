@@ -10,7 +10,7 @@ export function Card({
     return (
         <div
             className={[
-                "rounded-[18px] border border-white/[0.08] bg-[#111827] shadow-[0_14px_36px_rgba(0,0,0,0.18)] xl:rounded-2xl xl:border-[#e7e8f0] xl:bg-white xl:shadow-[0_14px_36px_rgba(16,25,54,0.06)]",
+                "rounded-[22px] border border-[#e8e3ff] bg-white shadow-[0_14px_34px_rgba(91,33,255,0.08)] xl:rounded-2xl xl:border-[#e7e8f0] xl:bg-white xl:shadow-[0_14px_36px_rgba(16,25,54,0.06)]",
                 className,
             ].join(" ")}
         >
@@ -30,18 +30,18 @@ export function CardHeader({
 }) {
     return (
         <div className="flex items-start justify-between gap-4 px-3 py-3 sm:px-4 sm:py-4">
-            <div>
-                <h2 className="text-[14px] font-black tracking-[-0.01em] text-[#F9FAFB] xl:font-bold xl:text-[#101936]">
+            <div className="min-w-0">
+                <h2 className="truncate text-[14px] font-black tracking-[-0.01em] text-[#101936] xl:font-bold xl:text-[#101936]">
                     {title}
                 </h2>
                 {subtitle ? (
-                    <p className="mt-0.5 text-[12px] font-extrabold text-[#9CA3AF] xl:font-medium xl:text-[#66739a]">
+                    <p className="mt-0.5 text-[12px] font-semibold text-[#66739a] xl:font-medium xl:text-[#66739a]">
                         {subtitle}
                     </p>
                 ) : null}
             </div>
 
-            {action ? <div>{action}</div> : null}
+            {action ? <div className="shrink-0">{action}</div> : null}
         </div>
     );
 }
@@ -54,7 +54,7 @@ export function CardContent({
     className?: string;
 }) {
     return (
-        <div className={["border-t border-white/[0.08] p-3 sm:p-4 xl:border-[#eef1f5]", className].join(" ")}>
+        <div className={["border-t border-[#f0edff] p-3 sm:p-4 xl:border-[#eef1f5]", className].join(" ")}>
             {children}
         </div>
     );

@@ -20,7 +20,13 @@ export function Badge({
 
     return (
         <span
-            className={`inline-flex rounded-[4px] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.04em] ${map[tone]}`}
+            className={[
+                "inline-flex items-center justify-center",
+                "rounded-[6px]",
+                "px-2 py-[3px]",
+                "text-[10px] font-semibold uppercase tracking-[0.04em]",
+                map[tone],
+            ].join(" ")}
         >
             {children}
         </span>

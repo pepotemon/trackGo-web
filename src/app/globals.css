@@ -1,7 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --tg-bg: #f6f8fb;
+  --tg-bg: #f6f3ff;
+  --tg-bg-2: #fbfaff;
   --tg-surface: #ffffff;
   --tg-surface-2: #f9fafb;
   --tg-border: #e4e7ec;
@@ -9,6 +10,11 @@
   --tg-text: #172033;
   --tg-muted: #667085;
   --tg-subtle: #98a2b3;
+
+  --tg-purple: #7c3aed;
+  --tg-purple-2: #4f46e5;
+  --tg-purple-soft: #f3f0ff;
+
   --tg-blue: #2563eb;
   --tg-blue-dim: #eff6ff;
   --tg-green: #059669;
@@ -21,6 +27,7 @@
 
 * {
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
 html,
@@ -42,15 +49,40 @@ textarea {
   font: inherit;
 }
 
+button {
+  touch-action: manipulation;
+}
+
 ::selection {
-  background: rgba(37, 99, 235, 0.18);
+  background: rgba(124, 58, 237, 0.18);
   color: var(--tg-text);
+}
+
+@media (max-width: 1279px) {
+
+  html,
+  body {
+    background:
+      radial-gradient(circle at top left, rgba(124, 58, 237, 0.13), transparent 34%),
+      linear-gradient(180deg, #fbfaff 0%, #f6f3ff 52%, #f8fafc 100%);
+  }
+
+  body {
+    color: #172033;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
 }
 
 @keyframes tg-chart-draw {
   from {
     stroke-dashoffset: 1;
   }
+
   to {
     stroke-dashoffset: 0;
   }
@@ -61,6 +93,7 @@ textarea {
     opacity: 0;
     transform: translateY(8px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -72,9 +105,22 @@ textarea {
     opacity: 0;
     transform: scaleY(0);
   }
+
   to {
     opacity: 1;
     transform: scaleY(1);
+  }
+}
+
+@keyframes tg-chart-width {
+  from {
+    opacity: 0;
+    transform: scaleX(0);
+  }
+
+  to {
+    opacity: 1;
+    transform: scaleX(1);
   }
 }
 
@@ -103,17 +149,6 @@ textarea {
   animation: tg-chart-width 0.78s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-@keyframes tg-chart-width {
-  from {
-    opacity: 0;
-    transform: scaleX(0);
-  }
-  to {
-    opacity: 1;
-    transform: scaleX(1);
-  }
-}
-
 .tg-chart-area {
   opacity: 0;
   animation: tg-chart-fade-up 0.8s ease-out 0.25s forwards;
@@ -125,6 +160,7 @@ textarea {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   .tg-chart-line,
   .tg-chart-area,
   .tg-chart-point,

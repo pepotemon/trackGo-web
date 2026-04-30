@@ -61,17 +61,37 @@ export function AppIcon({
         plain ||
         className.includes("bg-transparent") ||
         className.includes("text-current");
+
     const box =
         size === "lg"
             ? "h-14 w-14 rounded-2xl"
             : size === "sm"
                 ? "h-8 w-8 rounded-xl"
                 : "h-10 w-10 rounded-2xl";
-    const icon = size === "lg" ? "h-7 w-7" : size === "sm" ? "h-4 w-4" : "h-5 w-5";
+
+    const icon =
+        size === "lg" ? "h-7 w-7" : size === "sm" ? "h-4 w-4" : "h-5 w-5";
 
     return (
-        <span className={`inline-flex shrink-0 items-center justify-center ${shouldUsePlainSurface ? "" : "ring-1"} ${box} ${shouldUsePlainSurface ? "" : toneClass[tone]} ${className}`}>
-            <svg aria-hidden="true" viewBox="0 0 24 24" className={icon} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <span
+            className={[
+                "inline-flex shrink-0 items-center justify-center",
+                shouldUsePlainSurface ? "" : "ring-1",
+                box,
+                shouldUsePlainSurface ? "" : toneClass[tone],
+                className,
+            ].join(" ")}
+        >
+            <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                className={icon}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            >
                 {name === "activity" ? <path d="M22 12h-4l-3 8L9 4l-3 8H2" /> : null}
                 {name === "alert" ? (
                     <>
