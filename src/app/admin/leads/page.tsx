@@ -398,16 +398,17 @@ function MobileLeadQueue({
     const [filtersOpen, setFiltersOpen] = useState(false);
 
     return (
-        <div className="-mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] max-w-[100vw] overflow-x-hidden bg-[#0B1220] bg-[linear-gradient(rgba(3,10,20,0.62),rgba(3,10,20,0.62)),url('/brand/trackgo-bg-map.png')] bg-cover bg-center px-3 pb-[132px] pt-2 text-[#F9FAFB]">
-            <div className="mb-2 flex items-center gap-1.5">
+        <div className="-mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] max-w-[100vw] overflow-x-hidden bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.10),transparent_36%),linear-gradient(180deg,#fbfaff_0%,#f6f3ff_52%,#f8fafc_100%)] px-3 pb-[136px] pt-3 text-[#101936]">
+
+            {/* HEADER */}
+            <div className="mb-3 flex items-center gap-2">
                 <div className="min-w-0 flex-1">
-                    <h1 className="truncate text-[17px] font-black text-white">
+                    <h1 className="truncate text-[20px] font-black tracking-[-0.03em] text-[#101936]">
                         Leads Meta
                     </h1>
-                    <p className="mt-0.5 truncate text-[11px] font-extrabold text-[#9CA3AF]">
-                        Cola activa · visibles{" "}
-                        <span className="font-black text-white">{leads.length}</span>{" "}
-                        · total <span className="font-black text-white">{stats.total}</span>
+                    <p className="mt-0.5 truncate text-[11px] font-semibold text-[#66739A]">
+                        <span className="font-black text-[#7C3AED]">{leads.length}</span> visibles
+                        {" · "}total <span className="font-black text-[#101936]">{stats.total}</span>
                     </p>
                 </div>
 
@@ -430,56 +431,63 @@ function MobileLeadQueue({
                 />
             </div>
 
-            <div className="mb-2 flex h-[46px] items-center gap-2 rounded-[14px] border border-[#1F2937] bg-[#0F172A] px-3">
+            {/* BÚSQUEDA */}
+            <div className="mb-3 flex h-[46px] items-center gap-2 rounded-[14px] border border-[#E8E7FB] bg-white px-3 shadow-[0_2px_12px_rgba(91,33,255,0.07)]">
                 <AppIcon
                     name="search"
-                    tone="slate"
+                    tone="purple"
                     size="sm"
-                    className="h-5 w-5 shrink-0 bg-transparent text-[#9CA3AF] ring-0"
+                    className="h-5 w-5 shrink-0 bg-transparent text-[#98A2B3] ring-0"
                 />
                 <input
                     value={filters.search}
                     onChange={(e) => onPatchFilters({ search: e.target.value })}
-                    placeholder="Buscar lead, teléfono..."
-                    className="min-w-0 flex-1 bg-transparent text-[14px] font-bold text-white outline-none placeholder:text-[#6B7280]"
+                    placeholder="Buscar lead, teléfono, negocio..."
+                    className="min-w-0 flex-1 bg-transparent font-semibold text-[#101936] outline-none placeholder:text-[#98A2B3]"
                     style={{ fontSize: "16px" }}
                 />
                 {filters.search ? (
                     <button
                         type="button"
                         onClick={() => onPatchFilters({ search: "" })}
-                        className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-white/[0.06] text-[18px] text-white transition active:bg-white/[0.12]"
+                        className="flex h-7 w-7 items-center justify-center rounded-full bg-[#f3f0ff] text-[16px] text-[#7C3AED] transition active:bg-violet-200"
                     >
                         ×
                     </button>
                 ) : null}
             </div>
 
-            <div className="mb-2 rounded-[14px] border border-[#1F2937] bg-[#0F172A]/90 p-2.5">
+            {/* FILTROS */}
+            <div className="mb-3 rounded-[14px] border border-[#E8E7FB] bg-white p-3 shadow-[0_2px_12px_rgba(91,33,255,0.05)]">
                 <div className="flex items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-2">
                         <AppIcon
-                            name="activity"
-                            tone="blue"
+                            name="filter"
+                            tone="purple"
                             size="sm"
-                            className="h-5 w-5 bg-transparent text-[#93C5FD] ring-0"
+                            className="h-5 w-5 bg-transparent text-[#7C3AED] ring-0"
                         />
-                        <p className="truncate text-[12px] font-black text-[#CBD5E1]">
+                        <p className="truncate text-[12px] font-bold text-[#66739A]">
                             Filtros operativos
+                            {activeFiltersCount > 0 && (
+                                <span className="ml-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-[#7C3AED] text-[9px] font-black text-white">
+                                    {activeFiltersCount}
+                                </span>
+                            )}
                         </p>
                     </div>
 
                     <button
                         type="button"
                         onClick={() => setFiltersOpen((v) => !v)}
-                        className="rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-[11px] font-black text-[#DDEAFE]"
+                        className="rounded-full border border-[#E8E7FB] bg-[#f8f7ff] px-3 py-1.5 text-[11px] font-bold text-[#7C3AED] transition active:bg-[#f3f0ff]"
                     >
-                        {filtersOpen ? "Ocultar" : "Filtros"}
+                        {filtersOpen ? "Ocultar" : "Mostrar"}
                     </button>
                 </div>
 
                 {filtersOpen ? (
-                    <div className="mt-2 grid gap-2">
+                    <div className="mt-3 grid gap-2.5">
                         <MobileFilterSelect
                             label="Ciudad"
                             value={filters.city}
@@ -508,13 +516,20 @@ function MobileLeadQueue({
                         </MobileFilterSelect>
 
                         {activeFiltersCount > 0 ? (
-                            <Button onClick={onResetFilters}>Limpiar filtros</Button>
+                            <button
+                                type="button"
+                                onClick={onResetFilters}
+                                className="h-9 rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] text-[12px] font-bold text-[#66739A] transition active:bg-[#f3f0ff]"
+                            >
+                                Limpiar filtros
+                            </button>
                         ) : null}
                     </div>
                 ) : null}
             </div>
 
-            <div className="grid min-w-0 gap-1.5 overflow-x-hidden">
+            {/* LISTA */}
+            <div className="grid min-w-0 gap-2 overflow-x-hidden">
                 {loading ? (
                     <MobileState
                         icon="refresh"
@@ -525,7 +540,7 @@ function MobileLeadQueue({
                     <MobileState
                         icon="filter"
                         title="Sin resultados"
-                        body="No hay leads Meta en la cola activa para ese filtro."
+                        body="No hay leads para ese filtro."
                     />
                 ) : (
                     leads.map((lead) => (
@@ -544,7 +559,7 @@ function MobileLeadQueue({
                         type="button"
                         onClick={onLoadMore}
                         disabled={loadingMore}
-                        className="mt-1 min-h-11 rounded-[15px] border border-white/[0.08] bg-[#0F172A] px-4 text-[12px] font-black text-white disabled:opacity-60"
+                        className="mt-1 min-h-[46px] rounded-[14px] border border-[#E8E7FB] bg-white text-[12px] font-bold text-[#7C3AED] shadow-sm transition active:bg-[#f3f0ff] disabled:opacity-60"
                     >
                         {loadingMore ? "Cargando..." : "Cargar más"}
                     </button>
@@ -576,13 +591,20 @@ function MobileLeadCard({
 
     const statusBox =
         status === "pending_review"
-            ? "border-blue-400/20 bg-blue-500/[0.08] text-[#93C5FD]"
+            ? "border-blue-200 bg-blue-50 text-blue-700"
             : status === "not_suitable"
-                ? "border-red-400/20 bg-red-400/[0.08] text-[#FCA5A5]"
-                : "border-yellow-300/20 bg-yellow-300/[0.08] text-[#FDE68A]";
+                ? "border-red-200 bg-red-50 text-red-600"
+                : "border-amber-200 bg-amber-50 text-amber-700";
+
+    const statusIcon =
+        status === "pending_review" ? "🔍"
+            : status === "not_suitable" ? "⊘"
+                : "!";
 
     return (
-        <article className="min-w-0 max-w-full overflow-hidden rounded-[15px] border border-[#1F2937] bg-[#111827] p-2.5">
+        <article className="min-w-0 max-w-full overflow-hidden rounded-[16px] border border-[#E8E7FB] bg-white p-3 shadow-[0_4px_18px_rgba(91,33,255,0.07)]">
+
+            {/* FILA SUPERIOR */}
             <div className="flex items-start justify-between gap-2">
                 <button
                     type="button"
@@ -591,20 +613,18 @@ function MobileLeadCard({
                     className="min-w-0 flex-1 text-left disabled:opacity-60"
                 >
                     <div className="flex min-w-0 items-center gap-2">
-                        <p className="min-w-0 flex-1 truncate text-[13px] font-black text-white">
+                        <p className="min-w-0 flex-1 truncate text-[14px] font-black tracking-[-0.01em] text-[#101936]">
                             {lead.phone || displayName(lead)}
                         </p>
                         {hasNewInbound(lead) ? <Badge tone="green">NEW</Badge> : null}
                     </div>
-
                     {lead.name ? (
-                        <p className="mt-0.5 truncate text-[12px] font-black text-[#D7DCE5]">
+                        <p className="mt-0.5 truncate text-[12px] font-semibold text-[#344054]">
                             {lead.name}
                         </p>
                     ) : null}
-
                     {lead.business ? (
-                        <p className="mt-0.5 truncate text-[11px] font-extrabold text-[#9CA3AF]">
+                        <p className="mt-0.5 truncate text-[11px] font-medium text-[#66739A]">
                             {lead.business}
                         </p>
                     ) : null}
@@ -613,91 +633,90 @@ function MobileLeadCard({
                 <button
                     type="button"
                     onClick={() => onQuickActions(lead)}
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-[#1F2937] bg-[#0F172A] text-[14px] font-black text-white transition active:bg-[#1F2937]"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] text-[15px] font-black text-[#66739A] transition active:bg-[#f3f0ff]"
                 >
                     ···
                 </button>
             </div>
 
-            <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1.5">
+            {/* CIUDAD */}
+            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
                 <span
                     className={[
-                        "inline-flex min-h-5 max-w-full items-center gap-1 rounded-full border px-2 text-[10px] font-black",
+                        "inline-flex min-h-5 max-w-full items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold",
                         lead.location.outOfCoverage
-                            ? "border-yellow-300/25 bg-yellow-300/10 text-[#FDE68A]"
-                            : "border-blue-400/25 bg-blue-500/10 text-[#93C5FD]",
+                            ? "border-amber-200 bg-amber-50 text-amber-700"
+                            : "border-violet-200 bg-violet-50 text-violet-700",
                     ].join(" ")}
                 >
-                    <span>{lead.location.outOfCoverage ? "⚠" : "⌖"}</span>
+                    <span>{lead.location.outOfCoverage ? "⚠" : "📍"}</span>
                     <span className="truncate">{cityLabel(lead)}</span>
                 </span>
             </div>
 
+            {/* STATUS */}
             <div
                 className={[
-                    "mt-2 flex items-center gap-2 rounded-[11px] border px-2.5 py-1.5 text-[11px] font-black",
+                    "mt-2 flex items-center gap-2 rounded-[10px] border px-2.5 py-1.5 text-[11px] font-semibold",
                     statusBox,
                 ].join(" ")}
             >
-                <span>
-                    {status === "pending_review"
-                        ? "⌕"
-                        : status === "not_suitable"
-                            ? "⊘"
-                            : "!"}
-                </span>
+                <span>{statusIcon}</span>
                 <span className="min-w-0 flex-1 truncate">
                     {quickStatus(lead) || statusLabel[status]}
                 </span>
             </div>
 
+            {/* DIRECCIÓN */}
             {lead.location.address ? (
-                <p className="mt-1.5 line-clamp-1 text-[11px] font-bold text-[#CBD5E1]">
-                    📍 {lead.location.address}
+                <p className="mt-1.5 line-clamp-1 text-[11px] font-medium text-[#66739A]">
+                    {lead.location.address}
                 </p>
             ) : null}
 
-            <p className="mt-1.5 truncate text-[10px] font-extrabold text-[#9CA3AF]">
-                Creado: {formatDateShort(lead.createdAt)} · Relevante:{" "}
-                {formatDateShort(
-                    lead.lastInboundMessageAt || lead.updatedAt || lead.createdAt
-                )}
+            {/* META */}
+            <p className="mt-1 truncate text-[10px] font-medium text-[#98A2B3]">
+                Creado {formatDateShort(lead.createdAt)}
+                {" · "}
+                Activo {formatDateShort(lead.lastInboundMessageAt || lead.updatedAt || lead.createdAt)}
             </p>
 
+            {/* MENSAJE / CTA CHAT */}
             {lead.lastInboundText ? (
                 <Link
                     href={`/admin/leads/${lead.id}`}
-                    className="mt-2 block rounded-[13px] border border-white/[0.08] bg-white/[0.04] p-2.5 transition active:bg-white/[0.08]"
+                    className="mt-2.5 block rounded-[12px] border border-[#E8E7FB] bg-[#fafafa] p-2.5 transition active:bg-[#f3f0ff]"
                 >
                     <div className="flex items-center gap-2">
-                        <span className="text-[11px] text-[#9CA3AF]">💬</span>
-                        <span className="min-w-0 flex-1 truncate text-[10px] font-black text-[#9CA3AF]">
-                            Último mensaje recibido
+                        <span className="text-[11px]">💬</span>
+                        <span className="min-w-0 flex-1 truncate text-[10px] font-semibold text-[#66739A]">
+                            Último mensaje
                         </span>
-                        <span className="rounded-full border border-blue-400/20 bg-blue-500/10 px-2 py-0.5 text-[9px] font-black text-[#93C5FD]">
+                        <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[9px] font-bold text-violet-700">
                             Chat
                         </span>
                     </div>
-                    <p className="mt-1 line-clamp-1 text-[11px] font-bold text-white/90">
+                    <p className="mt-1 line-clamp-1 text-[11px] font-semibold text-[#101936]">
                         {lead.lastInboundText}
                     </p>
                 </Link>
             ) : (
                 <Link
                     href={`/admin/leads/${lead.id}`}
-                    className="mt-2 flex min-h-[44px] items-center justify-center gap-2 rounded-[13px] border border-blue-400/25 bg-blue-500/[0.08] px-3 text-[12px] font-black text-[#93C5FD] transition active:bg-blue-500/[0.15]"
+                    className="mt-2.5 flex min-h-[44px] items-center justify-center gap-2 rounded-[12px] border border-violet-200 bg-violet-50 px-3 text-[12px] font-bold text-violet-700 transition active:bg-violet-100"
                 >
                     💬 Abrir chat
                 </Link>
             )}
 
-            <div className="mt-2 flex items-center gap-2">
+            {/* ACCIONES */}
+            <div className="mt-2.5 flex items-center gap-2">
                 {lead.location.mapsUrl ? (
                     <a
                         href={lead.location.mapsUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="flex h-10 w-10 items-center justify-center rounded-[13px] border border-[#1F2937] bg-[#0F172A] text-[15px] text-white transition active:bg-[#1F2937]"
+                        className="flex h-10 w-10 items-center justify-center rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] text-[15px] transition active:bg-[#f3f0ff]"
                     >
                         🗺️
                     </a>
@@ -708,7 +727,7 @@ function MobileLeadCard({
                         href={whatsappUrl(lead.phone)}
                         target="_blank"
                         rel="noreferrer"
-                        className="flex h-10 w-10 items-center justify-center rounded-[13px] border border-[#1F2937] bg-[#0F172A] text-[15px] text-white transition active:bg-[#1F2937]"
+                        className="flex h-10 w-10 items-center justify-center rounded-[12px] border border-emerald-200 bg-emerald-50 text-[15px] transition active:bg-emerald-100"
                     >
                         ☎
                     </a>
@@ -717,14 +736,14 @@ function MobileLeadCard({
                 <button
                     type="button"
                     onClick={() => onEdit(lead)}
-                    className="ml-auto min-h-[36px] rounded-[13px] border border-white/[0.08] bg-white/[0.05] px-3 py-1.5 text-[11px] font-black text-white transition active:bg-white/[0.1]"
+                    className="ml-auto min-h-[36px] rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 py-1.5 text-[11px] font-bold text-[#66739A] transition active:bg-[#f3f0ff]"
                 >
                     Editar
                 </button>
             </div>
 
             {saving ? (
-                <p className="mt-1.5 text-[11px] font-black text-[#9CA3AF]">
+                <p className="mt-1.5 text-[11px] font-medium text-[#98A2B3]">
                     Procesando…
                 </p>
             ) : null}
@@ -750,13 +769,13 @@ function MobileHeaderButton({
             disabled={disabled}
             title={label}
             aria-label={label}
-            className="flex h-10 w-10 items-center justify-center rounded-[13px] border border-[#1F2937] bg-[#0F172A] text-white transition active:bg-[#1F2937] disabled:opacity-50"
+            className="flex h-10 w-10 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-white shadow-sm transition active:bg-[#f3f0ff] disabled:opacity-50"
         >
             <AppIcon
                 name={icon}
-                tone="slate"
+                tone="purple"
                 size="sm"
-                className="h-[18px] w-[18px] bg-transparent text-white ring-0"
+                className="h-[18px] w-[18px] bg-transparent text-[#7C3AED] ring-0"
             />
         </button>
     );
@@ -776,13 +795,13 @@ function MobileHeaderLink({
             href={href}
             title={label}
             aria-label={label}
-            className="flex h-10 w-10 items-center justify-center rounded-[13px] border border-violet-400/25 bg-violet-500/10 text-white transition active:bg-violet-500/20"
+            className="flex h-10 w-10 items-center justify-center rounded-[13px] border border-violet-200 bg-violet-50 transition active:bg-violet-100"
         >
             <AppIcon
                 name={icon}
                 tone="purple"
                 size="sm"
-                className="h-[18px] w-[18px] bg-transparent text-white ring-0"
+                className="h-[18px] w-[18px] bg-transparent text-violet-700 ring-0"
             />
         </Link>
     );
@@ -801,11 +820,12 @@ function MobileFilterSelect({
 }) {
     return (
         <label className="grid gap-1">
-            <span className="text-[10px] font-black text-[#9CA3AF]">{label}</span>
+            <span className="text-[10px] font-bold text-[#98A2B3]">{label}</span>
             <select
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
-                className="h-9 rounded-[12px] border border-[#1F2937] bg-[#111827] px-3 text-[11px] font-black text-white outline-none"
+                className="h-10 rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 text-[13px] font-semibold text-[#101936] outline-none focus:border-[#7c3aed]"
+                style={{ fontSize: "16px" }}
             >
                 {children}
             </select>
@@ -823,15 +843,15 @@ function MobileState({
     body: string;
 }) {
     return (
-        <div className="mt-8 flex flex-col items-center gap-2 px-4 text-center">
+        <div className="mt-10 flex flex-col items-center gap-3 px-4 text-center">
             <AppIcon
                 name={icon}
-                tone="slate"
+                tone={icon === "refresh" ? "purple" : "slate"}
                 size="lg"
-                className="bg-[#0F172A] text-[#9CA3AF]"
+                className="bg-[#f3f0ff]"
             />
-            <p className="text-[13px] font-black text-[#9CA3AF]">{title}</p>
-            <p className="text-[12px] font-bold text-[#64748B]">{body}</p>
+            <p className="text-[14px] font-black text-[#101936]">{title}</p>
+            <p className="text-[12px] font-medium text-[#66739A]">{body}</p>
         </div>
     );
 }
@@ -859,33 +879,33 @@ function LeadMobileStatusBar({
                 label: "Revisar",
                 count: stats.pendingReview,
                 icon: "lead",
-                color: "text-[#93C5FD]",
+                color: "text-blue-500",
             },
             {
                 value: "incomplete",
                 label: "Incompletos",
                 count: stats.incomplete,
                 icon: "alert",
-                color: "text-[#FDE68A]",
+                color: "text-amber-500",
             },
             {
                 value: "not_suitable",
                 label: "No aptos",
                 count: stats.notSuitable,
                 icon: "close",
-                color: "text-[#FCA5A5]",
+                color: "text-red-500",
             },
             {
                 value: "all",
                 label: "Todos",
                 count: total,
                 icon: "filter",
-                color: "text-[#C4B5FD]",
+                color: "text-violet-500",
             },
         ];
 
     return (
-        <div className="fixed bottom-[72px] left-0 right-0 z-30 max-w-[100vw] overflow-hidden border-t border-white/[0.06] bg-[#0B1220]/94 px-2.5 pb-2 pt-2 backdrop-blur-xl xl:hidden">
+        <div className="fixed bottom-[72px] left-0 right-0 z-30 max-w-[100vw] overflow-hidden border-t border-[#E8E7FB] bg-white/95 px-2.5 pb-2 pt-2 shadow-[0_-8px_24px_rgba(91,33,255,0.08)] backdrop-blur-xl xl:hidden">
             <div className="grid grid-cols-4 gap-1.5">
                 {items.map((item) => {
                     const active = value === item.value;
@@ -896,14 +916,14 @@ function LeadMobileStatusBar({
                             type="button"
                             onClick={() => onChange(item.value)}
                             className={[
-                                "relative min-h-[52px] rounded-[15px] border px-2 py-1.5 text-left transition active:opacity-80",
+                                "relative min-h-[52px] rounded-[14px] border px-2 py-1.5 text-left transition active:opacity-80",
                                 active
-                                    ? "border-white/[0.14] bg-[#1a2744]"
-                                    : "border-white/[0.08] bg-[#0F172A]",
+                                    ? "border-violet-200 bg-violet-50"
+                                    : "border-[#E8E7FB] bg-[#fafafa]",
                             ].join(" ")}
                         >
                             {active && (
-                                <span className="absolute inset-x-3 top-0 h-[2px] rounded-full bg-gradient-to-r from-[#7c3aed] to-[#3b82f6]" />
+                                <span className="absolute inset-x-3 top-0 h-[2px] rounded-full bg-gradient-to-r from-[#7c3aed] to-[#4f46e5]" />
                             )}
                             <div className="flex items-center justify-between gap-1">
                                 <AppIcon
@@ -915,8 +935,8 @@ function LeadMobileStatusBar({
                                 <span
                                     className={
                                         active
-                                            ? "rounded-full bg-white/20 px-1.5 py-0.5 text-[9px] font-black text-white"
-                                            : "rounded-full bg-white/[0.08] px-1.5 py-0.5 text-[9px] font-black text-[#CBD5E1]"
+                                            ? "rounded-full bg-violet-100 px-1.5 py-0.5 text-[9px] font-black text-violet-700"
+                                            : "rounded-full bg-[#f2f4f7] px-1.5 py-0.5 text-[9px] font-semibold text-[#98A2B3]"
                                     }
                                 >
                                     {item.count}
@@ -925,8 +945,8 @@ function LeadMobileStatusBar({
                             <div
                                 className={
                                     active
-                                        ? "mt-1.5 truncate text-[9px] font-black text-white"
-                                        : "mt-1.5 truncate text-[9px] font-black text-[#9CA3AF]"
+                                        ? "mt-1.5 truncate text-[9px] font-bold text-violet-700"
+                                        : "mt-1.5 truncate text-[9px] font-medium text-[#98A2B3]"
                                 }
                             >
                                 {item.label}
