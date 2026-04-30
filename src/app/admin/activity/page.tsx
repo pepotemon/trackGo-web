@@ -31,6 +31,9 @@ import {
 } from "@/components/ui";
 
 const PAGE_SIZE = 120;
+const PENDING_START_KEY = "0000-01-01";
+
+type ActivityViewMode = "day" | "week";
 
 const typeLabel: Record<Exclude<ActivityEventType, "all">, string> = {
     visited: "Visitado",
@@ -155,8 +158,13 @@ function getRatePerVisit(user?: ActivityUserOption) {
     return Number.isFinite(n) ? n : 0;
 }
 
+function viewModeLabel(mode: ActivityViewMode) {
+    return mode === "day" ? "Día" : "Semana";
+}
+
 export default function ActivityPage() {
-    const [filters, setFilters] = useState<ActivityFilters>(() => defaultFilters());
+    const [viewMode, setViewMode] = useState<ActivityViewMode>("day");
+    const [filters, setFilters] = useState<ActivityFilters>(() => todayFilters());
     const [users, setUsers] = useState<ActivityUserOption[]>([]);
     const [events, setEvents] = useState<DailyEventDoc[]>([]);
     const [cursor, setCursor] = useState<ActivityCursor>(null);
@@ -218,14 +226,14 @@ export default function ActivityPage() {
     }, [filters.search, filters.type, filters.userId, rows]);
 
     const stats = useMemo<ActivityStats>(() => {
-        const visibleUsers = new Set(filteredRows.map((row) => row.userId).filter(Boolean));
+        const assignments = filteredRows.length;
 
         return {
             total: filteredRows.length,
             visited: filteredRows.filter((row) => row.type === "visited").length,
             rejected: filteredRows.filter((row) => row.type === "rejected").length,
             pending: filteredRows.filter((row) => row.type === "pending").length,
-            users: visibleUsers.size,
+            users: assignments,
         };
     }, [filteredRows]);
 
@@ -288,9 +296,9 @@ export default function ActivityPage() {
                     pageSize: PAGE_SIZE,
                 }),
                 listPendingClientsForActivity({
-                    startKey: nextFilters.startKey,
+                    startKey: PENDING_START_KEY,
                     endKey: nextFilters.endKey,
-                    pageSize: 500,
+                    pageSize: 2000,
                 }),
             ]);
 
@@ -332,6 +340,7 @@ export default function ActivityPage() {
     useEffect(() => {
         queueMicrotask(() => {
             const next = todayFilters();
+            setViewMode("day");
             setFilters(next);
             void loadInitial(next);
         });
@@ -345,20 +354,32 @@ export default function ActivityPage() {
         void loadInitial(filters);
     }
 
+    function changeViewMode(mode: ActivityViewMode) {
+        const next = mode === "day" ? todayFilters() : defaultFilters();
+        setViewMode(mode);
+        setMobileFiltersOpen(false);
+        setFilters(next);
+        void loadInitial(next);
+    }
+
     function resetFilters() {
+        const base = viewMode === "day" ? todayFilters() : defaultFilters();
         const next = {
-            ...filters,
+            ...base,
             userId: "all",
             type: "all" as const,
             search: "",
         };
+
         setFilters(next);
+        void loadInitial(next);
     }
 
     return (
         <div className="mx-auto w-full max-w-[1220px]">
             <div className="xl:hidden">
                 <MobileActivityView
+                    viewMode={viewMode}
                     rows={filteredRows}
                     stats={stats}
                     filters={filters}
@@ -369,6 +390,7 @@ export default function ActivityPage() {
                     activeFiltersCount={activeFiltersCount}
                     amountTotal={amountTotal}
                     filtersOpen={mobileFiltersOpen}
+                    onChangeViewMode={changeViewMode}
                     onToggleFilters={() => setMobileFiltersOpen((value) => !value)}
                     onPatchFilters={patchFilters}
                     onApplyRange={applyRange}
@@ -384,7 +406,7 @@ export default function ActivityPage() {
             <div className="hidden xl:block">
                 <PageHeader
                     title="Actividad"
-                    subtitle="Auditoría de visitas, rechazos y pendientes del equipo."
+                    subtitle="Auditoría de visitas, rechazos, pendientes y asignaciones del equipo."
                     icon={
                         <AppIcon
                             name="activity"
@@ -422,11 +444,11 @@ export default function ActivityPage() {
                 ) : null}
 
                 <section className="mb-4 grid grid-cols-5 gap-4">
-                    <KpiCard label="Actividad" value={stats.total} caption="Eventos + pendientes" icon="activity" tone="purple" />
+                    <KpiCard label="Actividad" value={stats.total} caption={`${viewModeLabel(viewMode)} · eventos + pendientes`} icon="activity" tone="purple" />
                     <KpiCard label="Visitados" value={stats.visited} caption="Clientes trabajados" icon="check" tone="green" />
                     <KpiCard label="Rechazados" value={stats.rejected} caption="No concretados" icon="close" tone="red" />
-                    <KpiCard label="Pendientes" value={stats.pending} caption="Sin cierre" icon="alert" tone="orange" />
-                    <KpiCard label="Usuarios" value={stats.users} caption="Con actividad" icon="users" tone="blue" />
+                    <KpiCard label="Pendientes" value={stats.pending} caption="Total pendiente hasta ahora" icon="alert" tone="orange" />
+                    <KpiCard label="Asignaciones" value={stats.users} caption="Clientes asignados en vista" icon="assign" tone="blue" />
                 </section>
 
                 <Card className="overflow-hidden">
@@ -434,19 +456,22 @@ export default function ActivityPage() {
                         <div className="flex flex-row items-center justify-between gap-3">
                             <div>
                                 <h2 className="text-[14px] font-semibold text-[#171717]">
-                                    Auditoría diaria
+                                    Auditoría {viewMode === "day" ? "diaria" : "semanal"}
                                 </h2>
                                 <p className="mt-0.5 text-[12px] font-medium text-[#9ca3af]">
                                     {filteredRows.length} visibles de {events.length} cargados
                                 </p>
                             </div>
 
-                            <Input
-                                value={filters.search}
-                                onChange={(event) => patchFilters({ search: event.target.value })}
-                                placeholder="Buscar cliente, teléfono, usuario..."
-                                className="w-[360px]"
-                            />
+                            <div className="flex items-center gap-2">
+                                <ViewModeSwitch value={viewMode} onChange={changeViewMode} />
+                                <Input
+                                    value={filters.search}
+                                    onChange={(event) => patchFilters({ search: event.target.value })}
+                                    placeholder="Buscar cliente, teléfono, usuario..."
+                                    className="w-[360px]"
+                                />
+                            </div>
                         </div>
 
                         <div className="grid grid-cols-[1fr_1fr_1.25fr_1fr_150px] gap-2">
@@ -502,6 +527,10 @@ export default function ActivityPage() {
                                 </Button>
                             </div>
                         </div>
+
+                        <p className="text-[11px] font-semibold text-[#98a2b3]">
+                            Pendientes se muestran como acumulado hasta la fecha final del rango.
+                        </p>
                     </div>
 
                     <ActivityTable rows={filteredRows} loading={loading} onQuickActions={setQuickRow} />
@@ -541,7 +570,40 @@ export default function ActivityPage() {
     );
 }
 
+function ViewModeSwitch({
+    value,
+    onChange,
+}: {
+    value: ActivityViewMode;
+    onChange: (mode: ActivityViewMode) => void;
+}) {
+    return (
+        <div className="grid h-10 w-[180px] grid-cols-2 rounded-2xl border border-[#e5e7eb] bg-[#f8fafc] p-1">
+            {(["day", "week"] as ActivityViewMode[]).map((mode) => {
+                const active = value === mode;
+
+                return (
+                    <button
+                        key={mode}
+                        type="button"
+                        onClick={() => onChange(mode)}
+                        className={[
+                            "rounded-xl text-[12px] font-black transition",
+                            active
+                                ? "bg-[#7c3aed] text-white shadow-sm"
+                                : "text-[#667085] hover:bg-white",
+                        ].join(" ")}
+                    >
+                        {mode === "day" ? "Día" : "Semana"}
+                    </button>
+                );
+            })}
+        </div>
+    );
+}
+
 function MobileActivityView({
+    viewMode,
     rows,
     stats,
     filters,
@@ -552,6 +614,7 @@ function MobileActivityView({
     activeFiltersCount,
     amountTotal,
     filtersOpen,
+    onChangeViewMode,
     onToggleFilters,
     onPatchFilters,
     onApplyRange,
@@ -562,6 +625,7 @@ function MobileActivityView({
     onOpenList,
     onOpenEarnings,
 }: {
+    viewMode: ActivityViewMode;
     rows: ActivityEventRow[];
     stats: ActivityStats;
     filters: ActivityFilters;
@@ -572,6 +636,7 @@ function MobileActivityView({
     activeFiltersCount: number;
     amountTotal: number;
     filtersOpen: boolean;
+    onChangeViewMode: (mode: ActivityViewMode) => void;
     onToggleFilters: () => void;
     onPatchFilters: (patch: Partial<ActivityFilters>) => void;
     onApplyRange: () => void;
@@ -614,6 +679,34 @@ function MobileActivityView({
                 </button>
             </div>
 
+            <div className="mb-2 grid grid-cols-2 gap-2 rounded-[16px] border border-white/[0.08] bg-[#0F172A]/90 p-1">
+                <button
+                    type="button"
+                    onClick={() => onChangeViewMode("day")}
+                    className={[
+                        "h-9 rounded-[13px] text-[12px] font-black transition",
+                        viewMode === "day"
+                            ? "bg-blue-500 text-white shadow-[0_10px_25px_rgba(37,99,235,0.22)]"
+                            : "text-[#9CA3AF]",
+                    ].join(" ")}
+                >
+                    Día
+                </button>
+
+                <button
+                    type="button"
+                    onClick={() => onChangeViewMode("week")}
+                    className={[
+                        "h-9 rounded-[13px] text-[12px] font-black transition",
+                        viewMode === "week"
+                            ? "bg-blue-500 text-white shadow-[0_10px_25px_rgba(37,99,235,0.22)]"
+                            : "text-[#9CA3AF]",
+                    ].join(" ")}
+                >
+                    Semana
+                </button>
+            </div>
+
             <div className="mb-2 grid grid-cols-4 gap-1.5">
                 <MobileStatButton
                     label="Visitados"
@@ -640,9 +733,9 @@ function MobileActivityView({
                     disabled={stats.pending <= 0}
                 />
                 <MobileStatButton
-                    label="Usuarios"
+                    label="Asignados"
                     value={stats.users}
-                    icon="users"
+                    icon="assign"
                     color="text-[#CBD5E1]"
                 />
             </div>
@@ -671,7 +764,7 @@ function MobileActivityView({
                     <div className="flex min-w-0 items-center gap-2">
                         <AppIcon name="activity" tone="blue" size="sm" className="h-5 w-5 bg-transparent text-[#93C5FD] ring-0" />
                         <p className="truncate text-[12px] font-black text-[#CBD5E1]">
-                            Rango {filters.startKey} → {filters.endKey}
+                            {viewMode === "day" ? "Día" : "Semana"} · {filters.startKey} → {filters.endKey}
                         </p>
                     </div>
 
@@ -687,6 +780,10 @@ function MobileActivityView({
                 <div className="mt-2 h-2 overflow-hidden rounded-full border border-white/[0.06] bg-white/[0.04]">
                     <div className="h-full rounded-full bg-emerald-400/55" style={{ width: `${pct}%` }} />
                 </div>
+
+                <p className="mt-2 truncate text-[10px] font-bold text-[#64748B]">
+                    Pendientes = acumulado hasta la fecha final.
+                </p>
 
                 {filtersOpen ? (
                     <div className="mt-3 grid gap-2">
@@ -788,7 +885,7 @@ function MobileStatButton({
 }: {
     label: string;
     value: number;
-    icon: "check" | "close" | "alert" | "users";
+    icon: "check" | "close" | "alert" | "users" | "assign";
     color: string;
     onClick?: () => void;
     disabled?: boolean;
