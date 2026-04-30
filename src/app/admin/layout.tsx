@@ -10,6 +10,7 @@ type NavIconName =
     | "activity"
     | "dashboard"
     | "inbox"
+    | "more"
     | "search"
     | "users"
     | "wallet"
@@ -142,37 +143,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             </aside>
 
             <div className="xl:pl-[228px]">
-                <div className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-white/[0.06] bg-[#0B1220]/92 px-3 backdrop-blur-xl xl:hidden">
-                    <div className="flex items-center gap-2">
-                        <TrackGoLogo size="sm" />
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        <form className="hidden min-w-0 flex-1 sm:block" onSubmit={handleSidebarSearch}>
-                            <label className="flex h-9 w-[260px] items-center gap-2 rounded-full border border-white/[0.08] bg-[#0F172A] px-3 text-[#9CA3AF] shadow-sm">
-                                <NavIcon name="search" />
-                                <input
-                                    value={sidebarSearch}
-                                    onChange={(event) => setSidebarSearch(event.target.value)}
-                                    placeholder="Buscar lead..."
-                                    className="min-w-0 flex-1 bg-transparent text-[12px] font-semibold text-[#F9FAFB] outline-none placeholder:text-[#9CA3AF]"
-                                />
-                            </label>
-                        </form>
-                        <button
-                            type="button"
-                            onClick={() => setMobileMenuOpen(true)}
-                            className="flex h-10 w-10 items-center justify-center rounded-[13px] border border-white/[0.08] bg-[#0F172A] text-[#F9FAFB] shadow-[0_10px_24px_rgba(0,0,0,0.18)]"
-                            aria-label="Abrir menu"
-                            title="Menu"
-                        >
-                            <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5">
-                                <path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-
                 <MobileDrawer
                     open={mobileMenuOpen}
                     onClose={() => setMobileMenuOpen(false)}
@@ -189,7 +159,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                     {children}
                 </main>
 
-                <MobileBottomNav pathname={pathname} />
+                <MobileBottomNav pathname={pathname} onOpenMore={() => setMobileMenuOpen(true)} />
             </div>
         </div>
     );
@@ -399,10 +369,16 @@ function MobileNavSection({
     );
 }
 
-function MobileBottomNav({ pathname }: { pathname: string }) {
+function MobileBottomNav({
+    pathname,
+    onOpenMore,
+}: {
+    pathname: string;
+    onOpenMore: () => void;
+}) {
     return (
         <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/[0.06] bg-[#0B1220]/92 px-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-2 shadow-[0_-18px_45px_rgba(0,0,0,0.24)] backdrop-blur-xl xl:hidden">
-            <div className="mx-auto grid max-w-md grid-cols-4 gap-1">
+            <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
                 {NAV_MAIN.map((item) => {
                     const active = pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href));
                     return (
@@ -421,6 +397,16 @@ function MobileBottomNav({ pathname }: { pathname: string }) {
                         </Link>
                     );
                 })}
+                <button
+                    type="button"
+                    onClick={onOpenMore}
+                    className="flex flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-[10px] font-bold text-[#9CA3AF] transition active:bg-white/[0.06]"
+                >
+                    <span className="text-[#9CA3AF]">
+                        <NavIcon name="more" />
+                    </span>
+                    <span className="max-w-full truncate">Mas</span>
+                </button>
             </div>
         </nav>
     );
@@ -452,6 +438,7 @@ function NavIcon({ name }: { name: NavIconName }) {
                     <path {...common} d="M9 16h6" />
                 </>
             ) : null}
+            {name === "more" ? <path {...common} d="M5 12h.01M12 12h.01M19 12h.01" /> : null}
             {name === "activity" ? <path {...common} d="M22 12h-4l-3 8L9 4l-3 8H2" /> : null}
             {name === "wallet" ? (
                 <>

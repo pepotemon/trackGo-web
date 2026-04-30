@@ -64,7 +64,7 @@ function norm(text: unknown) {
 
 function selectClassName(extra = "") {
     return [
-        "h-9 w-full rounded-lg border border-[#e4e7ec] bg-white px-3 text-[12px] font-semibold text-[#344054] outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-blue-100",
+        "h-10 w-full rounded-[15px] border border-white/[0.08] bg-[#0F172A] px-3 text-[13px] font-bold text-[#F9FAFB] outline-none transition focus:border-blue-400/35 focus:ring-2 focus:ring-blue-400/10 sm:h-9 sm:rounded-lg sm:text-[12px] xl:border-[#e4e7ec] xl:bg-white xl:font-semibold xl:text-[#344054] xl:focus:border-[#2563eb] xl:focus:ring-blue-100",
         extra,
     ].join(" ");
 }
@@ -324,7 +324,7 @@ export default function UsersPage() {
                 subtitle="Gestiona permisos, cobertura, auto-asignacion y modelos de pago."
                 icon={<AppIcon name="users" tone="blue" size="sm" className="bg-transparent text-white ring-0" />}
                 actions={
-                    <>
+                    <div className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:flex sm:flex-wrap sm:justify-end">
                         <IconButton icon="refresh" label="Actualizar" variant="primary" onClick={loadUsers} />
                         <IconButton
                             icon="plus"
@@ -332,7 +332,7 @@ export default function UsersPage() {
                             variant="primary"
                             onClick={() => setCreateOpen(true)}
                         />
-                    </>
+                    </div>
                 }
             />
 
@@ -342,7 +342,7 @@ export default function UsersPage() {
                 </div>
             ) : null}
 
-            <section className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <section className="mb-3 grid grid-cols-2 gap-2 md:gap-4 xl:mb-4 xl:grid-cols-4">
                 <KpiCard label="Usuarios" value={stats.total} caption="Total registrado" icon="users" tone="blue" />
                 <KpiCard label="Activos" value={stats.active} caption="Usuarios operativos" icon="check" tone="green" />
                 <KpiCard label="Admins" value={stats.admins} caption="Permisos admin" icon="assign" tone="purple" />
@@ -351,9 +351,9 @@ export default function UsersPage() {
 
             <section>
                 <Card className="overflow-hidden">
-                    <div className="flex flex-col gap-4 px-4 py-4">
+                    <div className="flex flex-col gap-3 bg-[#111827] px-3 py-3 xl:bg-white xl:px-4 xl:py-4">
                         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                            <div>
+                            <div className="hidden xl:block">
                                 <h2 className="text-[14px] font-semibold text-[#172033]">
                                     Equipo
                                 </h2>
@@ -409,8 +409,8 @@ export default function UsersPage() {
                         </div>
                     </div>
 
-                    <div className="border-t border-[#eef1f5]">
-                        <div className="divide-y divide-[#eef1f5] lg:hidden">
+                    <div className="border-t border-white/[0.08] xl:border-[#eef1f5]">
+                        <div className="divide-y divide-white/[0.08] lg:hidden">
                             {loading ? (
                                 <UsersTableState icon="refresh" title="Cargando usuarios" body="Estamos preparando el equipo." />
                             ) : filteredUsers.length === 0 ? (
@@ -557,7 +557,7 @@ function FilterSelect({
 }) {
     return (
         <label className="block">
-            <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.07em] text-[#667085]">
+            <span className="mb-1 block text-[10px] font-black uppercase tracking-[0.07em] text-[#9CA3AF] xl:font-semibold xl:text-[#667085]">
                 {label}
             </span>
             <select
@@ -583,8 +583,8 @@ function UsersTableState({
     return (
         <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
             <AppIcon name={icon} tone={icon === "refresh" ? "purple" : "slate"} size="lg" />
-            <div className="mt-3 text-[13px] font-bold text-[#101936]">{title}</div>
-            <div className="mt-1 text-[12px] font-medium text-[#66739a]">{body}</div>
+            <div className="mt-3 text-[13px] font-black text-[#F9FAFB] xl:font-bold xl:text-[#101936]">{title}</div>
+            <div className="mt-1 text-[12px] font-bold text-[#9CA3AF] xl:font-medium xl:text-[#66739a]">{body}</div>
         </div>
     );
 }
@@ -606,8 +606,8 @@ function UserMobileCard({
             onClick={onSelect}
             className={
                 selected
-                    ? "block w-full bg-[#eff6ff] px-4 py-3 text-left"
-                    : "block w-full px-4 py-3 text-left transition hover:bg-[#f8f7ff]"
+                    ? "block w-full bg-blue-500/16 px-3 py-3 text-left xl:bg-[#eff6ff] xl:px-4"
+                    : "block w-full bg-[#111827] px-3 py-3 text-left transition active:bg-[#0F172A] xl:bg-white xl:px-4 xl:hover:bg-[#f8f7ff]"
             }
         >
             <div className="flex items-start justify-between gap-3">
@@ -616,10 +616,10 @@ function UserMobileCard({
                         {(user.name || user.email || "U").slice(0, 1).toUpperCase()}
                     </div>
                     <div className="min-w-0">
-                        <div className="truncate text-[13px] font-bold text-[#101936]">
+                        <div className="truncate text-[14px] font-black text-[#F9FAFB] xl:text-[13px] xl:font-bold xl:text-[#101936]">
                             {user.name || "Usuario"}
                         </div>
-                        <div className="mt-1 truncate text-[11px] font-medium text-[#8a93ad]">
+                        <div className="mt-1 truncate text-[12px] font-extrabold text-[#9CA3AF] xl:text-[11px] xl:font-medium xl:text-[#8a93ad]">
                             {user.email || "Sin correo registrado"}
                         </div>
                     </div>
@@ -642,7 +642,7 @@ function UserMobileCard({
                 </Badge>
             </div>
 
-            <div className="mt-3 truncate text-[11px] font-semibold text-[#66739a]">
+            <div className="mt-3 truncate text-[11px] font-black text-[#93C5FD] xl:font-semibold xl:text-[#66739a]">
                 {coverageLabel(user)}
             </div>
         </button>

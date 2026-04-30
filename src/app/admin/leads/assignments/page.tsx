@@ -33,7 +33,7 @@ const matchLabel: Record<LeadAutoAssignMatchType, string> = {
 
 function selectClassName(extra = "") {
     return [
-        "h-9 rounded-lg border border-[#e5e7eb] bg-white px-3 text-[12px] font-semibold text-[#52525b] outline-none transition focus:border-[#171717]",
+        "h-10 rounded-[15px] border border-white/[0.08] bg-[#0F172A] px-3 text-[13px] font-bold text-[#F9FAFB] outline-none transition focus:border-blue-400/35 focus:ring-2 focus:ring-blue-400/10 sm:h-9 sm:rounded-lg sm:text-[12px] xl:border-[#e5e7eb] xl:bg-white xl:font-semibold xl:text-[#52525b] xl:focus:border-[#7c3aed] xl:focus:ring-violet-100",
         extra,
     ].join(" ");
 }
@@ -130,7 +130,7 @@ export default function AutoAssignLogsPage() {
 
             <LeadQuickAccessCards />
 
-            <section className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <section className="mb-3 grid grid-cols-2 gap-2 md:gap-4 xl:mb-4 xl:grid-cols-4">
                 <KpiCard label="Asignaciones" value={stats.total} caption="Logs cargados" icon="assign" tone="green" />
                 <KpiCard label="Usuarios" value={stats.users} caption="Recibieron leads" icon="users" tone="blue" />
                 <KpiCard label="Ciudad / Hub" value={stats.city + stats.hubCity} caption="Matches precisos" icon="map" tone="purple" />
@@ -138,9 +138,9 @@ export default function AutoAssignLogsPage() {
             </section>
 
             <Card className="overflow-hidden">
-                <div className="flex flex-col gap-4 px-4 py-4">
+                <div className="flex flex-col gap-3 bg-[#111827] px-3 py-3 xl:bg-white xl:px-4 xl:py-4">
                     <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                        <div>
+                        <div className="hidden xl:block">
                             <h2 className="text-[14px] font-semibold text-[#171717]">
                                 Auditoria de auto-asignacion
                             </h2>
@@ -210,8 +210,8 @@ export default function AutoAssignLogsPage() {
 
                 <AssignmentsTable logs={filteredLogs} loading={loading} onQuickActions={setQuickLog} />
 
-                <div className="flex items-center justify-between gap-3 border-t border-[#f0f1f2] px-4 py-3">
-                    <p className="text-[12px] font-medium text-[#9ca3af]">
+                <div className="flex items-center justify-between gap-3 border-t border-white/[0.08] px-3 py-3 xl:border-[#f0f1f2] xl:px-4">
+                    <p className="text-[12px] font-extrabold text-[#9CA3AF] xl:font-medium xl:text-[#9ca3af]">
                         {filteredLogs.length} asignaciones cargadas en esta vista
                     </p>
                     {hasMore ? (
@@ -240,8 +240,8 @@ function AssignmentsTable({
     onQuickActions: (log: AutoAssignLogDoc) => void;
 }) {
     return (
-        <div className="border-t border-[#f0f1f2]">
-            <div className="divide-y divide-[#f0f1f2] lg:hidden">
+        <div className="border-t border-white/[0.08] xl:border-[#f0f1f2]">
+            <div className="divide-y divide-white/[0.08] lg:hidden">
                 {loading ? (
                     <div className="p-6 text-center text-[13px] font-semibold text-[#71717a]">
                         Cargando asignaciones...
@@ -306,14 +306,14 @@ function AssignmentMobileCard({
         <button
             type="button"
             onClick={() => onQuickActions(log)}
-            className="w-full bg-white px-3 py-3 text-left transition active:bg-[#f8f7ff]"
+            className="w-full bg-[#111827] px-3 py-3 text-left transition active:bg-[#0F172A] xl:bg-white xl:active:bg-[#f8f7ff]"
         >
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                    <div className="truncate text-[13px] font-bold text-[#101936]">
+                    <div className="truncate text-[14px] font-black text-[#F9FAFB] xl:text-[13px] xl:font-bold xl:text-[#101936]">
                         {leadTitle(log)}
                     </div>
-                    <div className="mt-1 truncate text-[11px] font-semibold text-[#66739a]">
+                    <div className="mt-1 truncate text-[12px] font-extrabold text-[#9CA3AF] xl:text-[11px] xl:font-semibold xl:text-[#66739a]">
                         {log.leadBusiness || log.leadPhone || "Lead asignado"}
                     </div>
                 </div>
@@ -326,14 +326,14 @@ function AssignmentMobileCard({
 
             <div className="mt-3 grid grid-cols-[1fr_auto] gap-3">
                 <div className="min-w-0">
-                    <div className="truncate text-[12px] font-bold text-[#344054]">
+                    <div className="truncate text-[12px] font-black text-[#93C5FD] xl:font-bold xl:text-[#344054]">
                         {log.userName || "Usuario"}
                     </div>
-                    <div className="mt-0.5 truncate text-[11px] font-medium text-[#98a2b3]">
+                    <div className="mt-0.5 truncate text-[11px] font-bold text-[#CBD5E1] xl:font-medium xl:text-[#98a2b3]">
                         {leadGeo(log)}
                     </div>
                 </div>
-                <div className="text-right text-[11px] font-bold text-[#66739a]">
+                <div className="text-right text-[11px] font-black text-[#9CA3AF] xl:font-bold xl:text-[#66739a]">
                     {formatDate(log.createdAt)}
                 </div>
             </div>
