@@ -775,20 +775,22 @@ function MobileActivityView({
                             type="date"
                             value={filters.startKey}
                             onChange={(e) => onPatchFilters({ startKey: e.target.value })}
-                            className="h-10 rounded-lg border border-[#E8E7FB] px-3"
+                            className="h-10 rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 text-[13px] font-semibold text-[#101936] outline-none focus:border-[#7c3aed] focus:ring-2 focus:ring-violet-100"
+                            style={{ fontSize: "16px" }}
                         />
 
                         <input
                             type="date"
                             value={filters.endKey}
                             onChange={(e) => onPatchFilters({ endKey: e.target.value })}
-                            className="h-10 rounded-lg border border-[#E8E7FB] px-3"
+                            className="h-10 rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 text-[13px] font-semibold text-[#101936] outline-none focus:border-[#7c3aed] focus:ring-2 focus:ring-violet-100"
+                            style={{ fontSize: "16px" }}
                         />
 
                         <select
                             value={filters.userId}
                             onChange={(e) => onPatchFilters({ userId: e.target.value })}
-                            className="h-10 rounded-lg border border-[#E8E7FB] px-3"
+                            className="h-10 rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 text-[13px] font-semibold text-[#101936] outline-none focus:border-[#7c3aed]"
                         >
                             <option value="all">Todos</option>
                             {users.map((u) => (
@@ -853,11 +855,11 @@ function MobileStatButton({
             type="button"
             onClick={onClick}
             disabled={!onClick || disabled}
-            className="min-w-0 rounded-[13px] border border-white/[0.08] bg-white/[0.035] px-1.5 py-2 disabled:opacity-50"
+            className="min-w-0 rounded-[14px] border border-[#E8E7FB] bg-white px-1.5 py-2.5 shadow-[0_4px_16px_rgba(91,33,255,0.07)] transition active:bg-[#f3f0ff] disabled:opacity-50"
         >
             <div className="flex items-center justify-center gap-1">
                 <AppIcon name={icon} tone="slate" size="sm" className={`h-4 w-4 bg-transparent ring-0 ${color}`} />
-                <span className="text-[12px] font-black text-white">{value}</span>
+                <span className="text-[13px] font-black text-[#101936]">{value}</span>
             </div>
             <div className="mt-1 truncate text-center text-[9px] font-black text-[#66739A]">{label}</div>
         </button>
@@ -942,7 +944,7 @@ function ActivityMobileCard({
             type="button"
             onClick={() => onQuickActions(row)}
             className={[
-                "block w-full max-w-full overflow-hidden rounded-[15px] border border-[#E8E7FB] bg-white text-left transition active:bg-[#0F172A]",
+                "block w-full max-w-full overflow-hidden rounded-[15px] border border-[#E8E7FB] bg-white text-left shadow-[0_4px_18px_rgba(91,33,255,0.06)] transition active:bg-[#f3f0ff]",
                 compact ? "px-2.5 py-2.5" : "px-3 py-3",
             ].join(" ")}
         >
@@ -951,7 +953,7 @@ function ActivityMobileCard({
                     <div className="truncate text-[13px] font-black text-[#101936]">
                         {eventTitle(row)}
                     </div>
-                    <div className="mt-0.5 truncate text-[11px] font-extrabold text-[#66739A]">
+                    <div className="mt-0.5 truncate text-[11px] font-semibold text-[#66739A]">
                         {eventSubtitle(row)}
                     </div>
                 </div>
@@ -961,22 +963,22 @@ function ActivityMobileCard({
 
             <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
                 <div className="min-w-0">
-                    <div className="truncate text-[12px] font-black text-[#93C5FD]">
+                    <div className="truncate text-[12px] font-black text-[#7C3AED]">
                         {row.userName}
                     </div>
-                    <div className="mt-0.5 truncate text-[10px] font-bold text-[#CBD5E1]">
+                    <div className="mt-0.5 truncate text-[10px] font-semibold text-[#98A2B3]">
                         {row.billingMode === "weekly_subscription" ? "Suscripción" : "Por visita"}
                     </div>
                 </div>
 
-                <div className="text-right text-[10px] font-black text-[#66739A]">
+                <div className="text-right text-[10px] font-semibold text-[#98A2B3]">
                     {formatDate(row.createdAt)}
                 </div>
             </div>
 
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 {reason ? (
-                    <span className="max-w-full truncate rounded-full border border-red-300/20 bg-red-400/10 px-2 py-1 text-[10px] font-black text-[#FCA5A5]">
+                    <span className="max-w-full truncate rounded-full border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-semibold text-red-600">
                         {reason}
                     </span>
                 ) : null}
@@ -1059,7 +1061,7 @@ function ActivityTableState({
             <div className="mt-3 text-[13px] font-black text-[#101936] xl:font-bold xl:text-[#101936]">
                 {title}
             </div>
-            <div className="mt-1 text-[12px] font-bold text-[#66739] xl:font-medium xl:text-[#66739a]">
+            <div className="mt-1 text-[12px] font-bold text-[#66739a] xl:font-medium xl:text-[#66739a]">
                 {body}
             </div>
         </div>

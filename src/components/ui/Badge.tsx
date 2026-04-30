@@ -10,12 +10,12 @@ export function Badge({
     tone?: BadgeTone;
 }) {
     const map: Record<BadgeTone, string> = {
-        green: "bg-emerald-400/10 text-[#86EFAC] xl:bg-[#ecfdf5] xl:text-[#047857]",
-        red: "bg-red-400/10 text-[#FCA5A5] xl:bg-[#fef2f2] xl:text-[#dc2626]",
-        blue: "bg-blue-400/10 text-[#93C5FD] xl:bg-[#eff6ff] xl:text-[#2563eb]",
-        gray: "bg-white/[0.06] text-[#CBD5E1] xl:bg-[#f2f4f7] xl:text-[#667085]",
-        yellow: "bg-yellow-300/10 text-[#FDE68A] xl:bg-[#fffbeb] xl:text-[#b45309]",
-        purple: "bg-violet-400/10 text-[#C4B5FD] xl:bg-[#f5f3ff] xl:text-[#7c3aed]",
+        green: "bg-[#ecfdf5] text-[#047857] xl:bg-[#ecfdf5] xl:text-[#047857]",
+        red: "bg-[#fef2f2] text-[#dc2626] xl:bg-[#fef2f2] xl:text-[#dc2626]",
+        blue: "bg-[#eff6ff] text-[#2563eb] xl:bg-[#eff6ff] xl:text-[#2563eb]",
+        gray: "bg-[#f2f4f7] text-[#667085] xl:bg-[#f2f4f7] xl:text-[#667085]",
+        yellow: "bg-[#fffbeb] text-[#b45309] xl:bg-[#fffbeb] xl:text-[#b45309]",
+        purple: "bg-[#f5f3ff] text-[#7c3aed] xl:bg-[#f5f3ff] xl:text-[#7c3aed]",
     };
 
     return (
