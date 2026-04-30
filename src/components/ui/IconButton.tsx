@@ -30,14 +30,22 @@ export function IconButton({
             variant={variant}
             aria-label={label}
             title={label}
-            className={`h-10 w-10 px-0 py-0 ${className}`}
+            className={[
+                "h-10 w-10 p-0 rounded-[14px]",
+                "active:scale-[0.96]",
+                className,
+            ].join(" ")}
             {...props}
         >
             <AppIcon
                 name={icon}
                 tone={tone ?? toneByVariant[variant]}
                 size="sm"
-                className={variant === "primary" ? "bg-transparent text-white ring-0" : "h-5 w-5 rounded-lg"}
+                className={
+                    variant === "primary"
+                        ? "bg-transparent text-white ring-0"
+                        : "bg-transparent text-current ring-0"
+                }
             />
         </Button>
     );

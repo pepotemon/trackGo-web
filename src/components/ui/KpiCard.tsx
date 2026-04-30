@@ -50,7 +50,19 @@ export function KpiCard({
     tone?: AppIconTone;
 }) {
     return (
-        <div className={`relative overflow-hidden rounded-[18px] border border-white/[0.08] bg-[#111827] p-3 shadow-[0_12px_30px_rgba(0,0,0,0.16)] sm:p-5 xl:rounded-2xl xl:border-[#e7e8f0] xl:bg-gradient-to-br ${fillColors[tone]} xl:to-white xl:shadow-[0_16px_42px_rgba(16,25,54,0.08)]`}>
+        <div
+            className={[
+                "relative overflow-hidden rounded-[18px]",
+                "border border-[#e8e7fb]",
+                "bg-gradient-to-br",
+                fillColors[tone],
+                "to-white",
+                "p-3 shadow-[0_14px_34px_rgba(91,33,255,0.08)]",
+                "sm:p-5",
+                // DESKTOP intacto
+                "xl:rounded-2xl xl:border-[#e7e8f0] xl:bg-gradient-to-br xl:to-white xl:shadow-[0_16px_42px_rgba(16,25,54,0.08)]",
+            ].join(" ")}
+        >
             <div className="flex items-start gap-3 sm:gap-4">
                 <AppIcon name={icon} tone={tone} size="md" className="sm:h-14 sm:w-14" />
 
@@ -58,11 +70,13 @@ export function KpiCard({
                     <p className={`text-[10px] font-extrabold uppercase tracking-[0.06em] sm:text-[11px] ${labelColors[tone]}`}>
                         {label}
                     </p>
-                    <p className="mt-1.5 break-words font-mono text-[clamp(18px,7vw,24px)] font-black leading-none tracking-[-0.04em] text-[#F9FAFB] sm:mt-2 sm:text-[clamp(20px,2.15vw,30px)] xl:font-semibold xl:text-[#101936]">
+
+                    <p className="mt-1.5 break-words font-mono text-[clamp(18px,7vw,24px)] font-black leading-none tracking-[-0.04em] text-[#101936] sm:mt-2 sm:text-[clamp(20px,2.15vw,30px)] xl:font-semibold">
                         {value}
                     </p>
+
                     {caption ? (
-                        <p className="mt-1.5 max-w-[160px] text-[11px] font-extrabold leading-snug text-[#9CA3AF] sm:mt-2 sm:text-[12px] xl:font-medium xl:text-[#66739a]">
+                        <p className="mt-1.5 max-w-[160px] text-[11px] font-bold leading-snug text-[#66739a] sm:mt-2 sm:text-[12px] xl:font-medium">
                             {caption}
                         </p>
                     ) : null}
