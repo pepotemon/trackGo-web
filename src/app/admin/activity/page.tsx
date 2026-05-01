@@ -244,25 +244,44 @@ export default function ActivityPage() {
         });
     }, [filters.search, filters.type, filters.userId, rows]);
 
-    const stats = useMemo<ActivityStats>(() => {
-        const assignments = filteredRows.length;
+    // Deduplicate by clientId so a client counted as both visited+rejected
+    // doesn't inflate stats. pending_client rows (current status) win over events.
+    const deduplicatedRows = useMemo<ActivityEventRow[]>(() => {
+        const byClient = new Map<string, ActivityEventRow>();
 
-        return {
-            total: filteredRows.length,
-            visited: filteredRows.filter((row) => row.type === "visited").length,
-            rejected: filteredRows.filter((row) => row.type === "rejected").length,
-            pending: filteredRows.filter((row) => row.type === "pending").length,
-            users: assignments,
-        };
+        for (const row of filteredRows) {
+            if (row.source !== "daily_event") continue;
+            const existing = byClient.get(row.clientId);
+            if (!existing || row.createdAt > existing.createdAt) {
+                byClient.set(row.clientId, row);
+            }
+        }
+
+        for (const row of filteredRows) {
+            if (row.source !== "pending_client") continue;
+            byClient.set(row.clientId, row);
+        }
+
+        return Array.from(byClient.values());
     }, [filteredRows]);
+
+    const stats = useMemo<ActivityStats>(() => {
+        return {
+            total: deduplicatedRows.length,
+            visited: deduplicatedRows.filter((row) => row.type === "visited").length,
+            rejected: deduplicatedRows.filter((row) => row.type === "rejected").length,
+            pending: deduplicatedRows.filter((row) => row.type === "pending").length,
+            users: deduplicatedRows.length,
+        };
+    }, [deduplicatedRows]);
 
     const activityRowsByType = useMemo(() => {
         return {
-            visited: filteredRows.filter((row) => row.type === "visited"),
-            rejected: filteredRows.filter((row) => row.type === "rejected"),
-            pending: filteredRows.filter((row) => row.type === "pending"),
+            visited: deduplicatedRows.filter((row) => row.type === "visited"),
+            rejected: deduplicatedRows.filter((row) => row.type === "rejected"),
+            pending: deduplicatedRows.filter((row) => row.type === "pending"),
         };
-    }, [filteredRows]);
+    }, [deduplicatedRows]);
 
     const earningsRows = useMemo(() => {
         const byUser = new Map<
@@ -272,7 +291,12 @@ export default function ActivityPage() {
 
         for (const row of activityRowsByType.visited) {
             const user = userMap.get(row.userId);
-            const rate = getRatePerVisit(user);
+            // Prefer frozen rate stored in the event over current user rate
+            const frozenRate = row.rateApplied ?? row.amountSnapshot ?? row.ratePerVisitSnapshot;
+            const rate = typeof frozenRate === "number" && Number.isFinite(frozenRate)
+                ? frozenRate
+                : getRatePerVisit(user);
+
             const current = byUser.get(row.userId) ?? {
                 userId: row.userId,
                 name: row.userName || user?.name || "Usuario",
