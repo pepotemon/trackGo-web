@@ -9,6 +9,8 @@ import {
     type ActivityCursor,
 } from "@/data/activityRepo";
 import { listAccountingUsers } from "@/data/accountingRepo";
+import { assignLeadToUser } from "@/data/leadsRepo";
+import { AssignUserModal } from "@/features/leads/AssignUserModal";
 import { dayKeyFromDate, weekRangeKeysMonToSun } from "@/lib/date";
 import type {
     ActivityEventRow,
@@ -522,22 +524,19 @@ export default function ActivityPage() {
                         <div className="flex flex-row items-center justify-between gap-3">
                             <div>
                                 <h2 className="text-[14px] font-semibold text-[#171717]">
-                                    Auditoría {viewMode === "day" ? "diaria" : "semanal"}
+                                    Registros
                                 </h2>
                                 <p className="mt-0.5 text-[12px] font-medium text-[#66739A]">
                                     {filteredRows.length} visibles de {events.length} cargados
                                 </p>
                             </div>
 
-                            <div className="flex items-center gap-2">
-                                <ViewModeSwitch value={viewMode} onChange={changeViewMode} />
-                                <Input
-                                    value={filters.search}
-                                    onChange={(event) => patchFilters({ search: event.target.value })}
-                                    placeholder="Buscar cliente, teléfono, usuario..."
-                                    className="w-[360px]"
-                                />
-                            </div>
+                            <Input
+                                value={filters.search}
+                                onChange={(event) => patchFilters({ search: event.target.value })}
+                                placeholder="Buscar cliente, teléfono, usuario..."
+                                className="w-[360px]"
+                            />
                         </div>
 
                         <div className="grid grid-cols-[1fr_1fr_1.25fr_1fr_150px] gap-2">
@@ -709,10 +708,14 @@ function MobileActivityView({
     onOpenList: (mode: Exclude<ActivityEventType, "all">) => void;
     onOpenEarnings: () => void;
 }) {
+    const [sheetRow, setSheetRow] = useState<ActivityEventRow | null>(null);
+    const [assigningRow, setAssigningRow] = useState<ActivityEventRow | null>(null);
+    const [assigning, setAssigning] = useState(false);
     const done = stats.visited + stats.rejected;
     const pct = stats.total <= 0 ? 0 : Math.round((done / Math.max(1, stats.total)) * 100);
 
     return (
+        <>
         <div className="tg-screen-enter -mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] max-w-[100vw] bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.16),transparent_34%),linear-gradient(180deg,#FBFAFF_0%,#F6F3FF_48%,#FFFFFF_100%)] pb-6 text-[#101936]">
 
             {/* STICKY HEADER */}
@@ -848,7 +851,7 @@ function MobileActivityView({
                     <ActivityTableState icon="filter" title="Sin resultados" body="No hay actividad con esos filtros." />
                 ) : (
                     rows.map((row) => (
-                        <ActivityMobileCard key={row.id} row={row} />
+                        <ActivityMobileCard key={row.id} row={row} onOpenSheet={setSheetRow} />
                     ))
                 )}
 
@@ -862,18 +865,42 @@ function MobileActivityView({
                     </button>
                 )}
             </div>
-
-            {/* FILTERS MODAL */}
-            <MobileActivityFiltersModal
-                open={filterModalOpen}
-                onClose={onCloseFilters}
-                filters={filters}
-                users={users}
-                onPatchFilters={onPatchFilters}
-                onResetFilters={() => { onResetFilters(); onCloseFilters(); }}
-                onApply={() => { onApplyRange(); onCloseFilters(); }}
-            />
         </div>
+
+        {/* Modals rendered outside the animated container to avoid stacking context issues */}
+        <MobileActivityFiltersModal
+            open={filterModalOpen}
+            onClose={onCloseFilters}
+            filters={filters}
+            users={users}
+            onPatchFilters={onPatchFilters}
+            onResetFilters={() => { onResetFilters(); onCloseFilters(); }}
+            onApply={() => { onApplyRange(); onCloseFilters(); }}
+        />
+        <ActivityActionSheet
+            row={sheetRow}
+            open={!!sheetRow}
+            onClose={() => setSheetRow(null)}
+            onOpenAssign={(row) => { setSheetRow(null); setAssigningRow(row); }}
+        />
+        <AssignUserModal
+            open={!!assigningRow}
+            onClose={() => setAssigningRow(null)}
+            users={users}
+            title="Reasignar a usuario"
+            saving={assigning}
+            onAssign={async (userId) => {
+                if (!assigningRow) return;
+                setAssigning(true);
+                try {
+                    await assignLeadToUser(assigningRow.clientId, userId);
+                    setAssigningRow(null);
+                } finally {
+                    setAssigning(false);
+                }
+            }}
+        />
+        </>
     );
 }
 
@@ -991,11 +1018,12 @@ function ActivityTable({
 function ActivityMobileCard({
     row,
     compact = false,
+    onOpenSheet,
 }: {
     row: ActivityEventRow;
     compact?: boolean;
+    onOpenSheet?: (row: ActivityEventRow) => void;
 }) {
-    const [sheetOpen, setSheetOpen] = useState(false);
     const reason = rejectedReasonText(row);
 
     return (
@@ -1026,7 +1054,7 @@ function ActivityMobileCard({
                         )}
                         <button
                             type="button"
-                            onClick={() => setSheetOpen(true)}
+                            onClick={() => onOpenSheet?.(row)}
                             className="flex h-8 w-8 items-center justify-center rounded-[10px] border border-[#E8E7FB] bg-[#f8f7ff] transition active:bg-[#f3f0ff]"
                             aria-label="Acciones"
                         >
@@ -1053,12 +1081,6 @@ function ActivityMobileCard({
                     </div>
                 ) : null}
             </article>
-
-            <ActivityActionSheet
-                row={row}
-                open={sheetOpen}
-                onClose={() => setSheetOpen(false)}
-            />
         </>
     );
 }
@@ -1067,10 +1089,12 @@ function ActivityActionSheet({
     row,
     open,
     onClose,
+    onOpenAssign,
 }: {
-    row: ActivityEventRow;
+    row: ActivityEventRow | null;
     open: boolean;
     onClose: () => void;
+    onOpenAssign?: (row: ActivityEventRow) => void;
 }) {
     useEffect(() => {
         if (!open) return;
@@ -1079,7 +1103,7 @@ function ActivityActionSheet({
         return () => window.removeEventListener("scroll", handler);
     }, [open, onClose]);
 
-    if (!open) return null;
+    if (!open || !row) return null;
 
     const waUrl = whatsappUrl(row.phone);
 
@@ -1104,7 +1128,7 @@ function ActivityActionSheet({
                 <div className="grid gap-2">
                     <Link
                         href={`/admin/clients/${row.clientId}`}
-                        className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#eff6ff] px-4 text-[14px] font-bold text-blue-700 transition active:bg-blue-100"
+                        className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#eff6ff] px-4 text-[14px] font-bold text-[#101936] transition active:bg-blue-100"
                     >
                         <AppIcon name="users" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-blue-600 ring-0" />
                         Ver cliente
@@ -1112,18 +1136,29 @@ function ActivityActionSheet({
 
                     <Link
                         href={`/admin/leads/${row.clientId}`}
-                        className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#f3f0ff] px-4 text-[14px] font-bold text-[#7C3AED] transition active:bg-violet-200"
+                        className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#f3f0ff] px-4 text-[14px] font-bold text-[#101936] transition active:bg-violet-200"
                     >
                         <AppIcon name="chat" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#7C3AED] ring-0" />
                         Chat
                     </Link>
+
+                    {onOpenAssign ? (
+                        <button
+                            type="button"
+                            onClick={() => onOpenAssign(row)}
+                            className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#f3f0ff] px-4 text-[14px] font-bold text-[#101936] transition active:bg-violet-200"
+                        >
+                            <AppIcon name="assign" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#7C3AED] ring-0" />
+                            Reasignar
+                        </button>
+                    ) : null}
 
                     {row.mapsUrl ? (
                         <a
                             href={row.mapsUrl}
                             target="_blank"
                             rel="noreferrer"
-                            className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-emerald-50 px-4 text-[14px] font-bold text-emerald-700 transition active:bg-emerald-100"
+                            className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-emerald-50 px-4 text-[14px] font-bold text-[#101936] transition active:bg-emerald-100"
                         >
                             <AppIcon name="map" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-emerald-600 ring-0" />
                             Maps
@@ -1135,7 +1170,7 @@ function ActivityActionSheet({
                             href={waUrl}
                             target="_blank"
                             rel="noreferrer"
-                            className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-emerald-50 px-4 text-[14px] font-bold text-emerald-700 transition active:bg-emerald-100"
+                            className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-emerald-50 px-4 text-[14px] font-bold text-[#101936] transition active:bg-emerald-100"
                         >
                             <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 fill-none stroke-emerald-600 stroke-2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                 <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.96a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 16.92Z" />
@@ -1229,11 +1264,19 @@ function ActivityTableState({
 }) {
     return (
         <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
-            <AppIcon name={icon} tone={icon === "refresh" ? "purple" : "slate"} size="lg" />
-            <div className="mt-3 text-[13px] font-black text-[#101936] xl:font-bold xl:text-[#101936]">
+            {icon === "refresh" ? (
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f3f0ff]">
+                    <svg className="tg-spin h-7 w-7 text-[#7C3AED]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M21 12a9 9 0 1 1-3.1-6.8" />
+                    </svg>
+                </div>
+            ) : (
+                <AppIcon name="filter" tone="slate" size="lg" />
+            )}
+            <div className="mt-3 text-[13px] font-semibold text-[#66739a]">
                 {title}
             </div>
-            <div className="mt-1 text-[12px] font-bold text-[#66739a] xl:font-medium xl:text-[#66739a]">
+            <div className="mt-1 text-[11px] font-medium text-[#98a2b3]">
                 {body}
             </div>
         </div>

@@ -7,6 +7,7 @@ import {
     updateLeadStatus,
 } from "@/data/leadsRepo";
 import { listAdminUsers } from "@/data/usersRepo";
+import { weekRangeKeysMonToSun } from "@/lib/date";
 import type {
     LeadCityOption,
     LeadFilters,
@@ -19,14 +20,17 @@ import type {
 } from "@/types/leads";
 import type { UserDoc } from "@/types/users";
 
-const EMPTY_FILTERS: LeadFilters = {
-    status: "pending_review",
-    city: "all",
-    assignment: "all",
-    search: "",
-    startKey: "",
-    endKey: "",
-};
+function defaultFilters(): LeadFilters {
+    const { startKey, endKey } = weekRangeKeysMonToSun();
+    return {
+        status: "pending_review",
+        city: "all",
+        assignment: "all",
+        search: "",
+        startKey,
+        endKey,
+    };
+}
 
 const DEFAULT_PAGE_SIZE = 80;
 const FILTERED_PAGE_SIZE = 150;
@@ -166,7 +170,7 @@ function filterLeads(leads: MetaLeadDoc[], filters: LeadFilters) {
 export function useAdminLeadQueue() {
     const [leads, setLeads] = useState<MetaLeadDoc[]>([]);
     const [users, setUsers] = useState<UserDoc[]>([]);
-    const [filters, setFilters] = useState<LeadFilters>(EMPTY_FILTERS);
+    const [filters, setFilters] = useState<LeadFilters>(() => defaultFilters());
     const deferredSearch = useDeferredValue(filters.search);
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
@@ -192,19 +196,28 @@ export function useAdminLeadQueue() {
         return filterLeads(leads, filters);
     }, [filters, leads]);
 
+    // Stats count leads in the current date range (ignoring status/city/search filters)
+    const statsLeads = useMemo(() => {
+        if (!filters.startKey && !filters.endKey) return leads;
+        return leads.filter((lead) => {
+            const at = leadActivityAt(lead);
+            const dayKey = at ? dayKeyFromMs(at) : "";
+            if (filters.startKey && dayKey < filters.startKey) return false;
+            if (filters.endKey && dayKey > filters.endKey) return false;
+            return true;
+        });
+    }, [leads, filters.startKey, filters.endKey]);
+
     const stats = useMemo<LeadQueueStats>(() => {
         return {
-            total: leads.length,
-            pendingReview: leads.filter((lead) => lead.verificationStatus === "pending_review")
-                .length,
-            incomplete: leads.filter((lead) => lead.verificationStatus === "incomplete")
-                .length,
-            notSuitable: leads.filter((lead) => lead.verificationStatus === "not_suitable")
-                .length,
-            verified: leads.filter((lead) => lead.verificationStatus === "verified").length,
-            outOfCoverage: leads.filter((lead) => lead.location.outOfCoverage).length,
+            total: statsLeads.length,
+            pendingReview: statsLeads.filter((lead) => lead.verificationStatus === "pending_review").length,
+            incomplete: statsLeads.filter((lead) => lead.verificationStatus === "incomplete").length,
+            notSuitable: statsLeads.filter((lead) => lead.verificationStatus === "not_suitable").length,
+            verified: statsLeads.filter((lead) => lead.verificationStatus === "verified").length,
+            outOfCoverage: statsLeads.filter((lead) => lead.location.outOfCoverage).length,
         };
-    }, [leads]);
+    }, [statsLeads]);
 
     async function loadUsers() {
         setErr(null);
@@ -375,7 +388,7 @@ export function useAdminLeadQueue() {
     }
 
     function resetFilters() {
-        setFilters(EMPTY_FILTERS);
+        setFilters(defaultFilters());
     }
 
     return {

@@ -78,6 +78,16 @@ button {
   }
 }
 
+@keyframes tg-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+.tg-spin {
+  animation: tg-spin 0.7s linear infinite;
+}
+
 @keyframes tg-screen-enter {
   from {
     opacity: 0;

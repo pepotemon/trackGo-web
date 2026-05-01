@@ -2,12 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { dayKeyFromDate, weekRangeKeysMonToSun } from "@/lib/date";
 import {
     buildCoverageMatches,
     userCoverageLabel,
 } from "@/features/leads/coverageMatching";
 import { LeadQuickAccessCards } from "@/features/leads/LeadQuickAccessCards";
 import { LeadEditModal } from "@/features/leads/LeadEditModal";
+import { AssignUserModal } from "@/features/leads/AssignUserModal";
 import { useAdminLeadQueue } from "@/features/leads/useAdminLeadQueue";
 import { deleteLead } from "@/data/leadsRepo";
 import type { LeadFilters, LeadReviewStatus, MetaLeadDoc } from "@/types/leads";
@@ -124,6 +126,8 @@ export default function AdminLeadsPage() {
     const [coverageOpen, setCoverageOpen] = useState(false);
     const [editingLead, setEditingLead] = useState<MetaLeadDoc | null>(null);
     const [quickLead, setQuickLead] = useState<MetaLeadDoc | null>(null);
+    const [viewMode, setViewMode] = useState<"day" | "week">("week");
+    const [assigningLead, setAssigningLead] = useState<MetaLeadDoc | null>(null);
 
     const {
         users,
@@ -143,6 +147,11 @@ export default function AdminLeadsPage() {
         loadMore,
         assignLead,
     } = useAdminLeadQueue();
+
+    async function handleAssignLead(lead: MetaLeadDoc, userId: string) {
+        await assignLead(lead, userId);
+        setAssigningLead(null);
+    }
 
     async function handleDeleteLead(lead: MetaLeadDoc) {
         const ok = window.confirm(`¿Eliminar el lead "${displayName(lead)}"? Esta acción no se puede deshacer.`);
@@ -170,6 +179,17 @@ export default function AdminLeadsPage() {
 
     function patchFilters(patch: Partial<LeadFilters>) {
         setFilters((prev) => ({ ...prev, ...patch }));
+    }
+
+    function changeViewMode(mode: "day" | "week") {
+        setViewMode(mode);
+        if (mode === "day") {
+            const today = dayKeyFromDate(new Date());
+            patchFilters({ startKey: today, endKey: today });
+        } else {
+            const { startKey, endKey } = weekRangeKeysMonToSun();
+            patchFilters({ startKey, endKey });
+        }
     }
 
     useEffect(() => {
@@ -210,6 +230,10 @@ export default function AdminLeadsPage() {
                     onLoadMore={loadMore}
                     onOpenCoverage={() => setCoverageOpen(true)}
                     onOpenEdit={setEditingLead}
+                    onDelete={handleDeleteLead}
+                    onOpenAssign={setAssigningLead}
+                    viewMode={viewMode}
+                    onChangeViewMode={changeViewMode}
                 />
             </div>
 
@@ -405,6 +429,14 @@ export default function AdminLeadsPage() {
                 }}
                 onDelete={handleDeleteLead}
             />
+
+            <AssignUserModal
+                open={!!assigningLead}
+                onClose={() => setAssigningLead(null)}
+                users={users}
+                onAssign={(userId) => assigningLead && handleAssignLead(assigningLead, userId)}
+                saving={!!savingId}
+            />
         </div>
     );
 }
@@ -425,6 +457,10 @@ function MobileLeadQueue({
     onLoadMore,
     onOpenCoverage,
     onOpenEdit,
+    onDelete,
+    onOpenAssign,
+    viewMode,
+    onChangeViewMode,
 }: {
     leads: MetaLeadDoc[];
     stats: ReturnType<typeof useAdminLeadQueue>["stats"];
@@ -441,6 +477,10 @@ function MobileLeadQueue({
     onLoadMore: () => void;
     onOpenCoverage: () => void;
     onOpenEdit: (lead: MetaLeadDoc) => void;
+    onDelete: (lead: MetaLeadDoc) => void;
+    onOpenAssign: (lead: MetaLeadDoc) => void;
+    viewMode: "day" | "week";
+    onChangeViewMode: (mode: "day" | "week") => void;
 }) {
     const [filterModalOpen, setFilterModalOpen] = useState(false);
 
@@ -471,6 +511,19 @@ function MobileLeadQueue({
                         </p>
                     </div>
 
+                    <button
+                        type="button"
+                        onClick={() => onChangeViewMode(viewMode === "day" ? "week" : "day")}
+                        className="flex h-10 items-center rounded-[13px] border border-[#E8E7FB] bg-white px-3 text-[12px] font-black text-[#101936] shadow-sm transition active:bg-[#f3f0ff]"
+                    >
+                        {viewMode === "day" ? "Día" : "Semana"}
+                    </button>
+                    <MobileHeaderButton
+                        onClick={onOpenCoverage}
+                        disabled={loading || !leads.length}
+                        icon="link"
+                        label="Cobertura"
+                    />
                     <Link
                         href="/admin/leads/assignments"
                         title="Asignaciones"
@@ -484,12 +537,6 @@ function MobileLeadQueue({
                             className="h-[18px] w-[18px] bg-transparent text-[#7C3AED] ring-0"
                         />
                     </Link>
-                    <MobileHeaderButton
-                        onClick={onReloadUsers}
-                        disabled={loading}
-                        icon="users"
-                        label="Usuarios"
-                    />
                 </div>
 
                 {/* STAT CARDS */}
@@ -497,7 +544,7 @@ function MobileLeadQueue({
                     <LeadStatCard
                         label="Revisar"
                         value={stats.pendingReview}
-                        icon="lead"
+                        icon="search"
                         color="text-blue-500"
                         active={filters.status === "pending_review"}
                         onClick={() => onPatchFilters({ status: filters.status === "pending_review" ? "all" : "pending_review" })}
@@ -505,7 +552,7 @@ function MobileLeadQueue({
                     <LeadStatCard
                         label="Incompl."
                         value={stats.incomplete}
-                        icon="alert"
+                        icon="clock"
                         color="text-amber-500"
                         active={filters.status === "incomplete"}
                         onClick={() => onPatchFilters({ status: filters.status === "incomplete" ? "all" : "incomplete" })}
@@ -513,7 +560,7 @@ function MobileLeadQueue({
                     <LeadStatCard
                         label="No aptos"
                         value={stats.notSuitable}
-                        icon="close"
+                        icon="ban"
                         color="text-red-500"
                         active={filters.status === "not_suitable"}
                         onClick={() => onPatchFilters({ status: filters.status === "not_suitable" ? "all" : "not_suitable" })}
@@ -597,6 +644,8 @@ function MobileLeadQueue({
                             lead={lead}
                             saving={savingId === lead.id}
                             onOpenEdit={onOpenEdit}
+                            onDelete={onDelete}
+                            onOpenAssign={onOpenAssign}
                         />
                     ))
                 )}
@@ -636,7 +685,7 @@ function LeadStatCard({
 }: {
     label: string;
     value: number;
-    icon: "lead" | "alert" | "close" | "filter";
+    icon: "search" | "clock" | "ban" | "filter";
     color: string;
     active: boolean;
     onClick: () => void;
@@ -683,10 +732,14 @@ function MobileLeadCard({
     lead,
     saving,
     onOpenEdit,
+    onDelete,
+    onOpenAssign,
 }: {
     lead: MetaLeadDoc;
     saving: boolean;
     onOpenEdit: (lead: MetaLeadDoc) => void;
+    onDelete: (lead: MetaLeadDoc) => void;
+    onOpenAssign: (lead: MetaLeadDoc) => void;
 }) {
     const [sheetOpen, setSheetOpen] = useState(false);
     const city = mobileCityName(lead);
@@ -771,6 +824,8 @@ function MobileLeadCard({
                 open={sheetOpen}
                 onClose={() => setSheetOpen(false)}
                 onOpenEdit={onOpenEdit}
+                onDelete={onDelete}
+                onOpenAssign={onOpenAssign}
             />
         </>
     );
@@ -781,11 +836,15 @@ function LeadActionSheet({
     open,
     onClose,
     onOpenEdit,
+    onDelete,
+    onOpenAssign,
 }: {
     lead: MetaLeadDoc;
     open: boolean;
     onClose: () => void;
     onOpenEdit: (lead: MetaLeadDoc) => void;
+    onDelete: (lead: MetaLeadDoc) => void;
+    onOpenAssign: (lead: MetaLeadDoc) => void;
 }) {
     useEffect(() => {
         if (!open) return;
@@ -823,7 +882,7 @@ function LeadActionSheet({
                     <Link
                         href={`/admin/leads/${lead.id}`}
                         onClick={onClose}
-                        className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#f3f0ff] px-4 text-[14px] font-bold text-[#7C3AED] transition active:bg-violet-200"
+                        className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#f3f0ff] px-4 text-[14px] font-bold text-[#101936] transition active:bg-violet-200"
                     >
                         <AppIcon name="chat" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#7C3AED] ring-0" />
                         Chat
@@ -832,10 +891,19 @@ function LeadActionSheet({
                     <button
                         type="button"
                         onClick={() => { onClose(); onOpenEdit(lead); }}
-                        className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#fff7ed] px-4 text-[14px] font-bold text-orange-700 transition active:bg-orange-100"
+                        className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#fff7ed] px-4 text-[14px] font-bold text-[#101936] transition active:bg-orange-100"
                     >
                         <AppIcon name="edit" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-orange-600 ring-0" />
                         Editar
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => { onClose(); onOpenAssign(lead); }}
+                        className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#f3f0ff] px-4 text-[14px] font-bold text-[#101936] transition active:bg-violet-200"
+                    >
+                        <AppIcon name="assign" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#7C3AED] ring-0" />
+                        Asignar a usuario
                     </button>
 
                     {hasMaps ? (
@@ -844,7 +912,7 @@ function LeadActionSheet({
                             target="_blank"
                             rel="noreferrer"
                             onClick={onClose}
-                            className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-emerald-50 px-4 text-[14px] font-bold text-emerald-700 transition active:bg-emerald-100"
+                            className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-emerald-50 px-4 text-[14px] font-bold text-[#101936] transition active:bg-emerald-100"
                         >
                             <AppIcon name="map" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-emerald-600 ring-0" />
                             Maps
@@ -857,7 +925,7 @@ function LeadActionSheet({
                             target="_blank"
                             rel="noreferrer"
                             onClick={onClose}
-                            className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-emerald-50 px-4 text-[14px] font-bold text-emerald-700 transition active:bg-emerald-100"
+                            className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-emerald-50 px-4 text-[14px] font-bold text-[#101936] transition active:bg-emerald-100"
                         >
                             <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 fill-none stroke-emerald-600 stroke-2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                 <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.96a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 16.92Z" />
@@ -865,6 +933,15 @@ function LeadActionSheet({
                             WhatsApp
                         </a>
                     ) : null}
+
+                    <button
+                        type="button"
+                        onClick={() => { onClose(); onDelete(lead); }}
+                        className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-red-50 px-4 text-[14px] font-bold text-[#101936] transition active:bg-red-100"
+                    >
+                        <AppIcon name="trash" tone="red" size="sm" className="h-5 w-5 bg-transparent ring-0" />
+                        Eliminar lead
+                    </button>
                 </div>
 
                 <button
@@ -1052,14 +1129,17 @@ function MobileState({
 }) {
     return (
         <div className="mt-10 flex flex-col items-center gap-3 px-4 text-center">
-            <AppIcon
-                name={icon}
-                tone={icon === "refresh" ? "purple" : "slate"}
-                size="lg"
-                className="bg-[#f3f0ff]"
-            />
-            <p className="text-[14px] font-black text-[#101936]">{title}</p>
-            <p className="text-[12px] font-medium text-[#66739A]">{body}</p>
+            {icon === "refresh" ? (
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f3f0ff]">
+                    <svg className="tg-spin h-7 w-7 text-[#7C3AED]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M21 12a9 9 0 1 1-3.1-6.8" />
+                    </svg>
+                </div>
+            ) : (
+                <AppIcon name="filter" tone="slate" size="lg" />
+            )}
+            <p className="text-[13px] font-semibold text-[#66739A]">{title}</p>
+            <p className="text-[11px] font-medium text-[#98A2B3]">{body}</p>
         </div>
     );
 }

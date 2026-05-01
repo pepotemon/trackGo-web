@@ -4,8 +4,10 @@ export type AppIconName =
     | "arrowLeft"
     | "arrowRight"
     | "assign"
+    | "ban"
     | "chat"
     | "check"
+    | "clock"
     | "close"
     | "download"
     | "edit"
@@ -97,6 +99,12 @@ export function AppIcon({
                 strokeLinejoin="round"
             >
                 {name === "activity" ? <path d="M22 12h-4l-3 8L9 4l-3 8H2" /> : null}
+                {name === "ban" ? (
+                    <>
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="m7.5 16.5 9-9" />
+                    </>
+                ) : null}
                 {name === "alert" ? (
                     <>
                         <circle cx="12" cy="12" r="9" />
@@ -114,6 +122,12 @@ export function AppIcon({
                 ) : null}
                 {name === "chat" ? <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z" /> : null}
                 {name === "check" ? <path d="M20 6 9 17l-5-5" /> : null}
+                {name === "clock" ? (
+                    <>
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="M12 7v5l3.5 3.5" />
+                    </>
+                ) : null}
                 {name === "close" ? (
                     <>
                         <circle cx="12" cy="12" r="9" />
