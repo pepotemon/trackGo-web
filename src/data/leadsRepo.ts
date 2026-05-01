@@ -1,5 +1,6 @@
 import {
     collection,
+    deleteDoc,
     doc,
     limit,
     getDocs,
@@ -447,6 +448,10 @@ export async function assignLeadToUser(leadId: string, userId: string) {
             updatedAt: now,
         })
     );
+}
+
+export async function deleteLead(leadId: string) {
+    await deleteDoc(doc(db, "clients", leadId));
 }
 
 export async function reopenLeadForReview(leadId: string) {

@@ -15,9 +15,9 @@ const ACCESS_ITEMS = [
     {
         href: "/admin/leads/assignments",
         title: "Asignaciones",
-        body: "Auditoria de auto-asignacion y distribucion de trabajo.",
+        body: "Auditoria de asignaciones y distribucion de trabajo.",
         icon: "assign",
-        tone: "green",
+        tone: "blue",
     },
 ] as const;
 

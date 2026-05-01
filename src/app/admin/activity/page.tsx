@@ -221,9 +221,11 @@ export default function ActivityPage() {
             if (filters.userId !== "all" && row.userId !== filters.userId) return false;
             if (filters.type !== "all" && row.type !== filters.type) return false;
 
-            const dk = String(row.dayKey || "");
-            if (startKey && dk < startKey) return false;
-            if (endKey && dk > endKey) return false;
+            if (row.type !== "pending") {
+                const dk = String(row.dayKey || "");
+                if (startKey && dk < startKey) return false;
+                if (endKey && dk > endKey) return false;
+            }
 
             if (!q) return true;
 
@@ -341,7 +343,7 @@ export default function ActivityPage() {
                 listAccountingUsers(),
                 listPendingClientsForActivity({
                     startKey: PENDING_START_KEY,
-                    endKey: nextFilters.endKey,
+                    endKey: "9999-12-31",
                     pageSize: 2000,
                 }),
             ]);
@@ -509,8 +511,10 @@ export default function ActivityPage() {
                     <KpiCard label="Actividad" value={stats.total} caption={`${viewModeLabel(viewMode)} · eventos + pendientes`} icon="activity" tone="purple" />
                     <KpiCard label="Visitados" value={stats.visited} caption="Clientes trabajados" icon="check" tone="green" />
                     <KpiCard label="Rechazados" value={stats.rejected} caption="No concretados" icon="close" tone="red" />
-                    <KpiCard label="Pendientes" value={stats.pending} caption="Total pendiente hasta ahora" icon="alert" tone="orange" />
-                    <KpiCard label="Asignaciones" value={stats.users} caption="Clientes asignados en vista" icon="assign" tone="blue" />
+                    <KpiCard label="Pendientes" value={stats.pending} caption="Todos los pendientes activos" icon="alert" tone="orange" />
+                    <Link href="/admin/leads/assignments" className="block transition hover:opacity-90 hover:scale-[1.01]">
+                        <KpiCard label="Asignaciones" value={stats.users} caption="Ver historial de asignaciones" icon="assign" tone="blue" />
+                    </Link>
                 </section>
 
                 <Card className="overflow-hidden">
@@ -591,7 +595,7 @@ export default function ActivityPage() {
                         </div>
 
                         <p className="text-[11px] font-semibold text-[#98a2b3]">
-                            Pendientes se muestran como acumulado hasta la fecha final del rango.
+                            Pendientes incluye todos los clientes activos sin respetar rango de fechas.
                         </p>
                     </div>
 
@@ -709,7 +713,7 @@ function MobileActivityView({
     const pct = stats.total <= 0 ? 0 : Math.round((done / Math.max(1, stats.total)) * 100);
 
     return (
-        <div className="-mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] max-w-[100vw] bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.16),transparent_34%),linear-gradient(180deg,#FBFAFF_0%,#F6F3FF_48%,#FFFFFF_100%)] pb-6 text-[#101936]">
+        <div className="tg-screen-enter -mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] max-w-[100vw] bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.16),transparent_34%),linear-gradient(180deg,#FBFAFF_0%,#F6F3FF_48%,#FFFFFF_100%)] pb-6 text-[#101936]">
 
             {/* STICKY HEADER */}
             <div className="sticky top-0 z-20 bg-[#fbfaff]/96 px-3 pb-3 pt-3 backdrop-blur-md">
@@ -781,7 +785,8 @@ function MobileActivityView({
                         label="Asignados"
                         value={stats.users}
                         icon="assign"
-                        color="text-[#66739A]"
+                        color="text-blue-600"
+                        href="/admin/leads/assignments"
                     />
                 </div>
 
@@ -879,6 +884,7 @@ function MobileStatButton({
     color,
     onClick,
     disabled,
+    href,
 }: {
     label: string;
     value: number;
@@ -886,19 +892,36 @@ function MobileStatButton({
     color: string;
     onClick?: () => void;
     disabled?: boolean;
+    href?: string;
 }) {
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            disabled={!onClick || disabled}
-            className="min-w-0 rounded-[14px] border border-[#E8E7FB] bg-white px-1.5 py-2.5 shadow-[0_4px_16px_rgba(91,33,255,0.07)] transition active:bg-[#f3f0ff] disabled:opacity-50"
-        >
+    const content = (
+        <>
             <div className="flex items-center justify-center gap-1">
                 <AppIcon name={icon} tone="slate" size="sm" className={`h-4 w-4 bg-transparent ring-0 ${color}`} />
                 <span className="text-[13px] font-black text-[#101936]">{value}</span>
             </div>
             <div className="mt-1 truncate text-center text-[9px] font-black text-[#66739A]">{label}</div>
+        </>
+    );
+
+    const base = "min-w-0 rounded-[14px] border border-[#E8E7FB] bg-white px-1.5 py-2.5 shadow-[0_4px_16px_rgba(91,33,255,0.07)] transition active:bg-[#f3f0ff]";
+
+    if (href) {
+        return (
+            <Link href={href} className={base}>
+                {content}
+            </Link>
+        );
+    }
+
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            disabled={!onClick || disabled}
+            className={`${base} disabled:opacity-50`}
+        >
+            {content}
         </button>
     );
 }
@@ -1013,22 +1036,11 @@ function ActivityMobileCard({
                 </div>
 
                 <div className="mt-2 flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 items-center gap-2">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                        <AppIcon name="user" tone="slate" size="sm" className="h-3.5 w-3.5 shrink-0 bg-transparent text-[#7C3AED] ring-0" />
                         <span className="truncate text-[12px] font-black text-[#7C3AED]">
                             {row.userName}
                         </span>
-                        {row.mapsUrl ? (
-                            <a
-                                href={row.mapsUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                aria-label="Ver en Maps"
-                                className="shrink-0 text-emerald-600"
-                            >
-                                <AppIcon name="map" tone="slate" size="sm" className="h-[14px] w-[14px] bg-transparent text-emerald-600 ring-0" />
-                            </a>
-                        ) : null}
                     </div>
                     <div className="shrink-0 text-right text-[10px] font-semibold text-[#98A2B3]">
                         {formatDate(row.createdAt)}
@@ -1176,12 +1188,15 @@ function ActivityRow({
             </td>
 
             <td className="px-3 py-2.5">
-                <div className="max-w-[220px]">
-                    <div className="truncate text-[12px] font-semibold text-[#52525b]">
-                        {row.userName}
-                    </div>
-                    <div className="mt-0.5 truncate text-[11px] font-medium text-[#66739A]">
-                        {row.billingMode === "weekly_subscription" ? "Suscripción" : "Por visita"}
+                <div className="flex max-w-[220px] items-center gap-1.5">
+                    <AppIcon name="user" tone="slate" size="sm" className="h-3.5 w-3.5 shrink-0 bg-transparent text-[#66739A] ring-0" />
+                    <div className="min-w-0">
+                        <div className="truncate text-[12px] font-semibold text-[#52525b]">
+                            {row.userName}
+                        </div>
+                        <div className="mt-0.5 truncate text-[11px] font-medium text-[#66739A]">
+                            {row.billingMode === "weekly_subscription" ? "Suscripción" : "Por visita"}
+                        </div>
                     </div>
                 </div>
             </td>

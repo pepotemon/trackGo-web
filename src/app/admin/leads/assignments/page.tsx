@@ -317,11 +317,14 @@ function AssignmentMobileCard({
                         {log.leadBusiness || log.leadPhone || "Lead asignado"}
                     </div>
                 </div>
-                {matchType ? (
-                    <Badge tone={matchTone[matchType]}>{matchLabel[matchType]}</Badge>
-                ) : (
-                    <Badge tone="gray">{log.matchType || "Match"}</Badge>
-                )}
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                    <Badge tone="blue">Auto</Badge>
+                    {matchType ? (
+                        <Badge tone={matchTone[matchType]}>{matchLabel[matchType]}</Badge>
+                    ) : (
+                        <Badge tone="gray">{log.matchType || "Match"}</Badge>
+                    )}
+                </div>
             </div>
 
             <div className="mt-3 grid grid-cols-[1fr_auto] gap-3">
@@ -388,11 +391,14 @@ function AssignmentRow({
             </td>
 
             <td className="px-4 py-3">
-                {matchType ? (
-                    <Badge tone={matchTone[matchType]}>{matchLabel[matchType]}</Badge>
-                ) : (
-                    <Badge tone="gray">{log.matchType || "Match"}</Badge>
-                )}
+                <div className="flex flex-wrap items-center gap-1.5">
+                    <Badge tone="blue">Auto</Badge>
+                    {matchType ? (
+                        <Badge tone={matchTone[matchType]}>{matchLabel[matchType]}</Badge>
+                    ) : (
+                        <Badge tone="gray">{log.matchType || "Match"}</Badge>
+                    )}
+                </div>
             </td>
 
             <td className="px-4 py-3">

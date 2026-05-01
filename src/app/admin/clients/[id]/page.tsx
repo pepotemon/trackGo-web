@@ -406,11 +406,8 @@ export default function ClientDetailPage() {
                                     <Info label="Actualizado" value={formatDate(client.updatedAt)} />
                                 </div>
 
-                                <div className="grid grid-cols-3 gap-2 pt-1">
+                                <div className="grid grid-cols-2 gap-2 pt-1">
                                     <SmallAction href={`/admin/leads/${clientId}`} icon="chat" label="Chat" />
-                                    {client.location.mapsUrl ? (
-                                        <SmallAction href={client.location.mapsUrl} icon="map" label="Maps" external />
-                                    ) : null}
                                     <button
                                         type="button"
                                         onClick={() => setEditOpen(true)}

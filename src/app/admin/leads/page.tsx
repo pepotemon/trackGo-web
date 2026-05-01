@@ -9,6 +9,7 @@ import {
 import { LeadQuickAccessCards } from "@/features/leads/LeadQuickAccessCards";
 import { LeadEditModal } from "@/features/leads/LeadEditModal";
 import { useAdminLeadQueue } from "@/features/leads/useAdminLeadQueue";
+import { deleteLead } from "@/data/leadsRepo";
 import type { LeadFilters, LeadReviewStatus, MetaLeadDoc } from "@/types/leads";
 import type { UserDoc } from "@/types/users";
 import {
@@ -143,6 +144,19 @@ export default function AdminLeadsPage() {
         assignLead,
     } = useAdminLeadQueue();
 
+    async function handleDeleteLead(lead: MetaLeadDoc) {
+        const ok = window.confirm(`¿Eliminar el lead "${displayName(lead)}"? Esta acción no se puede deshacer.`);
+        if (!ok) return;
+
+        try {
+            await deleteLead(lead.id);
+            setQuickLead(null);
+            reloadLeads();
+        } catch {
+            // silently ignore; reloadLeads will refresh the list
+        }
+    }
+
     const activeFiltersCount = useMemo(() => {
         let total = 0;
         if (filters.status !== "pending_review") total++;
@@ -219,7 +233,7 @@ export default function AdminLeadsPage() {
                                 className="w-full sm:w-auto"
                             >
                                 <AppIcon
-                                    name="assign"
+                                    name="link"
                                     tone="purple"
                                     size="sm"
                                     className="h-5 w-5 rounded-md bg-transparent text-current ring-0"
@@ -389,6 +403,7 @@ export default function AdminLeadsPage() {
                     setQuickLead(null);
                     setEditingLead(lead);
                 }}
+                onDelete={handleDeleteLead}
             />
         </div>
     );
@@ -459,7 +474,7 @@ function MobileLeadQueue({
                     <MobileHeaderButton
                         onClick={onOpenCoverage}
                         disabled={loading || !leads.length}
-                        icon="assign"
+                        icon="link"
                         label="Cobertura"
                     />
                     <MobileHeaderButton
@@ -704,7 +719,7 @@ function MobileLeadCard({
                     </button>
                 </div>
 
-                {/* ICON ROW: city · business · maps */}
+                {/* ICON ROW: city · business */}
                 <div className="mt-2.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
 
                     {/* City */}
@@ -732,23 +747,6 @@ function MobileLeadCard({
                             <span className="max-w-[90px] truncate text-[11px] font-semibold text-[#344054]">{lead.business}</span>
                         ) : null}
                     </div>
-
-                    {/* Maps */}
-                    {hasMaps ? (
-                        <a
-                            href={lead.location.mapsUrl!}
-                            target="_blank"
-                            rel="noreferrer"
-                            aria-label="Ver en Maps"
-                            className="flex items-center text-emerald-600"
-                        >
-                            <AppIcon name="map" tone="slate" size="sm" className="h-[14px] w-[14px] bg-transparent text-emerald-600 ring-0" />
-                        </a>
-                    ) : (
-                        <span className="flex items-center text-red-400" aria-label="Sin Maps">
-                            <AppIcon name="map" tone="slate" size="sm" className="h-[14px] w-[14px] bg-transparent text-red-400 ring-0" />
-                        </span>
-                    )}
                 </div>
 
                 {/* META */}
@@ -932,7 +930,7 @@ function MobileHeaderButton({
     onClick,
     disabled,
 }: {
-    icon: "assign" | "users";
+    icon: "assign" | "users" | "link";
     label: string;
     onClick: () => void;
     disabled?: boolean;
@@ -1206,10 +1204,12 @@ function LeadQuickActionsModal({
     lead,
     onClose,
     onEdit,
+    onDelete,
 }: {
     lead: MetaLeadDoc | null;
     onClose: () => void;
     onEdit: (lead: MetaLeadDoc) => void;
+    onDelete: (lead: MetaLeadDoc) => void;
 }) {
     if (!lead) return null;
 
@@ -1252,6 +1252,12 @@ function LeadQuickActionsModal({
                     label="Editar"
                     tone="orange"
                 />
+                <ActionTileButton
+                    onClick={() => onDelete(lead)}
+                    icon="trash"
+                    label="Eliminar lead"
+                    tone="red"
+                />
             </div>
         </Modal>
     );
@@ -1275,9 +1281,14 @@ function CoverageAssignModal({
     const [query, setQuery] = useState("");
     const [running, setRunning] = useState(false);
 
+    const eligibleLeads = useMemo(
+        () => leads.filter((l) => l.verificationStatus !== "not_suitable"),
+        [leads]
+    );
+
     const matches = useMemo(() => {
         const q = query.toLowerCase().trim();
-        const base = buildCoverageMatches(leads, users);
+        const base = buildCoverageMatches(eligibleLeads, users);
 
         if (!q) return base;
 
@@ -1310,7 +1321,7 @@ function CoverageAssignModal({
                 };
             })
             .filter((match) => match.leads.length > 0);
-    }, [leads, query, users]);
+    }, [eligibleLeads, query, users]);
 
     const plan = useMemo(() => {
         const used = new Set<string>();
@@ -1348,7 +1359,7 @@ function CoverageAssignModal({
             open={open}
             onClose={onClose}
             title="Asignar por cobertura"
-            subtitle={`${plan.length} sugerencias sobre ${leads.length} leads visibles`}
+            subtitle={`${plan.length} sugerencias · ${eligibleLeads.length} leads aptos`}
         >
             <div className="space-y-4">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -1378,14 +1389,17 @@ function CoverageAssignModal({
                                 className="rounded-lg border border-[#e5e7eb] bg-white"
                             >
                                 <div className="flex items-center justify-between gap-3 border-b border-[#f0f1f2] px-3 py-3">
-                                    <div className="min-w-0">
-                                        <div className="truncate text-[12px] font-semibold text-[#171717]">
-                                            {match.user.name ||
-                                                match.user.email ||
-                                                match.user.id}
-                                        </div>
-                                        <div className="mt-0.5 truncate text-[11px] font-medium text-[#9ca3af]">
-                                            {userCoverageLabel(match.user)}
+                                    <div className="flex min-w-0 items-center gap-2">
+                                        <AppIcon name="user" tone="blue" size="sm" className="h-7 w-7 shrink-0" />
+                                        <div className="min-w-0">
+                                            <div className="truncate text-[12px] font-semibold text-[#171717]">
+                                                {match.user.name ||
+                                                    match.user.email ||
+                                                    match.user.id}
+                                            </div>
+                                            <div className="mt-0.5 truncate text-[11px] font-medium text-[#9ca3af]">
+                                                {userCoverageLabel(match.user)}
+                                            </div>
                                         </div>
                                     </div>
                                     <Badge tone="blue">{match.leads.length}</Badge>
