@@ -1072,6 +1072,13 @@ function ActivityActionSheet({
     open: boolean;
     onClose: () => void;
 }) {
+    useEffect(() => {
+        if (!open) return;
+        const handler = () => onClose();
+        window.addEventListener("scroll", handler, { passive: true });
+        return () => window.removeEventListener("scroll", handler);
+    }, [open, onClose]);
+
     if (!open) return null;
 
     const waUrl = whatsappUrl(row.phone);

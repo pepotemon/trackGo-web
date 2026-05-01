@@ -471,12 +471,19 @@ function MobileLeadQueue({
                         </p>
                     </div>
 
-                    <MobileHeaderButton
-                        onClick={onOpenCoverage}
-                        disabled={loading || !leads.length}
-                        icon="link"
-                        label="Cobertura"
-                    />
+                    <Link
+                        href="/admin/leads/assignments"
+                        title="Asignaciones"
+                        aria-label="Asignaciones"
+                        className="flex h-10 w-10 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-white shadow-sm transition active:bg-[#f3f0ff]"
+                    >
+                        <AppIcon
+                            name="assign"
+                            tone="purple"
+                            size="sm"
+                            className="h-[18px] w-[18px] bg-transparent text-[#7C3AED] ring-0"
+                        />
+                    </Link>
                     <MobileHeaderButton
                         onClick={onReloadUsers}
                         disabled={loading}
@@ -490,7 +497,7 @@ function MobileLeadQueue({
                     <LeadStatCard
                         label="Revisar"
                         value={stats.pendingReview}
-                        icon="lead"
+                        icon="search"
                         color="text-blue-500"
                         active={filters.status === "pending_review"}
                         onClick={() => onPatchFilters({ status: filters.status === "pending_review" ? "all" : "pending_review" })}
@@ -681,15 +688,13 @@ function MobileLeadCard({
     saving: boolean;
     onOpenEdit: (lead: MetaLeadDoc) => void;
 }) {
-    const [menuOpen, setMenuOpen] = useState(false);
+    const [sheetOpen, setSheetOpen] = useState(false);
     const city = mobileCityName(lead);
     const hasCity = city !== "" && city !== "Sin ciudad";
     const hasBusiness = !!lead.business;
-    const hasMaps = !!lead.location.mapsUrl;
-    const waUrl = whatsappUrl(lead.phone);
 
     return (
-        <div className="relative">
+        <>
             <article className="min-w-0 max-w-full overflow-hidden rounded-[16px] border border-[#E8E7FB] bg-white p-3 shadow-[0_4px_18px_rgba(91,33,255,0.07)]">
 
                 {/* TOP ROW: name/phone + "..." */}
@@ -710,7 +715,7 @@ function MobileLeadCard({
 
                     <button
                         type="button"
-                        onClick={() => setMenuOpen(true)}
+                        onClick={() => setSheetOpen(true)}
                         disabled={saving}
                         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] transition active:bg-[#f3f0ff] disabled:opacity-60"
                         aria-label="Acciones"
@@ -761,60 +766,116 @@ function MobileLeadCard({
                 ) : null}
             </article>
 
-            {/* FLOATING MENU */}
-            {menuOpen ? (
-                <>
+            <LeadActionSheet
+                lead={lead}
+                open={sheetOpen}
+                onClose={() => setSheetOpen(false)}
+                onOpenEdit={onOpenEdit}
+            />
+        </>
+    );
+}
+
+function LeadActionSheet({
+    lead,
+    open,
+    onClose,
+    onOpenEdit,
+}: {
+    lead: MetaLeadDoc;
+    open: boolean;
+    onClose: () => void;
+    onOpenEdit: (lead: MetaLeadDoc) => void;
+}) {
+    useEffect(() => {
+        if (!open) return;
+        const handler = () => onClose();
+        window.addEventListener("scroll", handler, { passive: true });
+        return () => window.removeEventListener("scroll", handler);
+    }, [open, onClose]);
+
+    if (!open) return null;
+
+    const hasMaps = !!lead.location.mapsUrl;
+    const waUrl = whatsappUrl(lead.phone);
+
+    return (
+        <>
+            <button
+                type="button"
+                onClick={onClose}
+                className="fixed inset-0 z-40 bg-black/40 xl:hidden"
+                aria-label="Cerrar"
+            />
+            <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-[24px] bg-white px-4 pb-8 pt-4 shadow-[0_-8px_40px_rgba(0,0,0,0.18)] xl:hidden">
+                <div className="mx-auto mb-4 h-1 w-12 rounded-full bg-[#E8E7FB]" />
+
+                <div className="mb-4 min-w-0">
+                    <p className="truncate text-[15px] font-black text-[#101936]">{displayName(lead)}</p>
+                    {lead.business || lead.location.address ? (
+                        <p className="mt-0.5 truncate text-[12px] font-semibold text-[#66739A]">
+                            {lead.business || lead.location.address}
+                        </p>
+                    ) : null}
+                </div>
+
+                <div className="grid gap-2">
+                    <Link
+                        href={`/admin/leads/${lead.id}`}
+                        onClick={onClose}
+                        className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#f3f0ff] px-4 text-[14px] font-bold text-[#7C3AED] transition active:bg-violet-200"
+                    >
+                        <AppIcon name="chat" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#7C3AED] ring-0" />
+                        Chat
+                    </Link>
+
                     <button
                         type="button"
-                        onClick={() => setMenuOpen(false)}
-                        className="fixed inset-0 z-40"
-                        aria-label="Cerrar menú"
-                    />
-                    <div className="absolute right-0 top-0 z-50 min-w-[160px] overflow-hidden rounded-[14px] border border-[#E8E7FB] bg-white shadow-[0_8px_32px_rgba(0,0,0,0.16)]">
-                        <Link
-                            href={`/admin/leads/${lead.id}`}
-                            onClick={() => setMenuOpen(false)}
-                            className="flex h-11 items-center gap-2.5 px-4 text-[13px] font-semibold text-[#101936] transition active:bg-[#f8f7ff]"
+                        onClick={() => { onClose(); onOpenEdit(lead); }}
+                        className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#fff7ed] px-4 text-[14px] font-bold text-orange-700 transition active:bg-orange-100"
+                    >
+                        <AppIcon name="edit" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-orange-600 ring-0" />
+                        Editar
+                    </button>
+
+                    {hasMaps ? (
+                        <a
+                            href={lead.location.mapsUrl!}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={onClose}
+                            className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-emerald-50 px-4 text-[14px] font-bold text-emerald-700 transition active:bg-emerald-100"
                         >
-                            <AppIcon name="chat" tone="slate" size="sm" className="h-4 w-4 bg-transparent text-[#66739A] ring-0" />
-                            Chat
-                        </Link>
-                        <button
-                            type="button"
-                            onClick={() => { setMenuOpen(false); onOpenEdit(lead); }}
-                            className="flex h-11 w-full items-center gap-2.5 border-t border-[#f0f1f2] px-4 text-[13px] font-semibold text-[#101936] transition active:bg-[#f8f7ff]"
+                            <AppIcon name="map" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-emerald-600 ring-0" />
+                            Maps
+                        </a>
+                    ) : null}
+
+                    {waUrl ? (
+                        <a
+                            href={waUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={onClose}
+                            className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-emerald-50 px-4 text-[14px] font-bold text-emerald-700 transition active:bg-emerald-100"
                         >
-                            <AppIcon name="edit" tone="slate" size="sm" className="h-4 w-4 bg-transparent text-[#66739A] ring-0" />
-                            Editar
-                        </button>
-                        {hasMaps ? (
-                            <a
-                                href={lead.location.mapsUrl!}
-                                target="_blank"
-                                rel="noreferrer"
-                                onClick={() => setMenuOpen(false)}
-                                className="flex h-11 items-center gap-2.5 border-t border-[#f0f1f2] px-4 text-[13px] font-semibold text-[#101936] transition active:bg-[#f8f7ff]"
-                            >
-                                <AppIcon name="map" tone="slate" size="sm" className="h-4 w-4 bg-transparent text-[#66739A] ring-0" />
-                                Maps
-                            </a>
-                        ) : null}
-                        {waUrl ? (
-                            <a
-                                href={waUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                onClick={() => setMenuOpen(false)}
-                                className="flex h-11 items-center gap-2.5 border-t border-[#f0f1f2] px-4 text-[13px] font-semibold text-[#101936] transition active:bg-[#f8f7ff]"
-                            >
-                                <AppIcon name="phone" tone="slate" size="sm" className="h-4 w-4 bg-transparent text-[#66739A] ring-0" />
-                                WhatsApp
-                            </a>
-                        ) : null}
-                    </div>
-                </>
-            ) : null}
-        </div>
+                            <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 fill-none stroke-emerald-600 stroke-2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.96a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 16.92Z" />
+                            </svg>
+                            WhatsApp
+                        </a>
+                    ) : null}
+                </div>
+
+                <button
+                    type="button"
+                    onClick={onClose}
+                    className="mt-3 min-h-[48px] w-full rounded-[14px] border border-[#E8E7FB] bg-[#f8f7ff] text-[14px] font-bold text-[#66739A] transition active:bg-[#f3f0ff]"
+                >
+                    Cancelar
+                </button>
+            </div>
+        </>
     );
 }
 
