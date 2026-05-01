@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { useAutoAssignLogs } from "@/features/leads/useAutoAssignLogs";
-import { LeadQuickAccessCards } from "@/features/leads/LeadQuickAccessCards";
 import type {
     AutoAssignLogDoc,
     AutoAssignLogFilters,
@@ -14,7 +14,7 @@ const MATCH_OPTIONS: { value: LeadAutoAssignMatchType; label: string }[] = [
     { value: "city", label: "Ciudad" },
     { value: "hub_city", label: "Hub" },
     { value: "state", label: "Estado" },
-    { value: "country", label: "Pais" },
+    { value: "country", label: "País" },
 ];
 
 const matchTone: Record<LeadAutoAssignMatchType, "green" | "purple" | "yellow" | "blue"> = {
@@ -28,7 +28,7 @@ const matchLabel: Record<LeadAutoAssignMatchType, string> = {
     city: "Ciudad",
     hub_city: "Hub",
     state: "Estado",
-    country: "Pais",
+    country: "País",
 };
 
 function selectClassName(extra = "") {
@@ -49,15 +49,14 @@ function formatDate(value?: number | null) {
 }
 
 function safeMatchType(value: unknown): LeadAutoAssignMatchType | null {
-    if (
-        value === "city" ||
-        value === "hub_city" ||
-        value === "state" ||
-        value === "country"
-    ) {
+    if (value === "city" || value === "hub_city" || value === "state" || value === "country") {
         return value;
     }
     return null;
+}
+
+function isManual(log: AutoAssignLogDoc) {
+    return log.mode === "manual";
 }
 
 function leadTitle(log: AutoAssignLogDoc) {
@@ -74,7 +73,10 @@ function leadGeo(log: AutoAssignLogDoc) {
 }
 
 export default function AutoAssignLogsPage() {
+    const [filterModalOpen, setFilterModalOpen] = useState(false);
+    const [actionLog, setActionLog] = useState<AutoAssignLogDoc | null>(null);
     const [quickLog, setQuickLog] = useState<AutoAssignLogDoc | null>(null);
+
     const {
         users,
         filters,
@@ -98,139 +100,604 @@ export default function AutoAssignLogsPage() {
         return total;
     }, [filters]);
 
+    const manualCount = useMemo(() => filteredLogs.filter(isManual).length, [filteredLogs]);
+    const autoCount = filteredLogs.length - manualCount;
+
     function patchFilters(patch: Partial<AutoAssignLogFilters>) {
         setFilters((prev) => ({ ...prev, ...patch }));
     }
 
     return (
         <div className="mx-auto w-full max-w-[1220px]">
-            <PageHeader
-                title="Asignaciones"
-                subtitle="Auditoria de auto-asignacion y distribucion de trabajo."
-                icon={<AppIcon name="assign" tone="green" size="sm" className="bg-transparent text-white ring-0" />}
-                actions={
-                    <Button
-                        variant="primary"
-                        onClick={reloadLogs}
-                        disabled={loading}
-                        aria-label="Actualizar asignaciones"
-                        title="Actualizar asignaciones"
-                        className="h-10 w-10 px-0 py-0"
-                    >
-                        <AppIcon name="refresh" tone="purple" size="sm" className="bg-transparent text-white ring-0" />
-                    </Button>
-                }
-            />
+            {/* ── MOBILE ── */}
+            <div className="xl:hidden">
+                <MobileAssignmentsView
+                    logs={filteredLogs}
+                    stats={stats}
+                    autoCount={autoCount}
+                    manualCount={manualCount}
+                    filters={filters}
+                    users={users}
+                    loading={loading}
+                    loadingMore={loadingMore}
+                    hasMore={hasMore}
+                    filterModalOpen={filterModalOpen}
+                    activeFiltersCount={activeFiltersCount}
+                    onOpenFilters={() => setFilterModalOpen(true)}
+                    onCloseFilters={() => setFilterModalOpen(false)}
+                    onPatchFilters={patchFilters}
+                    onResetFilters={resetFilters}
+                    onReload={reloadLogs}
+                    onLoadMore={loadMore}
+                    onOpenSheet={setActionLog}
+                />
+            </div>
 
-            {err ? (
-                <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] font-semibold text-red-600">
-                    {err}
-                </div>
-            ) : null}
-
-            <LeadQuickAccessCards />
-
-            <section className="mb-3 grid grid-cols-2 gap-2 md:gap-4 xl:mb-4 xl:grid-cols-4">
-                <KpiCard label="Asignaciones" value={stats.total} caption="Logs cargados" icon="assign" tone="green" />
-                <KpiCard label="Usuarios" value={stats.users} caption="Recibieron leads" icon="users" tone="blue" />
-                <KpiCard label="Ciudad / Hub" value={stats.city + stats.hubCity} caption="Matches precisos" icon="map" tone="purple" />
-                <KpiCard label="Estado / Pais" value={stats.state + stats.country} caption="Matches amplios" icon="filter" tone="orange" />
-            </section>
-
-            <Card className="overflow-hidden">
-                <div className="flex flex-col gap-3 bg-[#111827] px-3 py-3 xl:bg-white xl:px-4 xl:py-4">
-                    <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                        <div className="hidden xl:block">
-                            <h2 className="text-[14px] font-semibold text-[#171717]">
-                                Auditoria de auto-asignacion
-                            </h2>
-                            <p className="mt-0.5 text-[12px] font-medium text-[#9ca3af]">
-                                {filteredLogs.length} visibles de {stats.total}
-                            </p>
+            {/* ── DESKTOP ── */}
+            <div className="hidden xl:block">
+                <PageHeader
+                    title="Asignaciones"
+                    subtitle="Auditoría de asignaciones automáticas y manuales."
+                    icon={<AppIcon name="assign" tone="green" size="sm" className="bg-transparent text-white ring-0" />}
+                    actions={
+                        <div className="flex items-center gap-2">
+                            {activeFiltersCount > 0 ? (
+                                <Button onClick={resetFilters}>Limpiar</Button>
+                            ) : null}
+                            <Button
+                                variant="primary"
+                                onClick={reloadLogs}
+                                disabled={loading}
+                                aria-label="Actualizar"
+                                className="h-10 w-10 px-0 py-0"
+                            >
+                                <AppIcon name="refresh" tone="purple" size="sm" className="bg-transparent text-white ring-0" />
+                            </Button>
                         </div>
+                    }
+                />
 
-                        <Input
-                            value={filters.search}
-                            onChange={(e) => patchFilters({ search: e.target.value })}
-                            placeholder="Buscar lead, telefono, usuario, ciudad..."
-                            className="xl:w-[360px]"
-                        />
+                {err ? (
+                    <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] font-semibold text-red-600">
+                        {err}
                     </div>
+                ) : null}
 
-                    <div className="grid gap-2 md:grid-cols-3">
-                        <Field label="Dia">
+                <section className="mb-4 grid grid-cols-4 gap-4">
+                    <KpiCard label="Asignaciones" value={stats.total} caption="Logs cargados" icon="assign" tone="green" />
+                    <KpiCard label="Usuarios" value={stats.users} caption="Recibieron leads" icon="users" tone="blue" />
+                    <KpiCard label="Ciudad / Hub" value={stats.city + stats.hubCity} caption="Matches precisos" icon="map" tone="purple" />
+                    <KpiCard label="Estado / País" value={stats.state + stats.country} caption="Matches amplios" icon="filter" tone="orange" />
+                </section>
+
+                <Card className="overflow-hidden">
+                    <div className="flex flex-col gap-3 bg-gradient-to-b from-white to-[#fbfaff] px-4 py-4">
+                        <div className="flex items-center justify-between gap-3">
+                            <div>
+                                <h2 className="text-[14px] font-semibold text-[#171717]">Registros</h2>
+                                <p className="mt-0.5 text-[12px] font-medium text-[#9ca3af]">
+                                    {filteredLogs.length} visibles de {stats.total}
+                                </p>
+                            </div>
                             <Input
-                                type="date"
-                                value={filters.dayKey}
-                                onChange={(e) => patchFilters({ dayKey: e.target.value })}
+                                value={filters.search}
+                                onChange={(e) => patchFilters({ search: e.target.value })}
+                                placeholder="Buscar lead, teléfono, usuario, ciudad..."
+                                className="w-[360px]"
                             />
-                        </Field>
+                        </div>
 
-                        <Field label="Usuario">
-                            <select
-                                value={filters.userId}
-                                onChange={(e) => patchFilters({ userId: e.target.value })}
-                                className={selectClassName("w-full")}
-                            >
-                                <option value="all">Todos los usuarios</option>
-                                {users.map((user) => (
-                                    <option key={user.id} value={user.id}>
-                                        {user.name || user.email || "Usuario sin nombre"}
-                                    </option>
-                                ))}
-                            </select>
-                        </Field>
-
-                        <Field label="Match">
-                            <select
-                                value={filters.matchType}
-                                onChange={(e) =>
-                                    patchFilters({
-                                        matchType: e.target.value as AutoAssignLogFilters["matchType"],
-                                    })
-                                }
-                                className={selectClassName("w-full")}
-                            >
-                                <option value="all">Todos los matches</option>
-                                {MATCH_OPTIONS.map((item) => (
-                                    <option key={item.value} value={item.value}>
-                                        {item.label}
-                                    </option>
-                                ))}
-                            </select>
-                        </Field>
+                        <div className="grid grid-cols-3 gap-2">
+                            <Field label="Día">
+                                <Input
+                                    type="date"
+                                    value={filters.dayKey}
+                                    onChange={(e) => patchFilters({ dayKey: e.target.value })}
+                                />
+                            </Field>
+                            <Field label="Usuario">
+                                <select
+                                    value={filters.userId}
+                                    onChange={(e) => patchFilters({ userId: e.target.value })}
+                                    className={selectClassName("w-full")}
+                                >
+                                    <option value="all">Todos los usuarios</option>
+                                    {users.map((user) => (
+                                        <option key={user.id} value={user.id}>
+                                            {user.name || user.email || "Sin nombre"}
+                                        </option>
+                                    ))}
+                                </select>
+                            </Field>
+                            <Field label="Match">
+                                <select
+                                    value={filters.matchType}
+                                    onChange={(e) =>
+                                        patchFilters({ matchType: e.target.value as AutoAssignLogFilters["matchType"] })
+                                    }
+                                    className={selectClassName("w-full")}
+                                >
+                                    <option value="all">Todos los matches</option>
+                                    {MATCH_OPTIONS.map((item) => (
+                                        <option key={item.value} value={item.value}>{item.label}</option>
+                                    ))}
+                                </select>
+                            </Field>
+                        </div>
                     </div>
 
-                    {activeFiltersCount > 0 ? (
-                        <div className="flex justify-end">
-                            <Button onClick={resetFilters}>Limpiar filtros</Button>
-                        </div>
-                    ) : null}
-                </div>
+                    <AssignmentsDesktopTable logs={filteredLogs} loading={loading} onQuickActions={setQuickLog} />
 
-                <AssignmentsTable logs={filteredLogs} loading={loading} onQuickActions={setQuickLog} />
+                    <div className="flex items-center justify-between gap-3 border-t border-[#f0f1f2] px-4 py-3">
+                        <p className="text-[12px] font-medium text-[#9ca3af]">
+                            {filteredLogs.length} asignaciones cargadas
+                        </p>
+                        {hasMore ? (
+                            <Button onClick={loadMore} disabled={loadingMore}>
+                                {loadingMore ? "Cargando..." : "Cargar más"}
+                            </Button>
+                        ) : null}
+                    </div>
+                </Card>
+            </div>
 
-                <div className="flex items-center justify-between gap-3 border-t border-white/[0.08] px-3 py-3 xl:border-[#f0f1f2] xl:px-4">
-                    <p className="text-[12px] font-extrabold text-[#9CA3AF] xl:font-medium xl:text-[#9ca3af]">
-                        {filteredLogs.length} asignaciones cargadas en esta vista
-                    </p>
-                    {hasMore ? (
-                        <Button onClick={loadMore} disabled={loadingMore}>
-                            {loadingMore ? "Cargando..." : "Cargar mas"}
-                        </Button>
-                    ) : null}
-                </div>
-            </Card>
-
-            <AssignmentQuickActionsModal
-                log={quickLog}
-                onClose={() => setQuickLog(null)}
+            {/* Mobile action sheet */}
+            <AssignmentActionSheet
+                log={actionLog}
+                open={!!actionLog}
+                onClose={() => setActionLog(null)}
             />
+
+            {/* Desktop quick actions */}
+            <AssignmentQuickActionsModal log={quickLog} onClose={() => setQuickLog(null)} />
         </div>
     );
 }
 
-function AssignmentsTable({
+// ─── MOBILE VIEW ─────────────────────────────────────────────────────────────
+
+function MobileAssignmentsView({
+    logs,
+    stats,
+    autoCount,
+    manualCount,
+    filters,
+    users,
+    loading,
+    loadingMore,
+    hasMore,
+    filterModalOpen,
+    activeFiltersCount,
+    onOpenFilters,
+    onCloseFilters,
+    onPatchFilters,
+    onResetFilters,
+    onReload,
+    onLoadMore,
+    onOpenSheet,
+}: {
+    logs: AutoAssignLogDoc[];
+    stats: ReturnType<typeof useAutoAssignLogs>["stats"];
+    autoCount: number;
+    manualCount: number;
+    filters: AutoAssignLogFilters;
+    users: { id: string; name?: string | null; email?: string | null }[];
+    loading: boolean;
+    loadingMore: boolean;
+    hasMore: boolean;
+    filterModalOpen: boolean;
+    activeFiltersCount: number;
+    onOpenFilters: () => void;
+    onCloseFilters: () => void;
+    onPatchFilters: (patch: Partial<AutoAssignLogFilters>) => void;
+    onResetFilters: () => void;
+    onReload: () => void;
+    onLoadMore: () => void;
+    onOpenSheet: (log: AutoAssignLogDoc) => void;
+}) {
+    return (
+        <>
+        <div className="-mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] max-w-[100vw] bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.10),transparent_36%),linear-gradient(180deg,#fbfaff_0%,#f6f3ff_52%,#f8fafc_100%)] pb-6 text-[#101936]">
+
+            {/* STICKY HEADER */}
+            <div className="sticky top-0 z-20 bg-[#fbfaff]/96 px-3 pb-3 pt-3 backdrop-blur-md">
+
+                {/* TITLE ROW */}
+                <div className="mb-3 flex items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                        <h1 className="truncate text-[20px] font-black tracking-[-0.03em] text-[#101936]">
+                            Asignaciones
+                        </h1>
+                        <p className="mt-0.5 text-[11px] font-semibold text-[#66739A]">
+                            <span className="font-black text-[#7C3AED]">{logs.length}</span> resultados
+                            {" · "}<span className="font-black text-[#101936]">{stats.total}</span> total
+                        </p>
+                    </div>
+
+                    <Link
+                        href="/admin/leads"
+                        className="flex h-10 w-10 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-white shadow-sm transition active:bg-[#f3f0ff]"
+                        title="Leads"
+                        aria-label="Leads"
+                    >
+                        <AppIcon name="lead" tone="purple" size="sm" className="h-[18px] w-[18px] bg-transparent text-[#7C3AED] ring-0" />
+                    </Link>
+
+                    <button
+                        type="button"
+                        onClick={onReload}
+                        disabled={loading}
+                        className="flex h-10 w-10 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-white shadow-sm transition active:bg-[#f3f0ff] disabled:opacity-50"
+                        aria-label="Actualizar"
+                    >
+                        <AppIcon name="refresh" tone="purple" size="sm" className="h-[18px] w-[18px] bg-transparent text-[#7C3AED] ring-0" />
+                    </button>
+                </div>
+
+                {/* STAT CARDS */}
+                <div className="mb-3 grid grid-cols-4 gap-2">
+                    <AssignStatCard label="Total" value={stats.total} color="text-violet-500" />
+                    <AssignStatCard label="Usuarios" value={stats.users} color="text-blue-500" />
+                    <AssignStatCard label="Auto" value={autoCount} color="text-emerald-500" />
+                    <AssignStatCard label="Manual" value={manualCount} color="text-amber-500" />
+                </div>
+
+                {/* SEARCH + FILTER */}
+                <div className="flex gap-2">
+                    <div className="flex h-[46px] flex-1 items-center gap-2 rounded-[14px] border border-[#E8E7FB] bg-white px-3 shadow-[0_2px_12px_rgba(91,33,255,0.07)]">
+                        <AppIcon name="search" tone="purple" size="sm" className="h-5 w-5 shrink-0 bg-transparent text-[#98A2B3] ring-0" />
+                        <input
+                            value={filters.search}
+                            onChange={(e) => onPatchFilters({ search: e.target.value })}
+                            placeholder="Buscar lead, usuario, ciudad..."
+                            className="min-w-0 flex-1 bg-transparent font-semibold text-[#101936] outline-none placeholder:text-[#98A2B3]"
+                            style={{ fontSize: "16px" }}
+                        />
+                        {filters.search ? (
+                            <button
+                                type="button"
+                                onClick={() => onPatchFilters({ search: "" })}
+                                className="flex h-7 w-7 items-center justify-center rounded-full bg-[#f3f0ff] text-[16px] text-[#7C3AED] transition active:bg-violet-200"
+                            >
+                                ×
+                            </button>
+                        ) : null}
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={onOpenFilters}
+                        className="relative flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-[14px] border border-[#E8E7FB] bg-white shadow-[0_2px_12px_rgba(91,33,255,0.07)] transition active:bg-[#f3f0ff]"
+                        aria-label="Filtros"
+                    >
+                        <AppIcon name="filter" tone="purple" size="sm" className="h-5 w-5 bg-transparent text-[#7C3AED] ring-0" />
+                        {activeFiltersCount > 0 ? (
+                            <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#7C3AED] text-[9px] font-black text-white">
+                                {activeFiltersCount}
+                            </span>
+                        ) : null}
+                    </button>
+                </div>
+            </div>
+
+            {/* LIST */}
+            <div className="grid gap-2 overflow-x-hidden px-3 pt-3">
+                {loading ? (
+                    <AssignMobileState icon="refresh" title="Cargando asignaciones" body="Estamos consultando los registros." />
+                ) : logs.length === 0 ? (
+                    <AssignMobileState icon="filter" title="Sin resultados" body="No hay asignaciones con esos filtros." />
+                ) : (
+                    logs.map((log) => (
+                        <AssignmentMobileCard key={log.id} log={log} onOpenSheet={onOpenSheet} />
+                    ))
+                )}
+
+                {hasMore ? (
+                    <button
+                        type="button"
+                        onClick={onLoadMore}
+                        disabled={loadingMore}
+                        className="mt-1 min-h-[46px] rounded-[14px] border border-[#E8E7FB] bg-white text-[12px] font-bold text-[#7C3AED] shadow-sm transition active:bg-[#f3f0ff] disabled:opacity-60"
+                    >
+                        {loadingMore ? "Cargando..." : "Cargar más"}
+                    </button>
+                ) : null}
+            </div>
+        </div>
+
+        {/* Filter modal outside animated container */}
+        <AssignMobileFiltersModal
+            open={filterModalOpen}
+            onClose={onCloseFilters}
+            filters={filters}
+            users={users}
+            onPatchFilters={onPatchFilters}
+            onResetFilters={() => { onResetFilters(); onCloseFilters(); }}
+        />
+        </>
+    );
+}
+
+function AssignStatCard({
+    label,
+    value,
+    color,
+}: {
+    label: string;
+    value: number;
+    color: string;
+}) {
+    return (
+        <div className="min-w-0 rounded-[14px] border border-[#E8E7FB] bg-white px-1.5 py-2.5 text-center shadow-[0_4px_16px_rgba(91,33,255,0.06)]">
+            <div className={`text-[13px] font-black ${color}`}>{value}</div>
+            <div className="mt-0.5 truncate text-[9px] font-semibold text-[#66739A]">{label}</div>
+        </div>
+    );
+}
+
+function AssignmentMobileCard({
+    log,
+    onOpenSheet,
+}: {
+    log: AutoAssignLogDoc;
+    onOpenSheet: (log: AutoAssignLogDoc) => void;
+}) {
+    const matchType = safeMatchType(log.matchType);
+    const manual = isManual(log);
+
+    return (
+        <article className="min-w-0 max-w-full overflow-hidden rounded-[16px] border border-[#E8E7FB] bg-white p-3 shadow-[0_4px_18px_rgba(91,33,255,0.07)]">
+            <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                    <p className="truncate text-[14px] font-black tracking-[-0.01em] text-[#101936]">
+                        {leadTitle(log)}
+                    </p>
+                    {(log.leadBusiness || log.leadPhone) ? (
+                        <p className="mt-0.5 truncate text-[12px] font-semibold text-[#344054]">
+                            {log.leadBusiness || log.leadPhone}
+                        </p>
+                    ) : null}
+                </div>
+
+                <div className="flex shrink-0 items-center gap-1.5">
+                    <Badge tone={manual ? "purple" : "blue"}>
+                        {manual ? "Manual" : "Auto"}
+                    </Badge>
+                    <button
+                        type="button"
+                        onClick={() => onOpenSheet(log)}
+                        className="flex h-9 w-9 items-center justify-center rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] transition active:bg-[#f3f0ff]"
+                        aria-label="Acciones"
+                    >
+                        <AppIcon name="more" tone="slate" size="sm" className="h-4 w-4 bg-transparent text-[#98A2B3] ring-0" />
+                    </button>
+                </div>
+            </div>
+
+            <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                <div className="flex items-center gap-1.5">
+                    <AppIcon name="user" tone="slate" size="sm" className="h-[14px] w-[14px] shrink-0 bg-transparent text-[#7C3AED] ring-0" />
+                    <span className="truncate text-[11px] font-black text-[#7C3AED]">{log.userName || "Usuario"}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                    <AppIcon name="location" tone="slate" size="sm" className="h-[14px] w-[14px] shrink-0 bg-transparent text-[#66739A] ring-0" />
+                    <span className="max-w-[140px] truncate text-[11px] font-semibold text-[#344054]">{leadGeo(log)}</span>
+                </div>
+                {matchType ? (
+                    <Badge tone={matchTone[matchType]}>{matchLabel[matchType]}</Badge>
+                ) : null}
+            </div>
+
+            <p className="mt-2 text-[10px] font-medium text-[#98A2B3]">{formatDate(log.createdAt)}</p>
+        </article>
+    );
+}
+
+function AssignMobileState({
+    icon,
+    title,
+    body,
+}: {
+    icon: "filter" | "refresh";
+    title: string;
+    body: string;
+}) {
+    return (
+        <div className="mt-10 flex flex-col items-center gap-3 px-4 text-center">
+            {icon === "refresh" ? (
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f3f0ff]">
+                    <svg className="tg-spin h-7 w-7 text-[#7C3AED]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                        <path d="M21 12a9 9 0 1 1-3.1-6.8" />
+                    </svg>
+                </div>
+            ) : (
+                <AppIcon name="filter" tone="slate" size="lg" />
+            )}
+            <p className="text-[13px] font-semibold text-[#66739A]">{title}</p>
+            <p className="text-[11px] font-medium text-[#98A2B3]">{body}</p>
+        </div>
+    );
+}
+
+function AssignMobileFiltersModal({
+    open,
+    onClose,
+    filters,
+    users,
+    onPatchFilters,
+    onResetFilters,
+}: {
+    open: boolean;
+    onClose: () => void;
+    filters: AutoAssignLogFilters;
+    users: { id: string; name?: string | null; email?: string | null }[];
+    onPatchFilters: (patch: Partial<AutoAssignLogFilters>) => void;
+    onResetFilters: () => void;
+}) {
+    if (!open) return null;
+
+    return (
+        <>
+            <button
+                type="button"
+                onClick={onClose}
+                className="fixed inset-0 z-40 bg-black/40 xl:hidden"
+                aria-label="Cerrar filtros"
+            />
+            <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-[24px] bg-white px-4 pb-8 pt-4 shadow-[0_-8px_40px_rgba(0,0,0,0.15)] xl:hidden">
+                <div className="mx-auto mb-4 h-1 w-12 rounded-full bg-[#E8E7FB]" />
+
+                <div className="mb-4 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <AppIcon name="filter" tone="purple" size="sm" className="h-4 w-4 bg-transparent text-[#7C3AED] ring-0" />
+                        <h3 className="text-[15px] font-black text-[#101936]">Filtros</h3>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onResetFilters}
+                        className="text-[12px] font-bold text-[#7C3AED] transition active:opacity-70"
+                    >
+                        Limpiar
+                    </button>
+                </div>
+
+                <div className="grid gap-3">
+                    <label className="grid gap-1">
+                        <span className="text-[10px] font-black uppercase tracking-[0.06em] text-[#66739A]">Día</span>
+                        <input
+                            type="date"
+                            value={filters.dayKey}
+                            onChange={(e) => onPatchFilters({ dayKey: e.target.value })}
+                            className="h-10 rounded-[13px] border border-[#E8E7FB] bg-white px-3 text-[13px] font-semibold text-[#101936] outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-violet-100"
+                        />
+                    </label>
+
+                    <label className="grid gap-1">
+                        <span className="text-[10px] font-black uppercase tracking-[0.06em] text-[#66739A]">Usuario</span>
+                        <select
+                            value={filters.userId}
+                            onChange={(e) => onPatchFilters({ userId: e.target.value })}
+                            className="h-10 rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 text-[13px] font-semibold text-[#101936] outline-none focus:border-[#7c3aed]"
+                            style={{ fontSize: "16px" }}
+                        >
+                            <option value="all">Todos</option>
+                            {users.map((u) => (
+                                <option key={u.id} value={u.id}>{u.name || u.email || "Usuario"}</option>
+                            ))}
+                        </select>
+                    </label>
+
+                    <label className="grid gap-1">
+                        <span className="text-[10px] font-black uppercase tracking-[0.06em] text-[#66739A]">Match</span>
+                        <select
+                            value={filters.matchType}
+                            onChange={(e) =>
+                                onPatchFilters({ matchType: e.target.value as AutoAssignLogFilters["matchType"] })
+                            }
+                            className="h-10 rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 text-[13px] font-semibold text-[#101936] outline-none focus:border-[#7c3aed]"
+                            style={{ fontSize: "16px" }}
+                        >
+                            <option value="all">Todos</option>
+                            {MATCH_OPTIONS.map((item) => (
+                                <option key={item.value} value={item.value}>{item.label}</option>
+                            ))}
+                        </select>
+                    </label>
+                </div>
+
+                <button
+                    type="button"
+                    onClick={onClose}
+                    className="mt-4 min-h-[52px] w-full rounded-[14px] bg-[#7C3AED] text-[14px] font-bold text-white transition active:bg-violet-700"
+                >
+                    Listo
+                </button>
+            </div>
+        </>
+    );
+}
+
+function AssignmentActionSheet({
+    log,
+    open,
+    onClose,
+}: {
+    log: AutoAssignLogDoc | null;
+    open: boolean;
+    onClose: () => void;
+}) {
+    useEffect(() => {
+        if (!open) return;
+        const handler = () => onClose();
+        window.addEventListener("scroll", handler, { passive: true });
+        return () => window.removeEventListener("scroll", handler);
+    }, [open, onClose]);
+
+    if (!open || !log) return null;
+
+    return (
+        <>
+            <button
+                type="button"
+                onClick={onClose}
+                className="fixed inset-0 z-40 bg-black/40 xl:hidden"
+                aria-label="Cerrar"
+            />
+            <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-[24px] bg-white px-4 pb-8 pt-4 shadow-[0_-8px_40px_rgba(0,0,0,0.18)] xl:hidden">
+                <div className="mx-auto mb-4 h-1 w-12 rounded-full bg-[#E8E7FB]" />
+
+                <div className="mb-4 min-w-0">
+                    <div className="flex items-center gap-2">
+                        <p className="truncate text-[15px] font-black text-[#101936]">{leadTitle(log)}</p>
+                        <Badge tone={isManual(log) ? "purple" : "blue"}>
+                            {isManual(log) ? "Manual" : "Auto"}
+                        </Badge>
+                    </div>
+                    <p className="mt-0.5 truncate text-[12px] font-semibold text-[#66739A]">
+                        {log.userName || "Usuario"} · {leadGeo(log)}
+                    </p>
+                </div>
+
+                {log.leadId ? (
+                    <div className="grid gap-2">
+                        <Link
+                            href={`/admin/leads/${log.leadId}`}
+                            onClick={onClose}
+                            className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#f3f0ff] px-4 text-[14px] font-bold text-[#101936] transition active:bg-violet-200"
+                        >
+                            <AppIcon name="chat" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#7C3AED] ring-0" />
+                            Chat
+                        </Link>
+                        <Link
+                            href={`/admin/leads/${log.leadId}`}
+                            onClick={onClose}
+                            className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#fff7ed] px-4 text-[14px] font-bold text-[#101936] transition active:bg-orange-100"
+                        >
+                            <AppIcon name="edit" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-orange-600 ring-0" />
+                            Editar lead
+                        </Link>
+                    </div>
+                ) : (
+                    <p className="rounded-[14px] border border-dashed border-[#d0d5dd] bg-[#f9fafb] px-4 py-4 text-center text-[12px] font-semibold text-[#667085]">
+                        No hay lead asociado.
+                    </p>
+                )}
+
+                <button
+                    type="button"
+                    onClick={onClose}
+                    className="mt-3 min-h-[48px] w-full rounded-[14px] border border-[#E8E7FB] bg-[#f8f7ff] text-[14px] font-bold text-[#66739A] transition active:bg-[#f3f0ff]"
+                >
+                    Cancelar
+                </button>
+            </div>
+        </>
+    );
+}
+
+// ─── DESKTOP TABLE ────────────────────────────────────────────────────────────
+
+function AssignmentsDesktopTable({
     logs,
     loading,
     onQuickActions,
@@ -240,107 +707,46 @@ function AssignmentsTable({
     onQuickActions: (log: AutoAssignLogDoc) => void;
 }) {
     return (
-        <div className="border-t border-white/[0.08] xl:border-[#f0f1f2]">
-            <div className="divide-y divide-white/[0.08] lg:hidden">
-                {loading ? (
-                    <div className="p-6 text-center text-[13px] font-semibold text-[#71717a]">
-                        Cargando asignaciones...
-                    </div>
-                ) : logs.length === 0 ? (
-                    <div className="p-6 text-center text-[13px] font-semibold text-[#71717a]">
-                        No hay asignaciones con esos filtros.
-                    </div>
-                ) : (
-                    logs.map((log) => (
-                        <AssignmentMobileCard key={log.id} log={log} onQuickActions={onQuickActions} />
-                    ))
-                )}
-            </div>
-
+        <div className="border-t border-[#f0f1f2]">
             <div className="hidden overflow-x-auto lg:block">
-            <table className="w-full min-w-[1120px] border-collapse">
-                <thead>
-                    <tr className="border-b border-[#f0f1f2] text-left text-[11px] font-medium text-[#9ca3af]">
-                        <th className="px-4 py-3">Lead</th>
-                        <th className="px-4 py-3">Usuario</th>
-                        <th className="px-4 py-3">Ciudad</th>
-                        <th className="px-4 py-3">Match</th>
-                        <th className="px-4 py-3">Cobertura usada</th>
-                        <th className="px-4 py-3 text-right">Fecha</th>
-                    </tr>
-                </thead>
-
-                <tbody>
-                    {loading ? (
-                        <tr>
-                            <td colSpan={6} className="p-8 text-center text-[13px] font-medium text-[#71717a]">
-                                Cargando asignaciones...
-                            </td>
+                <table className="w-full min-w-[1020px] border-collapse">
+                    <thead>
+                        <tr className="border-b border-[#f0f1f2] bg-[#fcfcff] text-left text-[10px] font-bold uppercase tracking-[0.06em] text-[#8a93ad]">
+                            <th className="px-4 py-2.5">Lead</th>
+                            <th className="px-4 py-2.5">Usuario</th>
+                            <th className="px-4 py-2.5">Ciudad</th>
+                            <th className="px-4 py-2.5">Match</th>
+                            <th className="px-4 py-2.5">Cobertura</th>
+                            <th className="px-4 py-2.5 text-right">Fecha</th>
                         </tr>
-                    ) : logs.length === 0 ? (
-                        <tr>
-                            <td colSpan={6} className="p-8 text-center text-[13px] font-medium text-[#71717a]">
-                                No hay asignaciones con esos filtros.
-                            </td>
-                        </tr>
-                    ) : (
-                        logs.map((log) => <AssignmentRow key={log.id} log={log} onQuickActions={onQuickActions} />)
-                    )}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        {loading ? (
+                            <tr>
+                                <td colSpan={6}>
+                                    <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
+                                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f3f0ff]">
+                                            <svg className="tg-spin h-7 w-7 text-[#7C3AED]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                                                <path d="M21 12a9 9 0 1 1-3.1-6.8" />
+                                            </svg>
+                                        </div>
+                                        <div className="mt-3 text-[13px] font-semibold text-[#66739a]">Cargando asignaciones</div>
+                                    </div>
+                                </td>
+                            </tr>
+                        ) : logs.length === 0 ? (
+                            <tr>
+                                <td colSpan={6} className="p-8 text-center text-[13px] font-medium text-[#71717a]">
+                                    No hay asignaciones con esos filtros.
+                                </td>
+                            </tr>
+                        ) : (
+                            logs.map((log) => <AssignmentRow key={log.id} log={log} onQuickActions={onQuickActions} />)
+                        )}
+                    </tbody>
+                </table>
             </div>
         </div>
-    );
-}
-
-function AssignmentMobileCard({
-    log,
-    onQuickActions,
-}: {
-    log: AutoAssignLogDoc;
-    onQuickActions: (log: AutoAssignLogDoc) => void;
-}) {
-    const matchType = safeMatchType(log.matchType);
-
-    return (
-        <button
-            type="button"
-            onClick={() => onQuickActions(log)}
-            className="w-full bg-[#111827] px-3 py-3 text-left transition active:bg-[#0F172A] xl:bg-white xl:active:bg-[#f8f7ff]"
-        >
-            <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                    <div className="truncate text-[14px] font-black text-[#F9FAFB] xl:text-[13px] xl:font-bold xl:text-[#101936]">
-                        {leadTitle(log)}
-                    </div>
-                    <div className="mt-1 truncate text-[12px] font-extrabold text-[#9CA3AF] xl:text-[11px] xl:font-semibold xl:text-[#66739a]">
-                        {log.leadBusiness || log.leadPhone || "Lead asignado"}
-                    </div>
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-1">
-                    <Badge tone="blue">Auto</Badge>
-                    {matchType ? (
-                        <Badge tone={matchTone[matchType]}>{matchLabel[matchType]}</Badge>
-                    ) : (
-                        <Badge tone="gray">{log.matchType || "Match"}</Badge>
-                    )}
-                </div>
-            </div>
-
-            <div className="mt-3 grid grid-cols-[1fr_auto] gap-3">
-                <div className="min-w-0">
-                    <div className="truncate text-[12px] font-black text-[#93C5FD] xl:font-bold xl:text-[#344054]">
-                        {log.userName || "Usuario"}
-                    </div>
-                    <div className="mt-0.5 truncate text-[11px] font-bold text-[#CBD5E1] xl:font-medium xl:text-[#98a2b3]">
-                        {leadGeo(log)}
-                    </div>
-                </div>
-                <div className="text-right text-[11px] font-black text-[#9CA3AF] xl:font-bold xl:text-[#66739a]">
-                    {formatDate(log.createdAt)}
-                </div>
-            </div>
-        </button>
     );
 }
 
@@ -360,58 +766,51 @@ function AssignmentRow({
         >
             <td className="px-4 py-3">
                 <div className="min-w-0">
-                    <div className="truncate text-[12px] font-semibold text-[#171717]">
-                        {leadTitle(log)}
+                    <div className="flex items-center gap-2">
+                        <span className="truncate text-[12px] font-semibold text-[#171717]">{leadTitle(log)}</span>
+                        <Badge tone={isManual(log) ? "purple" : "blue"}>
+                            {isManual(log) ? "Manual" : "Auto"}
+                        </Badge>
                     </div>
-                    <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-1 text-[11px] font-medium text-[#9ca3af]">
+                    <div className="mt-0.5 flex flex-wrap gap-x-2 text-[11px] font-medium text-[#9ca3af]">
                         {log.leadPhone ? <span>{log.leadPhone}</span> : null}
                         {log.leadBusiness ? <span>{log.leadBusiness}</span> : null}
                     </div>
                 </div>
             </td>
-
             <td className="px-4 py-3">
-                <div className="text-[12px] font-semibold text-[#171717]">
-                    {log.userName || "Usuario"}
-                </div>
-                <div className="mt-0.5 max-w-[220px] truncate text-[11px] font-medium text-[#9ca3af]">
+                <div className="text-[12px] font-semibold text-[#171717]">{log.userName || "Usuario"}</div>
+                <div className="mt-0.5 max-w-[200px] truncate text-[11px] font-medium text-[#9ca3af]">
                     {log.userCoverageLabel || "Sin cobertura visible"}
                 </div>
             </td>
-
             <td className="px-4 py-3">
-                <div className="text-[12px] font-semibold text-[#171717]">
-                    {leadGeo(log)}
-                </div>
+                <div className="text-[12px] font-semibold text-[#171717]">{leadGeo(log)}</div>
                 {log.leadGeoHubLabel ? (
-                    <div className="mt-0.5 max-w-[220px] truncate text-[11px] font-medium text-[#9ca3af]">
+                    <div className="mt-0.5 max-w-[200px] truncate text-[11px] font-medium text-[#9ca3af]">
                         Hub: {log.leadGeoHubLabel}
                     </div>
                 ) : null}
             </td>
-
             <td className="px-4 py-3">
                 <div className="flex flex-wrap items-center gap-1.5">
-                    <Badge tone="blue">Auto</Badge>
                     {matchType ? (
                         <Badge tone={matchTone[matchType]}>{matchLabel[matchType]}</Badge>
-                    ) : (
-                        <Badge tone="gray">{log.matchType || "Match"}</Badge>
+                    ) : isManual(log) ? null : (
+                        <Badge tone="gray">{log.matchType || "—"}</Badge>
                     )}
                 </div>
             </td>
-
             <td className="px-4 py-3">
-                <div className="max-w-[260px] truncate text-[12px] font-medium text-[#52525b]">
-                    {log.userCoverageLabel || log.coverageKey || "Sin cobertura visible"}
+                <div className="max-w-[220px] truncate text-[12px] font-medium text-[#52525b]">
+                    {log.userCoverageLabel || log.coverageKey || "—"}
                 </div>
                 {log.coverageKey ? (
-                    <div className="mt-0.5 max-w-[260px] truncate text-[11px] font-medium text-[#9ca3af]">
+                    <div className="mt-0.5 max-w-[220px] truncate text-[11px] font-medium text-[#9ca3af]">
                         {log.coverageKey}
                     </div>
                 ) : null}
             </td>
-
             <td className="px-4 py-3 text-right text-[12px] font-semibold text-[#71717a]">
                 {formatDate(log.createdAt)}
             </td>
@@ -443,7 +842,7 @@ function AssignmentQuickActionsModal({
                 </div>
             ) : (
                 <div className="rounded-2xl border border-dashed border-[#d0d5dd] bg-[#f9fafb] px-4 py-6 text-center text-[12px] font-semibold text-[#667085]">
-                    Esta asignacion no tiene lead asociado.
+                    Esta asignación no tiene lead asociado.
                 </div>
             )}
         </Modal>

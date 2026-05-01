@@ -1,4 +1,5 @@
 import {
+    addDoc,
     collection,
     getDocs,
     limit,
@@ -85,6 +86,47 @@ export function normalizeAutoAssignLogDoc(
         dayKey: text(data.dayKey) || null,
         mode: text(data.mode) || null,
     };
+}
+
+export async function writeManualAssignLog({
+    leadId,
+    leadName,
+    leadPhone,
+    leadBusiness,
+    leadGeoAdminDisplayLabel,
+    leadGeoAdminCityLabel,
+    leadGeoAdminStateLabel,
+    userId,
+    userName,
+}: {
+    leadId: string;
+    leadName?: string | null;
+    leadPhone?: string | null;
+    leadBusiness?: string | null;
+    leadGeoAdminDisplayLabel?: string | null;
+    leadGeoAdminCityLabel?: string | null;
+    leadGeoAdminStateLabel?: string | null;
+    userId: string;
+    userName?: string | null;
+}) {
+    const now = Date.now();
+    await addDoc(collection(db, "autoAssignLogs"), {
+        leadId: leadId || null,
+        leadName: leadName || null,
+        leadPhone: leadPhone || null,
+        leadBusiness: leadBusiness || null,
+        leadGeoAdminDisplayLabel: leadGeoAdminDisplayLabel || null,
+        leadGeoAdminCityLabel: leadGeoAdminCityLabel || null,
+        leadGeoAdminStateLabel: leadGeoAdminStateLabel || null,
+        userId: userId || null,
+        userName: userName || null,
+        userCoverageLabel: null,
+        matchType: null,
+        coverageKey: null,
+        createdAt: now,
+        dayKey: dayKeyFromDate(new Date(now)),
+        mode: "manual",
+    });
 }
 
 export async function getAutoAssignLogPage({

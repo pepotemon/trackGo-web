@@ -10,6 +10,7 @@ import {
 } from "@/data/activityRepo";
 import { listAccountingUsers } from "@/data/accountingRepo";
 import { assignLeadToUser } from "@/data/leadsRepo";
+import { writeManualAssignLog } from "@/data/autoAssignLogsRepo";
 import { AssignUserModal } from "@/features/leads/AssignUserModal";
 import { dayKeyFromDate, weekRangeKeysMonToSun } from "@/lib/date";
 import type {
@@ -650,6 +651,15 @@ export default function ActivityPage() {
                     setMobileAssigning(true);
                     try {
                         await assignLeadToUser(mobileAssigningRow.clientId, userId);
+                        const assignedUser = users.find((u) => u.id === userId);
+                        void writeManualAssignLog({
+                            leadId: mobileAssigningRow.clientId,
+                            leadName: mobileAssigningRow.name,
+                            leadPhone: mobileAssigningRow.phone,
+                            leadBusiness: mobileAssigningRow.business,
+                            userId,
+                            userName: assignedUser?.name || assignedUser?.email || null,
+                        });
                         setMobileAssigningRow(null);
                     } finally {
                         setMobileAssigning(false);

@@ -6,6 +6,7 @@ import {
     getLeadQueuePage,
     updateLeadStatus,
 } from "@/data/leadsRepo";
+import { writeManualAssignLog } from "@/data/autoAssignLogsRepo";
 import { listAdminUsers } from "@/data/usersRepo";
 import { weekRangeKeysMonToSun } from "@/lib/date";
 import type {
@@ -379,6 +380,18 @@ export function useAdminLeadQueue() {
                 verifiedAt: Date.now(),
             });
             await assignLeadToUser(lead.id, userId);
+            const assignedUser = users.find((u) => u.id === userId);
+            void writeManualAssignLog({
+                leadId: lead.id,
+                leadName: lead.name,
+                leadPhone: lead.phone,
+                leadBusiness: lead.business,
+                leadGeoAdminDisplayLabel: lead.location.displayLabel,
+                leadGeoAdminCityLabel: lead.location.adminCityLabel,
+                leadGeoAdminStateLabel: lead.location.adminStateLabel,
+                userId,
+                userName: assignedUser?.name || assignedUser?.email || null,
+            });
             setLeads((prev) => prev.filter((item) => item.id !== lead.id));
         } catch (e: unknown) {
             setErr(errorMessage(e, "No se pudo asignar el lead."));
