@@ -193,6 +193,9 @@ export default function ActivityPage() {
     const [listMode, setListMode] = useState<Exclude<ActivityEventType, "all"> | null>(null);
     const [earningsOpen, setEarningsOpen] = useState(false);
     const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+    const [mobileSheetRow, setMobileSheetRow] = useState<ActivityEventRow | null>(null);
+    const [mobileAssigningRow, setMobileAssigningRow] = useState<ActivityEventRow | null>(null);
+    const [mobileAssigning, setMobileAssigning] = useState(false);
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
     const [err, setErr] = useState<string | null>(null);
@@ -466,6 +469,7 @@ export default function ActivityPage() {
                     onLoadMore={loadMore}
                     onOpenList={setListMode}
                     onOpenEarnings={() => setEarningsOpen(true)}
+                    onOpenSheet={setMobileSheetRow}
                 />
             </div>
 
@@ -619,6 +623,7 @@ export default function ActivityPage() {
                 mode={listMode}
                 rows={listMode ? activityRowsByType[listMode] : []}
                 onClose={() => setListMode(null)}
+                onOpenSheet={setMobileSheetRow}
             />
 
             <EarningsModal
@@ -626,6 +631,30 @@ export default function ActivityPage() {
                 rows={earningsRows}
                 total={amountTotal}
                 onClose={() => setEarningsOpen(false)}
+            />
+
+            <ActivityActionSheet
+                row={mobileSheetRow}
+                open={!!mobileSheetRow}
+                onClose={() => setMobileSheetRow(null)}
+                onOpenAssign={(row) => { setMobileSheetRow(null); setMobileAssigningRow(row); }}
+            />
+            <AssignUserModal
+                open={!!mobileAssigningRow}
+                onClose={() => setMobileAssigningRow(null)}
+                users={users}
+                title="Reasignar a usuario"
+                saving={mobileAssigning}
+                onAssign={async (userId) => {
+                    if (!mobileAssigningRow) return;
+                    setMobileAssigning(true);
+                    try {
+                        await assignLeadToUser(mobileAssigningRow.clientId, userId);
+                        setMobileAssigningRow(null);
+                    } finally {
+                        setMobileAssigning(false);
+                    }
+                }}
             />
         </div>
     );
@@ -685,6 +714,7 @@ function MobileActivityView({
     onLoadMore,
     onOpenList,
     onOpenEarnings,
+    onOpenSheet,
 }: {
     viewMode: ActivityViewMode;
     rows: ActivityEventRow[];
@@ -707,10 +737,8 @@ function MobileActivityView({
     onLoadMore: () => void;
     onOpenList: (mode: Exclude<ActivityEventType, "all">) => void;
     onOpenEarnings: () => void;
+    onOpenSheet: (row: ActivityEventRow) => void;
 }) {
-    const [sheetRow, setSheetRow] = useState<ActivityEventRow | null>(null);
-    const [assigningRow, setAssigningRow] = useState<ActivityEventRow | null>(null);
-    const [assigning, setAssigning] = useState(false);
     const done = stats.visited + stats.rejected;
     const pct = stats.total <= 0 ? 0 : Math.round((done / Math.max(1, stats.total)) * 100);
 
@@ -851,7 +879,7 @@ function MobileActivityView({
                     <ActivityTableState icon="filter" title="Sin resultados" body="No hay actividad con esos filtros." />
                 ) : (
                     rows.map((row) => (
-                        <ActivityMobileCard key={row.id} row={row} onOpenSheet={setSheetRow} />
+                        <ActivityMobileCard key={row.id} row={row} onOpenSheet={onOpenSheet} />
                     ))
                 )}
 
@@ -876,29 +904,6 @@ function MobileActivityView({
             onPatchFilters={onPatchFilters}
             onResetFilters={() => { onResetFilters(); onCloseFilters(); }}
             onApply={() => { onApplyRange(); onCloseFilters(); }}
-        />
-        <ActivityActionSheet
-            row={sheetRow}
-            open={!!sheetRow}
-            onClose={() => setSheetRow(null)}
-            onOpenAssign={(row) => { setSheetRow(null); setAssigningRow(row); }}
-        />
-        <AssignUserModal
-            open={!!assigningRow}
-            onClose={() => setAssigningRow(null)}
-            users={users}
-            title="Reasignar a usuario"
-            saving={assigning}
-            onAssign={async (userId) => {
-                if (!assigningRow) return;
-                setAssigning(true);
-                try {
-                    await assignLeadToUser(assigningRow.clientId, userId);
-                    setAssigningRow(null);
-                } finally {
-                    setAssigning(false);
-                }
-            }}
         />
         </>
     );
@@ -1315,10 +1320,12 @@ function ActivityListModal({
     mode,
     rows,
     onClose,
+    onOpenSheet,
 }: {
     mode: Exclude<ActivityEventType, "all"> | null;
     rows: ActivityEventRow[];
     onClose: () => void;
+    onOpenSheet?: (row: ActivityEventRow) => void;
 }) {
     const [q, setQ] = useState("");
     const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set());
@@ -1423,12 +1430,11 @@ function ActivityListModal({
                                     {isExpanded ? (
                                         <div className="divide-y divide-[#f0f1f2] border-t border-[#f0f1f2]">
                                             {group.rows.map((row) => (
-                                                <Link
-                                                    key={row.id}
-                                                    href={`/admin/clients/${row.clientId}`}
-                                                    className="flex items-center justify-between gap-3 px-3 py-2.5 transition hover:bg-[#f8f7ff] active:bg-[#f3f0ff]"
-                                                >
-                                                    <div className="min-w-0 flex-1">
+                                                <div key={row.id} className="flex items-center gap-2 px-3 py-2.5 transition hover:bg-[#f8f7ff]">
+                                                    <Link
+                                                        href={`/admin/clients/${row.clientId}`}
+                                                        className="min-w-0 flex-1"
+                                                    >
                                                         <div className="truncate text-[13px] font-bold text-[#101936]">
                                                             {eventTitle(row)}
                                                         </div>
@@ -1437,9 +1443,19 @@ function ActivityListModal({
                                                                 {eventSubtitle(row)}
                                                             </div>
                                                         ) : null}
-                                                    </div>
+                                                    </Link>
                                                     <Badge tone={typeTone[row.type]}>{typeLabel[row.type]}</Badge>
-                                                </Link>
+                                                    {onOpenSheet ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => { onClose(); onOpenSheet(row); }}
+                                                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-[#E8E7FB] bg-[#f8f7ff] transition active:bg-[#f3f0ff] xl:hidden"
+                                                            aria-label="Acciones"
+                                                        >
+                                                            <AppIcon name="more" tone="slate" size="sm" className="h-[14px] w-[14px] bg-transparent text-[#98A2B3] ring-0" />
+                                                        </button>
+                                                    ) : null}
+                                                </div>
                                             ))}
                                         </div>
                                     ) : null}
