@@ -84,6 +84,18 @@ function cityLabel(lead: MetaLeadDoc) {
     );
 }
 
+function mobileCityName(lead: MetaLeadDoc): string {
+    const city =
+        lead.location.adminCityLabel ||
+        lead.location.cityLabel ||
+        "";
+    if (city) return city;
+    const full = lead.location.displayLabel || "";
+    if (!full) return "Sin ciudad";
+    const dash = full.lastIndexOf(" - ");
+    return dash > 0 ? full.slice(0, dash) : full;
+}
+
 function quickStatus(lead: MetaLeadDoc) {
     return typeof lead.raw.quickStatusText === "string"
         ? lead.raw.quickStatusText
@@ -151,6 +163,17 @@ export default function AdminLeadsPage() {
         if (!query) return;
         setFilters((prev) => ({ ...prev, search: query }));
     }, [setFilters]);
+
+    useEffect(() => {
+        if (!loading && filteredLeads.length > 0) {
+            try {
+                sessionStorage.setItem(
+                    "leads_mobile_queue",
+                    JSON.stringify(filteredLeads.map((l) => l.id))
+                );
+            } catch {}
+        }
+    }, [filteredLeads, loading]);
 
     return (
         <div className="mx-auto w-full max-w-[1220px]">
@@ -630,24 +653,20 @@ function MobileLeadCard({
     saving: boolean;
     onOpenEdit: (lead: MetaLeadDoc) => void;
 }) {
-    const [sheetOpen, setSheetOpen] = useState(false);
-    const status = lead.verificationStatus;
-    const city = cityLabel(lead);
-    const hasCity = city !== "Sin ciudad";
+    const [menuOpen, setMenuOpen] = useState(false);
+    const city = mobileCityName(lead);
+    const hasCity = cityLabel(lead) !== "Sin ciudad";
     const hasBusiness = !!lead.business;
     const hasMaps = !!lead.location.mapsUrl;
-    const isPendingReview = status === "pending_review";
+    const waUrl = whatsappUrl(lead.phone);
 
     return (
-        <>
+        <div className="relative">
             <article className="min-w-0 max-w-full overflow-hidden rounded-[16px] border border-[#E8E7FB] bg-white p-3 shadow-[0_4px_18px_rgba(91,33,255,0.07)]">
 
                 {/* TOP ROW: name/phone + "..." */}
                 <div className="flex items-start justify-between gap-2">
-                    <Link
-                        href={`/admin/leads/${lead.id}`}
-                        className={saving ? "pointer-events-none min-w-0 flex-1 opacity-60" : "min-w-0 flex-1"}
-                    >
+                    <div className={saving ? "pointer-events-none min-w-0 flex-1 opacity-60" : "min-w-0 flex-1"}>
                         <div className="flex min-w-0 items-center gap-2">
                             <p className="min-w-0 flex-1 truncate text-[14px] font-black tracking-[-0.01em] text-[#101936]">
                                 {lead.phone || displayName(lead)}
@@ -659,11 +678,11 @@ function MobileLeadCard({
                                 {lead.name}
                             </p>
                         ) : null}
-                    </Link>
+                    </div>
 
                     <button
                         type="button"
-                        onClick={() => setSheetOpen(true)}
+                        onClick={() => setMenuOpen(true)}
                         disabled={saving}
                         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] transition active:bg-[#f3f0ff] disabled:opacity-60"
                         aria-label="Acciones"
@@ -672,13 +691,13 @@ function MobileLeadCard({
                     </button>
                 </div>
 
-                {/* ICON ROW: city · business · maps · status */}
+                {/* ICON ROW: city · business · maps */}
                 <div className="mt-2.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
 
                     {/* City */}
                     <div className={["flex items-center gap-1", hasCity ? "text-emerald-600" : "text-red-500"].join(" ")}>
                         <AppIcon
-                            name="assign"
+                            name="map"
                             tone="slate"
                             size="sm"
                             className={["h-[14px] w-[14px] bg-transparent ring-0", hasCity ? "text-emerald-600" : "text-red-500"].join(" ")}
@@ -686,9 +705,6 @@ function MobileLeadCard({
                         <span className="text-[11px] font-semibold">
                             {hasCity ? city : "Sin ciudad"}
                         </span>
-                        {hasCity && lead.location.outOfCoverage ? (
-                            <span className="text-[10px] font-semibold text-amber-500">(fuera)</span>
-                        ) : null}
                     </div>
 
                     {/* Business */}
@@ -701,9 +717,7 @@ function MobileLeadCard({
                         />
                         {hasBusiness ? (
                             <span className="max-w-[90px] truncate text-[11px] font-semibold">{lead.business}</span>
-                        ) : (
-                            <span className="text-[11px] font-semibold">Sin negocio</span>
-                        )}
+                        ) : null}
                     </div>
 
                     {/* Maps */}
@@ -722,31 +736,10 @@ function MobileLeadCard({
                             <AppIcon name="map" tone="slate" size="sm" className="h-[14px] w-[14px] bg-transparent text-red-400 ring-0" />
                         </span>
                     )}
-
-                    {/* Status */}
-                    {isPendingReview ? (
-                        <AppIcon name="search" tone="slate" size="sm" className="h-[14px] w-[14px] bg-transparent text-blue-500 ring-0" />
-                    ) : (
-                        <span className={[
-                            "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold",
-                            status === "not_suitable"
-                                ? "border-red-200 bg-red-50 text-red-600"
-                                : "border-amber-200 bg-amber-50 text-amber-700",
-                        ].join(" ")}>
-                            {quickStatus(lead) || statusLabel[status]}
-                        </span>
-                    )}
                 </div>
 
-                {/* ADDRESS */}
-                {lead.location.address ? (
-                    <p className="mt-1.5 line-clamp-1 text-[11px] font-medium text-[#66739A]">
-                        {lead.location.address}
-                    </p>
-                ) : null}
-
                 {/* META */}
-                <p className="mt-1 truncate text-[10px] font-medium text-[#98A2B3]">
+                <p className="mt-2 truncate text-[10px] font-medium text-[#98A2B3]">
                     {formatDateShort(lead.createdAt)}
                     {" · "}
                     {formatDateShort(lead.lastInboundMessageAt || lead.updatedAt || lead.createdAt)}
@@ -757,109 +750,59 @@ function MobileLeadCard({
                 ) : null}
             </article>
 
-            <MobileLeadActionSheet
-                lead={lead}
-                open={sheetOpen}
-                onClose={() => setSheetOpen(false)}
-                onEdit={() => { setSheetOpen(false); onOpenEdit(lead); }}
-            />
-        </>
-    );
-}
-
-function MobileLeadActionSheet({
-    lead,
-    open,
-    onClose,
-    onEdit,
-}: {
-    lead: MetaLeadDoc;
-    open: boolean;
-    onClose: () => void;
-    onEdit: () => void;
-}) {
-    if (!open) return null;
-
-    const waUrl = whatsappUrl(lead.phone);
-
-    return (
-        <>
-            <button
-                type="button"
-                onClick={onClose}
-                className="fixed inset-0 z-40 bg-black/40 xl:hidden"
-                aria-label="Cerrar"
-            />
-            <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-[24px] bg-white px-4 pb-8 pt-4 shadow-[0_-8px_40px_rgba(0,0,0,0.18)] xl:hidden">
-                <div className="mx-auto mb-4 h-1 w-12 rounded-full bg-[#E8E7FB]" />
-
-                <div className="mb-4 min-w-0">
-                    <p className="truncate text-[15px] font-black text-[#101936]">
-                        {lead.phone || displayName(lead)}
-                    </p>
-                    {(lead.name || lead.business) ? (
-                        <p className="mt-0.5 truncate text-[12px] font-semibold text-[#66739A]">
-                            {lead.name || lead.business}
-                        </p>
-                    ) : null}
-                </div>
-
-                <div className="grid gap-2">
-                    <Link
-                        href={`/admin/leads/${lead.id}`}
-                        className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#f3f0ff] px-4 text-[14px] font-bold text-[#7C3AED] transition active:bg-violet-200"
-                    >
-                        <AppIcon name="chat" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#7C3AED] ring-0" />
-                        Chat
-                    </Link>
-
+            {/* FLOATING MENU */}
+            {menuOpen ? (
+                <>
                     <button
                         type="button"
-                        onClick={onEdit}
-                        className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#fff7ed] px-4 text-[14px] font-bold text-orange-600 transition active:bg-orange-100"
-                    >
-                        <AppIcon name="edit" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-orange-500 ring-0" />
-                        Editar
-                    </button>
-
-                    {lead.location.mapsUrl ? (
-                        <a
-                            href={lead.location.mapsUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-emerald-50 px-4 text-[14px] font-bold text-emerald-700 transition active:bg-emerald-100"
+                        onClick={() => setMenuOpen(false)}
+                        className="fixed inset-0 z-40"
+                        aria-label="Cerrar menú"
+                    />
+                    <div className="absolute right-0 top-0 z-50 min-w-[160px] overflow-hidden rounded-[14px] border border-[#E8E7FB] bg-white shadow-[0_8px_32px_rgba(0,0,0,0.16)]">
+                        <Link
+                            href={`/admin/leads/${lead.id}`}
+                            onClick={() => setMenuOpen(false)}
+                            className="flex h-11 items-center px-4 text-[13px] font-bold text-[#7C3AED] transition active:bg-[#f3f0ff]"
                         >
-                            <AppIcon name="map" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-emerald-600 ring-0" />
-                            Maps
-                        </a>
-                    ) : null}
-
-                    {waUrl ? (
-                        <a
-                            href={waUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-emerald-50 px-4 text-[14px] font-bold text-emerald-700 transition active:bg-emerald-100"
+                            Chat
+                        </Link>
+                        <button
+                            type="button"
+                            onClick={() => { setMenuOpen(false); onOpenEdit(lead); }}
+                            className="flex h-11 w-full items-center border-t border-[#f0f1f2] px-4 text-[13px] font-bold text-[#101936] transition active:bg-[#f8f7ff]"
                         >
-                            <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 fill-none stroke-emerald-600 stroke-2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.96a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 16.92Z" />
-                            </svg>
-                            WhatsApp
-                        </a>
-                    ) : null}
-                </div>
-
-                <button
-                    type="button"
-                    onClick={onClose}
-                    className="mt-3 min-h-[48px] w-full rounded-[14px] border border-[#E8E7FB] bg-[#f8f7ff] text-[14px] font-bold text-[#66739A] transition active:bg-[#f3f0ff]"
-                >
-                    Cancelar
-                </button>
-            </div>
-        </>
+                            Editar
+                        </button>
+                        {hasMaps ? (
+                            <a
+                                href={lead.location.mapsUrl!}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={() => setMenuOpen(false)}
+                                className="flex h-11 items-center border-t border-[#f0f1f2] px-4 text-[13px] font-bold text-emerald-700 transition active:bg-emerald-50"
+                            >
+                                Maps
+                            </a>
+                        ) : null}
+                        {waUrl ? (
+                            <a
+                                href={waUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={() => setMenuOpen(false)}
+                                className="flex h-11 items-center border-t border-[#f0f1f2] px-4 text-[13px] font-bold text-emerald-700 transition active:bg-emerald-50"
+                            >
+                                WhatsApp
+                            </a>
+                        ) : null}
+                    </div>
+                </>
+            ) : null}
+        </div>
     );
 }
+
 
 function MobileFiltersModal({
     open,

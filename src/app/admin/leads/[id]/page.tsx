@@ -90,6 +90,14 @@ export default function LeadChatPage() {
     const [sending, setSending] = useState(false);
     const [busyMode, setBusyMode] = useState(false);
     const [err, setErr] = useState<string | null>(null);
+    const [mobileQueue, setMobileQueue] = useState<string[]>([]);
+
+    useEffect(() => {
+        try {
+            const raw = sessionStorage.getItem("leads_mobile_queue");
+            if (raw) setMobileQueue(JSON.parse(raw) as string[]);
+        } catch {}
+    }, []);
 
     useEffect(() => {
         if (!clientId) return;
@@ -146,6 +154,10 @@ export default function LeadChatPage() {
 
     const mode = chatMode(lead);
 
+    const queueIndex = mobileQueue.indexOf(clientId);
+    const prevId = queueIndex > 0 ? mobileQueue[queueIndex - 1] : null;
+    const nextId = queueIndex < mobileQueue.length - 1 ? mobileQueue[queueIndex + 1] : null;
+
     const canSend = useMemo(() => {
         return mode === "human" && !!draft.trim() && !sending;
     }, [draft, mode, sending]);
@@ -199,39 +211,95 @@ export default function LeadChatPage() {
 
     return (
         <div className="mx-auto w-full max-w-[1220px]">
-            <PageHeader
-                title={displayName(lead)}
-                subtitle={lead?.business || lead?.phone || "Conversacion y validacion del lead"}
-                icon={<AppIcon name="chat" tone="purple" size="sm" className="bg-transparent text-white ring-0" />}
-                actions={
-                    <>
-                        <QuickLink href="/admin/leads" icon="lead" label="Leads" />
-                        <QuickLink href={`/admin/clients/${clientId}`} icon="users" label="Cliente" />
-                        {lead?.location.mapsUrl ? (
-                            <QuickLink href={lead.location.mapsUrl} icon="map" label="Maps" external />
-                        ) : null}
-                        <IconButton
-                            icon="edit"
-                            label="Editar lead"
-                            onClick={() => setEditOpen(true)}
-                            disabled={!lead}
-                        />
-                        <Button
-                            onClick={() => changeMode("human")}
-                            disabled={busyMode || mode === "human"}
-                        >
-                            Tomar chat
-                        </Button>
-                        <Button
-                            variant="primary"
-                            onClick={() => changeMode("bot")}
-                            disabled={busyMode || mode === "bot"}
-                        >
-                            Activar bot
-                        </Button>
-                    </>
-                }
-            />
+
+            {/* MOBILE HEADER — solo flecha atrás + nombre + prev/next */}
+            <div className="xl:hidden -mx-3 -mt-4 mb-4 flex items-center gap-2 border-b border-[#E8E7FB] bg-white px-3 py-3">
+                <Link
+                    href="/admin/leads"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-[#f8f7ff] transition active:bg-[#f3f0ff]"
+                    aria-label="Volver a leads"
+                >
+                    <AppIcon name="arrowLeft" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#101936] ring-0" />
+                </Link>
+
+                <div className="min-w-0 flex-1">
+                    {loadingLead ? (
+                        <p className="text-[13px] font-semibold text-[#66739A]">Cargando...</p>
+                    ) : (
+                        <>
+                            <p className="truncate text-[14px] font-black text-[#101936]">{displayName(lead)}</p>
+                            {lead?.business ? (
+                                <p className="truncate text-[10px] font-semibold text-[#66739A]">{lead.business}</p>
+                            ) : null}
+                        </>
+                    )}
+                </div>
+
+                {prevId ? (
+                    <Link
+                        href={`/admin/leads/${prevId}`}
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-[#f8f7ff] transition active:bg-[#f3f0ff]"
+                        aria-label="Lead anterior"
+                    >
+                        <AppIcon name="arrowLeft" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#66739A] ring-0" />
+                    </Link>
+                ) : (
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-[#f8f7ff] opacity-30">
+                        <AppIcon name="arrowLeft" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#66739A] ring-0" />
+                    </span>
+                )}
+
+                {nextId ? (
+                    <Link
+                        href={`/admin/leads/${nextId}`}
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-[#f8f7ff] transition active:bg-[#f3f0ff]"
+                        aria-label="Lead siguiente"
+                    >
+                        <AppIcon name="arrowRight" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#66739A] ring-0" />
+                    </Link>
+                ) : (
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-[#f8f7ff] opacity-30">
+                        <AppIcon name="arrowRight" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#66739A] ring-0" />
+                    </span>
+                )}
+            </div>
+
+            {/* DESKTOP HEADER */}
+            <div className="hidden xl:block">
+                <PageHeader
+                    title={displayName(lead)}
+                    subtitle={lead?.business || lead?.phone || "Conversacion y validacion del lead"}
+                    icon={<AppIcon name="chat" tone="purple" size="sm" className="bg-transparent text-white ring-0" />}
+                    actions={
+                        <>
+                            <QuickLink href="/admin/leads" icon="lead" label="Leads" />
+                            <QuickLink href={`/admin/clients/${clientId}`} icon="users" label="Cliente" />
+                            {lead?.location.mapsUrl ? (
+                                <QuickLink href={lead.location.mapsUrl} icon="map" label="Maps" external />
+                            ) : null}
+                            <IconButton
+                                icon="edit"
+                                label="Editar lead"
+                                onClick={() => setEditOpen(true)}
+                                disabled={!lead}
+                            />
+                            <Button
+                                onClick={() => changeMode("human")}
+                                disabled={busyMode || mode === "human"}
+                            >
+                                Tomar chat
+                            </Button>
+                            <Button
+                                variant="primary"
+                                onClick={() => changeMode("bot")}
+                                disabled={busyMode || mode === "bot"}
+                            >
+                                Activar bot
+                            </Button>
+                        </>
+                    }
+                />
+            </div>
 
             {err ? (
                 <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] font-semibold text-red-600">

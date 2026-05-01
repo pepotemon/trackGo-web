@@ -1,6 +1,7 @@
 // src/app/admin/activity/page.tsx
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     listActivityEventsPage,
@@ -132,6 +133,12 @@ function eventSubtitle(event: ActivityEventRow) {
     const cleanAddress = /^https?:\/\//i.test(address) ? "" : address;
 
     return business || cleanAddress || event.phone || event.clientId;
+}
+
+function whatsappUrl(phone?: string | null) {
+    const clean = String(phone ?? "").replace(/\D+/g, "");
+    if (!clean) return "";
+    return `https://wa.me/${clean}?text=${encodeURIComponent("Olá! Estou entrando em contato sobre seu cadastro 🙌")}`;
 }
 
 function rejectedReasonText(event: ActivityEventRow) {
@@ -401,15 +408,15 @@ export default function ActivityPage() {
                     hasMore={hasMore}
                     activeFiltersCount={activeFiltersCount}
                     amountTotal={amountTotal}
-                    filtersOpen={mobileFiltersOpen}
+                    filterModalOpen={mobileFiltersOpen}
                     onChangeViewMode={changeViewMode}
-                    onToggleFilters={() => setMobileFiltersOpen((value) => !value)}
+                    onOpenFilters={() => setMobileFiltersOpen(true)}
+                    onCloseFilters={() => setMobileFiltersOpen(false)}
                     onPatchFilters={patchFilters}
                     onApplyRange={applyRange}
                     onResetFilters={resetFilters}
                     onRefresh={() => void loadInitial(filters)}
                     onLoadMore={loadMore}
-                    onOpenRow={setQuickRow}
                     onOpenList={setListMode}
                     onOpenEarnings={() => setEarningsOpen(true)}
                 />
@@ -566,10 +573,6 @@ export default function ActivityPage() {
                 mode={listMode}
                 rows={listMode ? activityRowsByType[listMode] : []}
                 onClose={() => setListMode(null)}
-                onOpenRow={(row) => {
-                    setListMode(null);
-                    setQuickRow(row);
-                }}
             />
 
             <EarningsModal
@@ -625,15 +628,15 @@ function MobileActivityView({
     hasMore,
     activeFiltersCount,
     amountTotal,
-    filtersOpen,
+    filterModalOpen,
     onChangeViewMode,
-    onToggleFilters,
+    onOpenFilters,
+    onCloseFilters,
     onPatchFilters,
     onApplyRange,
     onResetFilters,
     onRefresh,
     onLoadMore,
-    onOpenRow,
     onOpenList,
     onOpenEarnings,
 }: {
@@ -647,15 +650,15 @@ function MobileActivityView({
     hasMore: boolean;
     activeFiltersCount: number;
     amountTotal: number;
-    filtersOpen: boolean;
+    filterModalOpen: boolean;
     onChangeViewMode: (mode: ActivityViewMode) => void;
-    onToggleFilters: () => void;
+    onOpenFilters: () => void;
+    onCloseFilters: () => void;
     onPatchFilters: (patch: Partial<ActivityFilters>) => void;
     onApplyRange: () => void;
     onResetFilters: () => void;
     onRefresh: () => void;
     onLoadMore: () => void;
-    onOpenRow: (row: ActivityEventRow) => void;
     onOpenList: (mode: Exclude<ActivityEventType, "all">) => void;
     onOpenEarnings: () => void;
 }) {
@@ -663,186 +666,165 @@ function MobileActivityView({
     const pct = stats.total <= 0 ? 0 : Math.round((done / Math.max(1, stats.total)) * 100);
 
     return (
-        <div className="-mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] max-w-[100vw] overflow-x-hidden 
-        bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.16),transparent_34%),linear-gradient(180deg,#FBFAFF_0%,#F6F3FF_48%,#FFFFFF_100%)]
-        px-3 pb-4 pt-2 text-[#101936]">
+        <div className="-mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] max-w-[100vw] bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.16),transparent_34%),linear-gradient(180deg,#FBFAFF_0%,#F6F3FF_48%,#FFFFFF_100%)] pb-6 text-[#101936]">
 
-            {/* HEADER */}
-            <div className="mb-3 flex items-center gap-2">
-                <div className="min-w-0 flex-1">
-                    <h1 className="truncate text-[20px] font-black">Actividad</h1>
-                    <p className="mt-0.5 text-[11px] font-semibold text-[#66739A]">
-                        <span className="font-black text-[#7C3AED]">{done}</span> / {stats.total} completados
-                    </p>
-                </div>
+            {/* STICKY HEADER */}
+            <div className="sticky top-0 z-20 bg-[#fbfaff]/96 px-3 pb-3 pt-3 backdrop-blur-md">
 
-                {/* ingresos */}
-                <button
-                    onClick={onOpenEarnings}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 text-[11px] font-bold text-emerald-600"
-                >
-                    R$ {Number(amountTotal || 0).toFixed(2)}
-                </button>
+                {/* TITLE ROW */}
+                <div className="mb-3 flex items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                        <h1 className="truncate text-[20px] font-black text-[#101936]">Actividad</h1>
+                        <p className="mt-0.5 text-[11px] font-semibold text-[#66739A]">
+                            <span className="font-black text-[#7C3AED]">{done}</span> / {stats.total} completados
+                        </p>
+                    </div>
 
-                {/* refresh */}
-                <button
-                    onClick={onRefresh}
-                    className="flex h-10 w-10 items-center justify-center rounded-[12px] border border-[#E8E7FB] bg-white"
-                >
-                    <AppIcon name="refresh" tone="purple" size="sm" />
-                </button>
-            </div>
-
-            {/* SWITCH */}
-            <div className="mb-3 grid grid-cols-2 gap-2 rounded-xl border border-[#E8E7FB] bg-white p-1">
-                {(["day", "week"] as ActivityViewMode[]).map((mode) => (
+                    {/* ingresos */}
                     <button
-                        key={mode}
                         type="button"
-                        onClick={() => onChangeViewMode(mode)}
-                        className={[
-                            "h-9 rounded-[13px] text-[12px] font-black transition",
-                            viewMode === mode
-                                ? "bg-[#7C3AED] text-white shadow-[0_10px_25px_rgba(124,58,237,0.22)]"
-                                : "text-[#66739A]",
-                        ].join(" ")}
+                        onClick={onOpenEarnings}
+                        className="inline-flex h-9 items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 text-[11px] font-bold text-emerald-600"
                     >
-                        {mode === "day" ? "Día" : "Semana"}
+                        R$ {Number(amountTotal || 0).toFixed(2)}
                     </button>
-                ))}
-            </div>
 
-            {/* STATS */}
-            <div className="mb-3 grid grid-cols-4 gap-2">
-                <MobileStatButton
-                    label="Visitados"
-                    value={stats.visited}
-                    icon="check"
-                    color="text-green-600"
-                    onClick={() => onOpenList("visited")}
-                    disabled={stats.visited <= 0}
-                />
-                <MobileStatButton
-                    label="Rechazados"
-                    value={stats.rejected}
-                    icon="close"
-                    color="text-red-500"
-                    onClick={() => onOpenList("rejected")}
-                    disabled={stats.rejected <= 0}
-                />
-                <MobileStatButton
-                    label="Pendientes"
-                    value={stats.pending}
-                    icon="alert"
-                    color="text-yellow-500"
-                    onClick={() => onOpenList("pending")}
-                    disabled={stats.pending <= 0}
-                />
-                <MobileStatButton
-                    label="Asignados"
-                    value={stats.users}
-                    icon="assign"
-                    color="text-[#66739A]"
-                />
-            </div>
-
-            {/* SEARCH */}
-            <div className="mb-3 flex h-[42px] items-center gap-2 rounded-xl border border-[#E8E7FB] bg-white px-3">
-                <AppIcon name="search" tone="slate" size="sm" />
-                <input
-                    value={filters.search}
-                    onChange={(e) => onPatchFilters({ search: e.target.value })}
-                    placeholder="Buscar..."
-                    className="flex-1 bg-transparent text-[13px] font-medium outline-none"
-                />
-            </div>
-
-            {/* FILTROS HEADER */}
-            <div className="mb-3 rounded-xl border border-[#E8E7FB] bg-white p-3">
-                <div className="flex items-center justify-between">
-                    <p className="text-[12px] font-semibold text-[#66739A]">
-                        {filters.startKey} → {filters.endKey}
-                    </p>
-
+                    {/* Day/Week single toggle */}
                     <button
-                        onClick={onToggleFilters}
-                        className="text-[11px] font-bold text-[#7C3AED]"
+                        type="button"
+                        onClick={() => onChangeViewMode(viewMode === "day" ? "week" : "day")}
+                        className="flex h-9 items-center rounded-[13px] border border-[#E8E7FB] bg-white px-3 text-[12px] font-black text-[#101936] transition active:bg-[#f3f0ff]"
                     >
-                        {filtersOpen ? "Ocultar" : "Filtros"}
+                        {viewMode === "day" ? "Día" : "Semana"}
+                    </button>
+
+                    {/* Refresh */}
+                    <button
+                        type="button"
+                        onClick={onRefresh}
+                        className="flex h-10 w-10 items-center justify-center rounded-[12px] border border-[#E8E7FB] bg-white transition active:bg-[#f3f0ff]"
+                    >
+                        <AppIcon name="refresh" tone="purple" size="sm" className="h-[18px] w-[18px] bg-transparent text-[#7C3AED] ring-0" />
                     </button>
                 </div>
 
-                {/* PROGRESS */}
-                <div className="mt-2 h-2 rounded-full bg-[#EEF2FF]">
-                    <div
-                        className="h-full rounded-full bg-[#7C3AED]"
-                        style={{ width: `${pct}%` }}
+                {/* STAT BUTTONS */}
+                <div className="mb-3 grid grid-cols-4 gap-2">
+                    <MobileStatButton
+                        label="Visitados"
+                        value={stats.visited}
+                        icon="check"
+                        color="text-green-600"
+                        onClick={() => onOpenList("visited")}
+                        disabled={stats.visited <= 0}
+                    />
+                    <MobileStatButton
+                        label="Rechazados"
+                        value={stats.rejected}
+                        icon="close"
+                        color="text-red-500"
+                        onClick={() => onOpenList("rejected")}
+                        disabled={stats.rejected <= 0}
+                    />
+                    <MobileStatButton
+                        label="Pendientes"
+                        value={stats.pending}
+                        icon="alert"
+                        color="text-yellow-500"
+                        onClick={() => onOpenList("pending")}
+                        disabled={stats.pending <= 0}
+                    />
+                    <MobileStatButton
+                        label="Asignados"
+                        value={stats.users}
+                        icon="assign"
+                        color="text-[#66739A]"
                     />
                 </div>
 
-                {/* FILTROS */}
-                {filtersOpen && (
-                    <div className="mt-3 grid gap-2">
+                {/* SEARCH + FILTER */}
+                <div className="flex gap-2">
+                    <div className="flex h-[46px] flex-1 items-center gap-2 rounded-[14px] border border-[#E8E7FB] bg-white px-3 shadow-[0_2px_12px_rgba(91,33,255,0.07)]">
+                        <AppIcon name="search" tone="purple" size="sm" className="h-5 w-5 shrink-0 bg-transparent text-[#98A2B3] ring-0" />
                         <input
-                            type="date"
-                            value={filters.startKey}
-                            onChange={(e) => onPatchFilters({ startKey: e.target.value })}
-                            className="h-10 rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 text-[13px] font-semibold text-[#101936] outline-none focus:border-[#7c3aed] focus:ring-2 focus:ring-violet-100"
+                            value={filters.search}
+                            onChange={(e) => onPatchFilters({ search: e.target.value })}
+                            placeholder="Buscar..."
+                            className="min-w-0 flex-1 bg-transparent font-semibold text-[#101936] outline-none placeholder:text-[#98A2B3]"
                             style={{ fontSize: "16px" }}
                         />
-
-                        <input
-                            type="date"
-                            value={filters.endKey}
-                            onChange={(e) => onPatchFilters({ endKey: e.target.value })}
-                            className="h-10 rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 text-[13px] font-semibold text-[#101936] outline-none focus:border-[#7c3aed] focus:ring-2 focus:ring-violet-100"
-                            style={{ fontSize: "16px" }}
-                        />
-
-                        <select
-                            value={filters.userId}
-                            onChange={(e) => onPatchFilters({ userId: e.target.value })}
-                            className="h-10 rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 text-[13px] font-semibold text-[#101936] outline-none focus:border-[#7c3aed]"
-                        >
-                            <option value="all">Todos</option>
-                            {users.map((u) => (
-                                <option key={u.id} value={u.id}>
-                                    {u.name}
-                                </option>
-                            ))}
-                        </select>
-
-                        <div className="grid grid-cols-2 gap-2">
-                            <Button onClick={onResetFilters}>Limpiar</Button>
-                            <Button variant="primary" onClick={onApplyRange}>
-                                Aplicar
-                            </Button>
-                        </div>
+                        {filters.search ? (
+                            <button
+                                type="button"
+                                onClick={() => onPatchFilters({ search: "" })}
+                                className="flex h-7 w-7 items-center justify-center rounded-full bg-[#f3f0ff] text-[16px] text-[#7C3AED]"
+                            >
+                                ×
+                            </button>
+                        ) : null}
                     </div>
-                )}
+
+                    <button
+                        type="button"
+                        onClick={onOpenFilters}
+                        className="relative flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-[14px] border border-[#E8E7FB] bg-white shadow-[0_2px_12px_rgba(91,33,255,0.07)] transition active:bg-[#f3f0ff]"
+                        aria-label="Filtros"
+                    >
+                        <AppIcon name="filter" tone="purple" size="sm" className="h-5 w-5 bg-transparent text-[#7C3AED] ring-0" />
+                        {activeFiltersCount > 0 ? (
+                            <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#7C3AED] text-[9px] font-black text-white">
+                                {activeFiltersCount}
+                            </span>
+                        ) : null}
+                    </button>
+                </div>
             </div>
 
-            {/* LISTA */}
-            <div className="grid gap-2">
+            {/* PROGRESS BAR (outside sticky, scrolls with content) */}
+            <div className="px-3 pt-3">
+                <div className="rounded-xl border border-[#E8E7FB] bg-white px-3 py-2.5">
+                    <p className="text-[11px] font-semibold text-[#66739A]">
+                        {filters.startKey} → {filters.endKey}
+                    </p>
+                    <div className="mt-2 h-2 rounded-full bg-[#EEF2FF]">
+                        <div className="h-full rounded-full bg-[#7C3AED]" style={{ width: `${pct}%` }} />
+                    </div>
+                </div>
+            </div>
+
+            {/* LIST */}
+            <div className="grid gap-2 overflow-x-hidden px-3 pt-3">
                 {loading ? (
-                    <ActivityTableState icon="refresh" title="Cargando" body="..." />
+                    <ActivityTableState icon="refresh" title="Cargando" body="Estamos preparando la actividad." />
                 ) : rows.length === 0 ? (
-                    <ActivityTableState icon="filter" title="Sin resultados" body="..." />
+                    <ActivityTableState icon="filter" title="Sin resultados" body="No hay actividad con esos filtros." />
                 ) : (
                     rows.map((row) => (
-                        <ActivityMobileCard key={row.id} row={row} onQuickActions={onOpenRow} />
+                        <ActivityMobileCard key={row.id} row={row} />
                     ))
                 )}
 
                 {hasMore && (
                     <button
+                        type="button"
                         onClick={onLoadMore}
-                        className="mt-2 h-12 rounded-xl border border-[#E8E7FB] bg-white font-bold"
+                        className="mt-2 h-12 rounded-xl border border-[#E8E7FB] bg-white text-[12px] font-bold text-[#7C3AED]"
                     >
                         {loadingMore ? "Cargando..." : "Cargar más"}
                     </button>
                 )}
             </div>
+
+            {/* FILTERS MODAL */}
+            <MobileActivityFiltersModal
+                open={filterModalOpen}
+                onClose={onCloseFilters}
+                filters={filters}
+                users={users}
+                onPatchFilters={onPatchFilters}
+                onResetFilters={() => { onResetFilters(); onCloseFilters(); }}
+                onApply={() => { onApplyRange(); onCloseFilters(); }}
+            />
         </div>
     );
 }
@@ -942,74 +924,174 @@ function ActivityTable({
 
 function ActivityMobileCard({
     row,
-    onQuickActions,
     compact = false,
 }: {
     row: ActivityEventRow;
-    onQuickActions: (row: ActivityEventRow) => void;
     compact?: boolean;
 }) {
+    const [sheetOpen, setSheetOpen] = useState(false);
     const reason = rejectedReasonText(row);
 
     return (
-        <button
-            type="button"
-            onClick={() => onQuickActions(row)}
-            className={[
-                "block w-full max-w-full overflow-hidden rounded-[15px] border border-[#E8E7FB] bg-white text-left shadow-[0_4px_18px_rgba(91,33,255,0.06)] transition active:bg-[#f3f0ff]",
+        <>
+            <article className={[
+                "block w-full max-w-full overflow-hidden rounded-[15px] border border-[#E8E7FB] bg-white text-left shadow-[0_4px_18px_rgba(91,33,255,0.06)]",
                 compact ? "px-2.5 py-2.5" : "px-3 py-3",
-            ].join(" ")}
-        >
-            <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13px] font-black text-[#101936]">
-                        {eventTitle(row)}
-                    </div>
-                    <div className="mt-0.5 truncate text-[11px] font-semibold text-[#66739A]">
-                        {eventSubtitle(row)}
+            ].join(" ")}>
+                <div className="flex items-start justify-between gap-2">
+                    <Link href={`/admin/clients/${row.clientId}`} className="min-w-0 flex-1">
+                        <div className="truncate text-[13px] font-black text-[#101936]">
+                            {eventTitle(row)}
+                        </div>
+                        <div className="mt-0.5 truncate text-[11px] font-semibold text-[#66739A]">
+                            {eventSubtitle(row)}
+                        </div>
+                    </Link>
+
+                    <div className="flex shrink-0 items-center gap-1.5">
+                        {row.type === "rejected" ? (
+                            reason ? (
+                                <span className="max-w-[120px] truncate rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600">
+                                    {reason}
+                                </span>
+                            ) : null
+                        ) : (
+                            <Badge tone={typeTone[row.type]}>{typeLabel[row.type]}</Badge>
+                        )}
+                        <button
+                            type="button"
+                            onClick={() => setSheetOpen(true)}
+                            className="flex h-8 w-8 items-center justify-center rounded-[10px] border border-[#E8E7FB] bg-[#f8f7ff] transition active:bg-[#f3f0ff]"
+                            aria-label="Acciones"
+                        >
+                            <AppIcon name="more" tone="slate" size="sm" className="h-[14px] w-[14px] bg-transparent text-[#98A2B3] ring-0" />
+                        </button>
                     </div>
                 </div>
 
-                <Badge tone={typeTone[row.type]}>{typeLabel[row.type]}</Badge>
-            </div>
+                <div className="mt-2 flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                        <span className="truncate text-[12px] font-black text-[#7C3AED]">
+                            {row.userName}
+                        </span>
+                        {row.mapsUrl ? (
+                            <a
+                                href={row.mapsUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                aria-label="Ver en Maps"
+                                className="shrink-0 text-emerald-600"
+                            >
+                                <AppIcon name="map" tone="slate" size="sm" className="h-[14px] w-[14px] bg-transparent text-emerald-600 ring-0" />
+                            </a>
+                        ) : null}
+                    </div>
+                    <div className="shrink-0 text-right text-[10px] font-semibold text-[#98A2B3]">
+                        {formatDate(row.createdAt)}
+                    </div>
+                </div>
 
-            <div className="mt-2 flex items-center justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-2">
-                    <span className="truncate text-[12px] font-black text-[#7C3AED]">
-                        {row.userName}
-                    </span>
+                {row.source === "pending_client" && row.type !== "pending" ? (
+                    <div className="mt-2">
+                        <Badge tone="yellow">Actual</Badge>
+                    </div>
+                ) : null}
+            </article>
+
+            <ActivityActionSheet
+                row={row}
+                open={sheetOpen}
+                onClose={() => setSheetOpen(false)}
+            />
+        </>
+    );
+}
+
+function ActivityActionSheet({
+    row,
+    open,
+    onClose,
+}: {
+    row: ActivityEventRow;
+    open: boolean;
+    onClose: () => void;
+}) {
+    if (!open) return null;
+
+    const waUrl = whatsappUrl(row.phone);
+
+    return (
+        <>
+            <button
+                type="button"
+                onClick={onClose}
+                className="fixed inset-0 z-40 bg-black/40 xl:hidden"
+                aria-label="Cerrar"
+            />
+            <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-[24px] bg-white px-4 pb-8 pt-4 shadow-[0_-8px_40px_rgba(0,0,0,0.18)] xl:hidden">
+                <div className="mx-auto mb-4 h-1 w-12 rounded-full bg-[#E8E7FB]" />
+
+                <div className="mb-4 min-w-0">
+                    <p className="truncate text-[15px] font-black text-[#101936]">{eventTitle(row)}</p>
+                    {eventSubtitle(row) ? (
+                        <p className="mt-0.5 truncate text-[12px] font-semibold text-[#66739A]">{eventSubtitle(row)}</p>
+                    ) : null}
+                </div>
+
+                <div className="grid gap-2">
+                    <Link
+                        href={`/admin/clients/${row.clientId}`}
+                        className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#eff6ff] px-4 text-[14px] font-bold text-blue-700 transition active:bg-blue-100"
+                    >
+                        <AppIcon name="users" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-blue-600 ring-0" />
+                        Ver cliente
+                    </Link>
+
+                    <Link
+                        href={`/admin/leads/${row.clientId}`}
+                        className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#f3f0ff] px-4 text-[14px] font-bold text-[#7C3AED] transition active:bg-violet-200"
+                    >
+                        <AppIcon name="chat" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#7C3AED] ring-0" />
+                        Chat
+                    </Link>
+
                     {row.mapsUrl ? (
                         <a
                             href={row.mapsUrl}
                             target="_blank"
                             rel="noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            aria-label="Ver en Maps"
-                            className="shrink-0 text-emerald-600"
+                            className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-emerald-50 px-4 text-[14px] font-bold text-emerald-700 transition active:bg-emerald-100"
                         >
-                            <AppIcon name="map" tone="slate" size="sm" className="h-[14px] w-[14px] bg-transparent text-emerald-600 ring-0" />
+                            <AppIcon name="map" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-emerald-600 ring-0" />
+                            Maps
+                        </a>
+                    ) : null}
+
+                    {waUrl ? (
+                        <a
+                            href={waUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-emerald-50 px-4 text-[14px] font-bold text-emerald-700 transition active:bg-emerald-100"
+                        >
+                            <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 fill-none stroke-emerald-600 stroke-2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.96a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.73 16.92Z" />
+                            </svg>
+                            WhatsApp
                         </a>
                     ) : null}
                 </div>
 
-                <div className="shrink-0 text-right text-[10px] font-semibold text-[#98A2B3]">
-                    {formatDate(row.createdAt)}
-                </div>
+                <button
+                    type="button"
+                    onClick={onClose}
+                    className="mt-3 min-h-[48px] w-full rounded-[14px] border border-[#E8E7FB] bg-[#f8f7ff] text-[14px] font-bold text-[#66739A] transition active:bg-[#f3f0ff]"
+                >
+                    Cancelar
+                </button>
             </div>
-
-            {(reason || (row.source === "pending_client" && row.type !== "pending")) ? (
-                <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    {reason ? (
-                        <span className="max-w-full truncate rounded-full border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-semibold text-red-600">
-                            {reason}
-                        </span>
-                    ) : null}
-                    {row.source === "pending_client" && row.type !== "pending" ? (
-                        <Badge tone="yellow">Actual</Badge>
-                    ) : null}
-                </div>
-            ) : null}
-        </button>
+        </>
     );
 }
 
@@ -1125,18 +1207,16 @@ function ActivityListModal({
     mode,
     rows,
     onClose,
-    onOpenRow,
 }: {
     mode: Exclude<ActivityEventType, "all"> | null;
     rows: ActivityEventRow[];
     onClose: () => void;
-    onOpenRow: (row: ActivityEventRow) => void;
 }) {
     const [q, setQ] = useState("");
-    const [collapsedUsers, setCollapsedUsers] = useState<Set<string>>(new Set());
+    const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set());
 
     function toggleUser(userId: string) {
-        setCollapsedUsers((prev) => {
+        setExpandedUsers((prev) => {
             const next = new Set(prev);
             if (next.has(userId)) next.delete(userId);
             else next.add(userId);
@@ -1206,7 +1286,7 @@ function ActivityListModal({
                         </div>
                     ) : (
                         groupedRows.map((group) => {
-                            const isExpanded = !collapsedUsers.has(group.userId);
+                            const isExpanded = expandedUsers.has(group.userId);
 
                             return (
                                 <div key={group.userId} className="overflow-hidden rounded-[14px] border border-[#E8E7FB] bg-white">
@@ -1235,12 +1315,23 @@ function ActivityListModal({
                                     {isExpanded ? (
                                         <div className="divide-y divide-[#f0f1f2] border-t border-[#f0f1f2]">
                                             {group.rows.map((row) => (
-                                                <ActivityMobileCard
+                                                <Link
                                                     key={row.id}
-                                                    row={row}
-                                                    onQuickActions={onOpenRow}
-                                                    compact
-                                                />
+                                                    href={`/admin/clients/${row.clientId}`}
+                                                    className="flex items-center justify-between gap-3 px-3 py-2.5 transition hover:bg-[#f8f7ff] active:bg-[#f3f0ff]"
+                                                >
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="truncate text-[13px] font-bold text-[#101936]">
+                                                            {eventTitle(row)}
+                                                        </div>
+                                                        {eventSubtitle(row) ? (
+                                                            <div className="mt-0.5 truncate text-[11px] font-semibold text-[#66739A]">
+                                                                {eventSubtitle(row)}
+                                                            </div>
+                                                        ) : null}
+                                                    </div>
+                                                    <Badge tone={typeTone[row.type]}>{typeLabel[row.type]}</Badge>
+                                                </Link>
                                             ))}
                                         </div>
                                     ) : null}
@@ -1251,6 +1342,117 @@ function ActivityListModal({
                 </div>
             </div>
         </Modal>
+    );
+}
+
+function MobileActivityFiltersModal({
+    open,
+    onClose,
+    filters,
+    users,
+    onPatchFilters,
+    onResetFilters,
+    onApply,
+}: {
+    open: boolean;
+    onClose: () => void;
+    filters: ActivityFilters;
+    users: ActivityUserOption[];
+    onPatchFilters: (patch: Partial<ActivityFilters>) => void;
+    onResetFilters: () => void;
+    onApply: () => void;
+}) {
+    if (!open) return null;
+
+    return (
+        <>
+            <button
+                type="button"
+                onClick={onClose}
+                className="fixed inset-0 z-40 bg-black/40 xl:hidden"
+                aria-label="Cerrar filtros"
+            />
+            <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-[24px] bg-white px-4 pb-8 pt-4 shadow-[0_-8px_40px_rgba(0,0,0,0.15)] xl:hidden">
+                <div className="mx-auto mb-4 h-1 w-12 rounded-full bg-[#E8E7FB]" />
+
+                <div className="mb-4 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <AppIcon name="filter" tone="purple" size="sm" className="h-4 w-4 bg-transparent text-[#7C3AED] ring-0" />
+                        <h3 className="text-[15px] font-black text-[#101936]">Filtros</h3>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onResetFilters}
+                        className="text-[12px] font-bold text-[#7C3AED] transition active:opacity-70"
+                    >
+                        Limpiar
+                    </button>
+                </div>
+
+                <div className="grid gap-3">
+                    <div className="grid grid-cols-2 gap-2">
+                        <MobileField label="Desde">
+                            <input
+                                type="date"
+                                value={filters.startKey}
+                                onChange={(e) => onPatchFilters({ startKey: e.target.value })}
+                                className="h-10 w-full rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] px-2 text-[13px] font-semibold text-[#101936] outline-none focus:border-[#7c3aed]"
+                                style={{ fontSize: "16px" }}
+                            />
+                        </MobileField>
+                        <MobileField label="Hasta">
+                            <input
+                                type="date"
+                                value={filters.endKey}
+                                onChange={(e) => onPatchFilters({ endKey: e.target.value })}
+                                className="h-10 w-full rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] px-2 text-[13px] font-semibold text-[#101936] outline-none focus:border-[#7c3aed]"
+                                style={{ fontSize: "16px" }}
+                            />
+                        </MobileField>
+                    </div>
+
+                    <MobileField label="Usuario">
+                        <select
+                            value={filters.userId}
+                            onChange={(e) => onPatchFilters({ userId: e.target.value })}
+                            className="h-10 w-full rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 text-[13px] font-semibold text-[#101936] outline-none focus:border-[#7c3aed]"
+                            style={{ fontSize: "16px" }}
+                        >
+                            <option value="all">Todos</option>
+                            {users.map((u) => (
+                                <option key={u.id} value={u.id}>
+                                    {u.name}
+                                </option>
+                            ))}
+                        </select>
+                    </MobileField>
+
+                    <MobileField label="Estado">
+                        <select
+                            value={filters.type}
+                            onChange={(e) =>
+                                onPatchFilters({ type: e.target.value as ActivityEventType })
+                            }
+                            className="h-10 w-full rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 text-[13px] font-semibold text-[#101936] outline-none focus:border-[#7c3aed]"
+                            style={{ fontSize: "16px" }}
+                        >
+                            <option value="all">Todos</option>
+                            <option value="visited">Visitados</option>
+                            <option value="rejected">Rechazados</option>
+                            <option value="pending">Pendientes</option>
+                        </select>
+                    </MobileField>
+                </div>
+
+                <button
+                    type="button"
+                    onClick={onApply}
+                    className="mt-4 min-h-[52px] w-full rounded-[14px] bg-[#7C3AED] text-[14px] font-bold text-white transition active:bg-violet-700"
+                >
+                    Aplicar
+                </button>
+            </div>
+        </>
     );
 }
 

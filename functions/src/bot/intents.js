@@ -388,6 +388,48 @@ function detectInboundIntent(text) {
     return "default";
 }
 
+function isInterestExpressed(text) {
+    return includesAnyNormalized(text, [
+        "tenho interesse",
+        "tenho interes",
+        "quero",
+        "gostaria",
+        "me interessa",
+        "pode fazer",
+        "serve pra mim",
+        "serve para mim",
+        "preciso de credito",
+        "preciso de crédito",
+        "preciso do credito",
+        "preciso do crédito",
+        "quero fazer",
+        "quero o credito",
+        "quero o crédito",
+        "quero o emprestimo",
+        "quero o empréstimo",
+        "pode sim",
+        "sim pode",
+        "to interessado",
+        "estou interessado",
+        "to interessada",
+        "estou interessada",
+        "me interesa",
+        "estoy interesado",
+        "estoy interesada",
+        "quiero",
+        "quisiera",
+        "si me interesa",
+        "si estoy interesado",
+        "quiero el prestamo",
+        "quiero el credito",
+        "quiero el crédito",
+        "pueden ayudarme",
+        "si quiero",
+        "claro que si",
+        "claro que sí",
+    ]);
+}
+
 module.exports = {
     isCoverageQuestion,
     isHowItWorksQuestion,
@@ -398,4 +440,5 @@ module.exports = {
     classifyProfileFromFlags,
     getVerificationStatusFromLead,
     detectInboundIntent,
+    isInterestExpressed,
 };

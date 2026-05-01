@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
     listClientDailyEvents,
@@ -88,6 +88,7 @@ function rawText(client: MetaLeadDoc | null, key: string) {
 export default function ClientDetailPage() {
     const params = useParams<{ id: string }>();
     const clientId = String(params.id ?? "").trim();
+    const router = useRouter();
 
     const [client, setClient] = useState<MetaLeadDoc | null>(null);
     const [messages, setMessages] = useState<LeadMessageDoc[]>([]);
@@ -239,46 +240,114 @@ export default function ClientDetailPage() {
 
     return (
         <div className="mx-auto w-full max-w-[1220px]">
-            <PageHeader
-                title={displayName(client)}
-                subtitle={client?.business || client?.phone || "Gestion operativa del cliente"}
-                icon={<AppIcon name="users" tone="blue" size="sm" className="bg-transparent text-white ring-0" />}
-                actions={
-                    <>
-                        <QuickLink href="/admin/activity" icon="activity" label="Actividad" />
-                        <QuickLink href={`/admin/leads/${clientId}`} icon="chat" label="Chat" />
-                        {client?.location.mapsUrl ? (
-                            <QuickLink href={client.location.mapsUrl} icon="map" label="Maps" external />
-                        ) : null}
-                        <IconButton
-                            icon="edit"
-                            label="Editar lead"
-                            onClick={() => setEditOpen(true)}
-                            disabled={!client}
-                        />
-                        <IconButton
-                            icon="pause"
-                            label="Volver a pendiente"
-                            onClick={() => setConfirmStatus("pending")}
-                            disabled={!client || savingStatus || status === "pending"}
-                        />
-                        <IconButton
-                            icon="close"
-                            label="Rechazar"
-                            onClick={() => setRejectOpen(true)}
-                            disabled={!client || savingStatus || status === "rejected"}
-                            variant="danger"
-                        />
-                        <IconButton
-                            icon="check"
-                            label="Marcar visitado"
-                            onClick={() => setConfirmStatus("visited")}
-                            disabled={!client || savingStatus || status === "visited"}
-                            variant="primary"
-                        />
-                    </>
-                }
-            />
+
+            {/* MOBILE HEADER */}
+            <div className="xl:hidden -mx-3 -mt-4 flex items-center gap-2 border-b border-[#E8E7FB] bg-white px-3 py-3">
+                <button
+                    type="button"
+                    onClick={() => router.back()}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-[#f8f7ff] transition active:bg-[#f3f0ff]"
+                    aria-label="Volver"
+                >
+                    <AppIcon name="arrowLeft" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#101936] ring-0" />
+                </button>
+
+                <div className="min-w-0 flex-1">
+                    {loadingClient ? (
+                        <p className="text-[13px] font-semibold text-[#66739A]">Cargando...</p>
+                    ) : (
+                        <>
+                            <p className="truncate text-[14px] font-black text-[#101936]">{displayName(client)}</p>
+                            {client?.business || client?.phone ? (
+                                <p className="truncate text-[10px] font-semibold text-[#66739A]">
+                                    {client.business || client.phone}
+                                </p>
+                            ) : null}
+                        </>
+                    )}
+                </div>
+
+                {client ? (
+                    <Badge tone={clientStatusTone[status]}>{clientStatusLabel[status]}</Badge>
+                ) : null}
+            </div>
+
+            {/* MOBILE ACTION BAR */}
+            <div className="xl:hidden -mx-3 mb-4 grid grid-cols-3 gap-2 border-b border-[#E8E7FB] bg-white px-3 pb-3 pt-2">
+                <button
+                    type="button"
+                    onClick={() => setRejectOpen(true)}
+                    disabled={!client || savingStatus || status === "rejected"}
+                    className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-[12px] border border-red-200 bg-red-50 text-[12px] font-bold text-red-600 transition active:bg-red-100 disabled:opacity-40"
+                >
+                    <AppIcon name="close" tone="slate" size="sm" className="h-4 w-4 bg-transparent text-red-500 ring-0" />
+                    Rechazar
+                </button>
+
+                <button
+                    type="button"
+                    onClick={() => setConfirmStatus("pending")}
+                    disabled={!client || savingStatus || status === "pending"}
+                    className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-[12px] border border-amber-200 bg-amber-50 text-[12px] font-bold text-amber-700 transition active:bg-amber-100 disabled:opacity-40"
+                >
+                    <AppIcon name="refresh" tone="slate" size="sm" className="h-4 w-4 bg-transparent text-amber-600 ring-0" />
+                    Revertir
+                </button>
+
+                <button
+                    type="button"
+                    onClick={() => setConfirmStatus("visited")}
+                    disabled={!client || savingStatus || status === "visited"}
+                    className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-[12px] border border-emerald-200 bg-emerald-50 text-[12px] font-bold text-emerald-700 transition active:bg-emerald-100 disabled:opacity-40"
+                >
+                    <AppIcon name="check" tone="slate" size="sm" className="h-4 w-4 bg-transparent text-emerald-600 ring-0" />
+                    Visitado
+                </button>
+            </div>
+
+            {/* DESKTOP HEADER */}
+            <div className="hidden xl:block">
+                <PageHeader
+                    title={displayName(client)}
+                    subtitle={client?.business || client?.phone || "Gestion operativa del cliente"}
+                    icon={<AppIcon name="users" tone="blue" size="sm" className="bg-transparent text-white ring-0" />}
+                    actions={
+                        <>
+                            <QuickLink href="/admin/activity" icon="activity" label="Actividad" />
+                            <QuickLink href={`/admin/leads/${clientId}`} icon="chat" label="Chat" />
+                            {client?.location.mapsUrl ? (
+                                <QuickLink href={client.location.mapsUrl} icon="map" label="Maps" external />
+                            ) : null}
+                            <IconButton
+                                icon="edit"
+                                label="Editar lead"
+                                onClick={() => setEditOpen(true)}
+                                disabled={!client}
+                            />
+                            <IconButton
+                                icon="pause"
+                                label="Volver a pendiente"
+                                onClick={() => setConfirmStatus("pending")}
+                                disabled={!client || savingStatus || status === "pending"}
+                            />
+                            <IconButton
+                                icon="close"
+                                label="Rechazar"
+                                onClick={() => setRejectOpen(true)}
+                                disabled={!client || savingStatus || status === "rejected"}
+                                variant="danger"
+                            />
+                            <IconButton
+                                icon="check"
+                                label="Marcar visitado"
+                                onClick={() => setConfirmStatus("visited")}
+                                disabled={!client || savingStatus || status === "visited"}
+                                variant="primary"
+                            />
+                        </>
+                    }
+                />
+            </div>
 
             {err ? (
                 <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] font-semibold text-red-600">
@@ -497,7 +566,7 @@ export default function ClientDetailPage() {
                 title={
                     confirmStatus === "visited"
                         ? "Marcar visitado"
-                        : "Volver a pendiente"
+                        : "Revertir a pendiente"
                 }
                 subtitle={displayName(client)}
                 size="sm"
@@ -506,7 +575,7 @@ export default function ClientDetailPage() {
                     <p className="text-[13px] font-medium leading-5 text-[#667085]">
                         {confirmStatus === "visited"
                             ? "Esto actualizara el estado del cliente y registrara un evento diario para contabilidad."
-                            : "Esto limpiara el estado actual y registrara el cliente como pendiente nuevamente."}
+                            : "El cliente volvera a estado pendiente. El estado anterior quedara en el historial de eventos."}
                     </p>
 
                     <div className="flex justify-end gap-2 border-t border-[#eef1f5] pt-4">

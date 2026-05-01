@@ -4,6 +4,7 @@ const { sendWhatsAppText } = require("../whatsapp/sender");
 const { appendClientMessage, isBotAllowedForClient } = require("../whatsapp/manualReply");
 const { getWhatsappChannelFromClient } = require("../whatsapp/channels");
 const { safeString, safeNumber, stripUndefined } = require("../utils/text");
+const { isInterestExpressed } = require("../bot/intents");
 
 const WINDOW_HOURS = 24;
 const DEFAULT_HOURS_BEFORE_DEADLINE = 5;
@@ -44,7 +45,34 @@ function getMissingInfoType(client) {
     return "";
 }
 
-function buildShortMissingInfoReminderPtBr(missingType) {
+function buildShortMissingInfoReminderPtBr(missingType, hasInterest) {
+    if (hasInterest) {
+        if (missingType === "business") {
+            return [
+                "Olá 👋",
+                "",
+                "Seu cadastro ainda não foi concluído — falta o tipo de comércio.",
+                "Ainda dá tempo, pode me enviar aqui.",
+            ].join("\n");
+        }
+
+        if (missingType === "maps") {
+            return [
+                "Olá 👋",
+                "",
+                "Seu cadastro ainda não foi concluído — falta a localização do comércio no Google Maps.",
+                "Ainda dá tempo, pode me enviar aqui.",
+            ].join("\n");
+        }
+
+        return [
+            "Olá 👋",
+            "",
+            "Seu cadastro ainda não foi concluído — falta o tipo de comércio e a localização no Google Maps.",
+            "Ainda dá tempo, pode me enviar aqui.",
+        ].join("\n");
+    }
+
     if (missingType === "business") {
         return [
             "Olá 👋",
@@ -71,7 +99,34 @@ function buildShortMissingInfoReminderPtBr(missingType) {
     ].join("\n");
 }
 
-function buildShortMissingInfoReminderEsPa(missingType) {
+function buildShortMissingInfoReminderEsPa(missingType, hasInterest) {
+    if (hasInterest) {
+        if (missingType === "business") {
+            return [
+                "Hola.",
+                "",
+                "Tu registro todavia no esta completo — falta el tipo de negocio.",
+                "Todavia hay tiempo, puedes enviarmelo aqui.",
+            ].join("\n");
+        }
+
+        if (missingType === "maps") {
+            return [
+                "Hola.",
+                "",
+                "Tu registro todavia no esta completo — falta la ubicacion del negocio en Google Maps.",
+                "Todavia hay tiempo, puedes enviarmela aqui.",
+            ].join("\n");
+        }
+
+        return [
+            "Hola.",
+            "",
+            "Tu registro todavia no esta completo — falta el tipo de negocio y la ubicacion en Google Maps.",
+            "Todavia hay tiempo, puedes enviarmelos aqui.",
+        ].join("\n");
+    }
+
     if (missingType === "business") {
         return [
             "Hola.",
@@ -98,12 +153,12 @@ function buildShortMissingInfoReminderEsPa(missingType) {
     ].join("\n");
 }
 
-function buildShortMissingInfoReminder(missingType, language) {
+function buildShortMissingInfoReminder(missingType, language, hasInterest) {
     if (safeString(language || "") === "es-PA") {
-        return buildShortMissingInfoReminderEsPa(missingType);
+        return buildShortMissingInfoReminderEsPa(missingType, hasInterest);
     }
 
-    return buildShortMissingInfoReminderPtBr(missingType);
+    return buildShortMissingInfoReminderPtBr(missingType, hasInterest);
 }
 
 function shouldSkipReminder(
@@ -208,7 +263,8 @@ async function processClientReminder({
     }
 
     const channel = getWhatsappChannelFromClient(client);
-    const body = buildShortMissingInfoReminder(missingType, channel.language);
+    const hasInterest = isInterestExpressed(safeString(client?.lastInboundText || ""));
+    const body = buildShortMissingInfoReminder(missingType, channel.language, hasInterest);
     const sendResult = await sendWhatsAppText(waId, body, {
         phoneNumberId: channel.phoneNumberId,
     });
@@ -227,6 +283,7 @@ async function processClientReminder({
             source: "bot_reminder",
             stage: `reminder:missing:${missingType}`,
             reminderType: missingType,
+            hasInterest,
             whatsappPhoneNumberId: channel.phoneNumberId,
             language: channel.language,
             marketCountry: channel.marketCountry,
