@@ -716,7 +716,7 @@ function MobileLeadCard({
                             className={["h-[14px] w-[14px] bg-transparent ring-0", hasCity ? "text-emerald-500" : "text-red-400"].join(" ")}
                         />
                         {hasCity ? (
-                            <span className="text-[11px] font-semibold text-[#7C3AED]">{city}</span>
+                            <span className="text-[11px] font-semibold text-[#344054]">{city}</span>
                         ) : null}
                     </div>
 
@@ -729,7 +729,7 @@ function MobileLeadCard({
                             className={["h-[14px] w-[14px] bg-transparent ring-0", hasBusiness ? "text-emerald-500" : "text-red-400"].join(" ")}
                         />
                         {hasBusiness ? (
-                            <span className="max-w-[90px] truncate text-[11px] font-semibold text-[#7C3AED]">{lead.business}</span>
+                            <span className="max-w-[90px] truncate text-[11px] font-semibold text-[#344054]">{lead.business}</span>
                         ) : null}
                     </div>
 
