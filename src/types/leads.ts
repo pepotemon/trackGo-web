@@ -69,6 +69,8 @@ export type LeadFilters = {
     city: string;
     assignment: LeadAutoAssignmentFilter;
     search: string;
+    startKey: string;
+    endKey: string;
 };
 
 export type LeadHistoryFilters = {

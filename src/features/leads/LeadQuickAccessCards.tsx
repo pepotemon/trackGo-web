@@ -13,13 +13,6 @@ const ACCESS_ITEMS = [
         tone: "purple",
     },
     {
-        href: "/admin/leads/history",
-        title: "Historial",
-        body: "Leads incompletos o descartados fuera de la cola activa.",
-        icon: "history",
-        tone: "slate",
-    },
-    {
         href: "/admin/leads/assignments",
         title: "Asignaciones",
         body: "Auditoria de auto-asignacion y distribucion de trabajo.",

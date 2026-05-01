@@ -9,7 +9,7 @@ import {
     type ActivityCursor,
 } from "@/data/activityRepo";
 import { listAccountingUsers } from "@/data/accountingRepo";
-import { dayKeyFromDate, addDays } from "@/lib/date";
+import { dayKeyFromDate, weekRangeKeysMonToSun } from "@/lib/date";
 import type {
     ActivityEventRow,
     ActivityEventType,
@@ -69,11 +69,10 @@ function selectClassName(extra = "") {
 }
 
 function defaultFilters(): ActivityFilters {
-    const today = new Date();
-
+    const { startKey, endKey } = weekRangeKeysMonToSun();
     return {
-        startKey: dayKeyFromDate(addDays(today, -6)),
-        endKey: dayKeyFromDate(today),
+        startKey,
+        endKey,
         userId: "all",
         type: "all",
         search: "",
@@ -182,8 +181,8 @@ function viewModeLabel(mode: ActivityViewMode) {
 }
 
 export default function ActivityPage() {
-    const [viewMode, setViewMode] = useState<ActivityViewMode>("day");
-    const [filters, setFilters] = useState<ActivityFilters>(() => todayFilters());
+    const [viewMode, setViewMode] = useState<ActivityViewMode>("week");
+    const [filters, setFilters] = useState<ActivityFilters>(() => defaultFilters());
     const [users, setUsers] = useState<ActivityUserOption[]>([]);
     const [events, setEvents] = useState<DailyEventDoc[]>([]);
     const [cursor, setCursor] = useState<ActivityCursor>(null);
@@ -216,10 +215,15 @@ export default function ActivityPage() {
 
     const filteredRows = useMemo(() => {
         const q = norm(filters.search);
+        const { startKey, endKey } = filters;
 
         return rows.filter((row) => {
             if (filters.userId !== "all" && row.userId !== filters.userId) return false;
             if (filters.type !== "all" && row.type !== filters.type) return false;
+
+            const dk = String(row.dayKey || "");
+            if (startKey && dk < startKey) return false;
+            if (endKey && dk > endKey) return false;
 
             if (!q) return true;
 
@@ -242,7 +246,7 @@ export default function ActivityPage() {
                 .join(" ")
                 .includes(q);
         });
-    }, [filters.search, filters.type, filters.userId, rows]);
+    }, [filters.endKey, filters.search, filters.startKey, filters.type, filters.userId, rows]);
 
     // Deduplicate by clientId so a client counted as both visited+rejected
     // doesn't inflate stats. pending_client rows (current status) win over events.
@@ -326,18 +330,15 @@ export default function ActivityPage() {
         return total;
     }, [filters]);
 
+    const MAX_INITIAL_PAGES = 5;
+
     const loadInitial = useCallback(async (nextFilters: ActivityFilters) => {
         setLoading(true);
         setErr(null);
 
         try {
-            const [userDocs, page, pendingClients] = await Promise.all([
+            const [userDocs, pendingClients] = await Promise.all([
                 listAccountingUsers(),
-                listActivityEventsPage({
-                    startKey: nextFilters.startKey,
-                    endKey: nextFilters.endKey,
-                    pageSize: PAGE_SIZE,
-                }),
                 listPendingClientsForActivity({
                     startKey: PENDING_START_KEY,
                     endKey: nextFilters.endKey,
@@ -345,10 +346,28 @@ export default function ActivityPage() {
                 }),
             ]);
 
+            let allEvents: DailyEventDoc[] = [];
+            let nextCursor: ActivityCursor = null;
+            let nextHasMore = true;
+            let pages = 0;
+
+            while (nextHasMore && pages < MAX_INITIAL_PAGES) {
+                const page = await listActivityEventsPage({
+                    startKey: nextFilters.startKey,
+                    endKey: nextFilters.endKey,
+                    pageSize: PAGE_SIZE,
+                    cursor: nextCursor ?? undefined,
+                });
+                allEvents = [...allEvents, ...page.events];
+                nextCursor = page.cursor;
+                nextHasMore = page.hasMore;
+                pages++;
+            }
+
             setUsers(userDocs.map(userToOption));
-            setEvents(mergeActivityEvents(page.events, pendingClients));
-            setCursor(page.cursor);
-            setHasMore(page.hasMore);
+            setEvents(mergeActivityEvents(allEvents, pendingClients));
+            setCursor(nextCursor);
+            setHasMore(nextHasMore);
         } catch (error) {
             setErr(error instanceof Error ? error.message : "No se pudo cargar la actividad.");
         } finally {
@@ -382,8 +401,8 @@ export default function ActivityPage() {
 
     useEffect(() => {
         queueMicrotask(() => {
-            const next = todayFilters();
-            setViewMode("day");
+            const next = defaultFilters();
+            setViewMode("week");
             setFilters(next);
             void loadInitial(next);
         });

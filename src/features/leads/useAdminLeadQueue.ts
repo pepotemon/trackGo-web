@@ -24,6 +24,8 @@ const EMPTY_FILTERS: LeadFilters = {
     city: "all",
     assignment: "all",
     search: "",
+    startKey: "",
+    endKey: "",
 };
 
 const DEFAULT_PAGE_SIZE = 80;
@@ -39,6 +41,18 @@ const CITY_FILTER_FIELDS = new Set<LeadQueueCityField>([
 
 function norm(value: unknown) {
     return String(value ?? "").toLowerCase().trim();
+}
+
+function dayKeyFromMs(ms: number) {
+    const d = new Date(ms);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+}
+
+function leadActivityAt(lead: MetaLeadDoc) {
+    return lead.lastInboundMessageAt || lead.verificationStatusChangedAt || lead.updatedAt || lead.createdAt || 0;
 }
 
 function phoneDigits(value: unknown) {
@@ -137,6 +151,13 @@ function filterLeads(leads: MetaLeadDoc[], filters: LeadFilters) {
         const isAutoAssigned = !!lead.autoAssignedAt;
         if (filters.assignment === "auto" && !isAutoAssigned) return false;
         if (filters.assignment === "manual" && isAutoAssigned) return false;
+
+        if (filters.startKey || filters.endKey) {
+            const at = leadActivityAt(lead);
+            const dayKey = at ? dayKeyFromMs(at) : "";
+            if (filters.startKey && dayKey < filters.startKey) return false;
+            if (filters.endKey && dayKey > filters.endKey) return false;
+        }
 
         return leadMatchesSearch(lead, queryText, queryDigits);
     });

@@ -149,6 +149,8 @@ export default function AdminLeadsPage() {
         if (filters.city !== "all") total++;
         if (filters.assignment !== "all") total++;
         if (filters.search.trim()) total++;
+        if (filters.startKey) total++;
+        if (filters.endKey) total++;
         return total;
     }, [filters]);
 
@@ -279,7 +281,7 @@ export default function AdminLeadsPage() {
                             />
                         </div>
 
-                        <div className="grid grid-cols-3 gap-2">
+                        <div className="grid grid-cols-5 gap-2">
                             <FilterSelect
                                 label="Estado"
                                 value={filters.status}
@@ -321,6 +323,18 @@ export default function AdminLeadsPage() {
                                 <option value="auto">Auto-asignados</option>
                                 <option value="manual">Manuales</option>
                             </FilterSelect>
+
+                            <FilterDate
+                                label="Desde"
+                                value={filters.startKey}
+                                onChange={(value) => patchFilters({ startKey: value })}
+                            />
+
+                            <FilterDate
+                                label="Hasta"
+                                value={filters.endKey}
+                                onChange={(value) => patchFilters({ endKey: value })}
+                            />
                         </div>
 
                         {activeFiltersCount > 0 ? (
@@ -416,8 +430,12 @@ function MobileLeadQueue({
     const [filterModalOpen, setFilterModalOpen] = useState(false);
 
     const modalFiltersCount = useMemo(
-        () => (filters.city !== "all" ? 1 : 0) + (filters.assignment !== "all" ? 1 : 0),
-        [filters.city, filters.assignment]
+        () =>
+            (filters.city !== "all" ? 1 : 0) +
+            (filters.assignment !== "all" ? 1 : 0) +
+            (filters.startKey ? 1 : 0) +
+            (filters.endKey ? 1 : 0),
+        [filters.city, filters.assignment, filters.startKey, filters.endKey]
     );
 
     return (
@@ -443,11 +461,6 @@ function MobileLeadQueue({
                         disabled={loading || !leads.length}
                         icon="assign"
                         label="Cobertura"
-                    />
-                    <MobileHeaderLink
-                        href="/admin/leads/history"
-                        icon="history"
-                        label="Historial"
                     />
                     <MobileHeaderButton
                         onClick={onReloadUsers}
@@ -655,7 +668,7 @@ function MobileLeadCard({
 }) {
     const [menuOpen, setMenuOpen] = useState(false);
     const city = mobileCityName(lead);
-    const hasCity = cityLabel(lead) !== "Sin ciudad";
+    const hasCity = city !== "" && city !== "Sin ciudad";
     const hasBusiness = !!lead.business;
     const hasMaps = !!lead.location.mapsUrl;
     const waUrl = whatsappUrl(lead.phone);
@@ -695,28 +708,28 @@ function MobileLeadCard({
                 <div className="mt-2.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
 
                     {/* City */}
-                    <div className={["flex items-center gap-1", hasCity ? "text-emerald-600" : "text-red-500"].join(" ")}>
+                    <div className="flex items-center gap-1">
                         <AppIcon
-                            name="map"
+                            name="location"
                             tone="slate"
                             size="sm"
-                            className={["h-[14px] w-[14px] bg-transparent ring-0", hasCity ? "text-emerald-600" : "text-red-500"].join(" ")}
+                            className={["h-[14px] w-[14px] bg-transparent ring-0", hasCity ? "text-emerald-500" : "text-red-400"].join(" ")}
                         />
-                        <span className="text-[11px] font-semibold">
-                            {hasCity ? city : "Sin ciudad"}
-                        </span>
+                        {hasCity ? (
+                            <span className="text-[11px] font-semibold text-[#7C3AED]">{city}</span>
+                        ) : null}
                     </div>
 
                     {/* Business */}
-                    <div className={["flex items-center gap-1", hasBusiness ? "text-emerald-600" : "text-red-500"].join(" ")}>
+                    <div className="flex items-center gap-1">
                         <AppIcon
                             name="wallet"
                             tone="slate"
                             size="sm"
-                            className={["h-[14px] w-[14px] bg-transparent ring-0", hasBusiness ? "text-emerald-600" : "text-red-500"].join(" ")}
+                            className={["h-[14px] w-[14px] bg-transparent ring-0", hasBusiness ? "text-emerald-500" : "text-red-400"].join(" ")}
                         />
                         {hasBusiness ? (
-                            <span className="max-w-[90px] truncate text-[11px] font-semibold">{lead.business}</span>
+                            <span className="max-w-[90px] truncate text-[11px] font-semibold text-[#7C3AED]">{lead.business}</span>
                         ) : null}
                     </div>
 
@@ -763,15 +776,17 @@ function MobileLeadCard({
                         <Link
                             href={`/admin/leads/${lead.id}`}
                             onClick={() => setMenuOpen(false)}
-                            className="flex h-11 items-center px-4 text-[13px] font-bold text-[#7C3AED] transition active:bg-[#f3f0ff]"
+                            className="flex h-11 items-center gap-2.5 px-4 text-[13px] font-semibold text-[#101936] transition active:bg-[#f8f7ff]"
                         >
+                            <AppIcon name="chat" tone="slate" size="sm" className="h-4 w-4 bg-transparent text-[#66739A] ring-0" />
                             Chat
                         </Link>
                         <button
                             type="button"
                             onClick={() => { setMenuOpen(false); onOpenEdit(lead); }}
-                            className="flex h-11 w-full items-center border-t border-[#f0f1f2] px-4 text-[13px] font-bold text-[#101936] transition active:bg-[#f8f7ff]"
+                            className="flex h-11 w-full items-center gap-2.5 border-t border-[#f0f1f2] px-4 text-[13px] font-semibold text-[#101936] transition active:bg-[#f8f7ff]"
                         >
+                            <AppIcon name="edit" tone="slate" size="sm" className="h-4 w-4 bg-transparent text-[#66739A] ring-0" />
                             Editar
                         </button>
                         {hasMaps ? (
@@ -780,8 +795,9 @@ function MobileLeadCard({
                                 target="_blank"
                                 rel="noreferrer"
                                 onClick={() => setMenuOpen(false)}
-                                className="flex h-11 items-center border-t border-[#f0f1f2] px-4 text-[13px] font-bold text-emerald-700 transition active:bg-emerald-50"
+                                className="flex h-11 items-center gap-2.5 border-t border-[#f0f1f2] px-4 text-[13px] font-semibold text-[#101936] transition active:bg-[#f8f7ff]"
                             >
+                                <AppIcon name="map" tone="slate" size="sm" className="h-4 w-4 bg-transparent text-[#66739A] ring-0" />
                                 Maps
                             </a>
                         ) : null}
@@ -791,8 +807,9 @@ function MobileLeadCard({
                                 target="_blank"
                                 rel="noreferrer"
                                 onClick={() => setMenuOpen(false)}
-                                className="flex h-11 items-center border-t border-[#f0f1f2] px-4 text-[13px] font-bold text-emerald-700 transition active:bg-emerald-50"
+                                className="flex h-11 items-center gap-2.5 border-t border-[#f0f1f2] px-4 text-[13px] font-semibold text-[#101936] transition active:bg-[#f8f7ff]"
                             >
+                                <AppIcon name="phone" tone="slate" size="sm" className="h-4 w-4 bg-transparent text-[#66739A] ring-0" />
                                 WhatsApp
                             </a>
                         ) : null}
@@ -848,6 +865,27 @@ function MobileFiltersModal({
                 </div>
 
                 <div className="grid gap-3">
+                    <div className="grid grid-cols-2 gap-2">
+                        <label className="grid gap-1">
+                            <span className="text-[10px] font-black uppercase tracking-[0.06em] text-[#66739A]">Desde</span>
+                            <input
+                                type="date"
+                                value={filters.startKey}
+                                onChange={(e) => onPatchFilters({ startKey: e.target.value })}
+                                className="h-10 rounded-[13px] border border-[#E8E7FB] bg-white px-3 text-[13px] font-semibold text-[#101936] outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-violet-100"
+                            />
+                        </label>
+                        <label className="grid gap-1">
+                            <span className="text-[10px] font-black uppercase tracking-[0.06em] text-[#66739A]">Hasta</span>
+                            <input
+                                type="date"
+                                value={filters.endKey}
+                                onChange={(e) => onPatchFilters({ endKey: e.target.value })}
+                                className="h-10 rounded-[13px] border border-[#E8E7FB] bg-white px-3 text-[13px] font-semibold text-[#101936] outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-violet-100"
+                            />
+                        </label>
+                    </div>
+
                     <MobileFilterSelect
                         label="Ciudad"
                         value={filters.city}
@@ -915,32 +953,6 @@ function MobileHeaderButton({
                 className="h-[18px] w-[18px] bg-transparent text-[#7C3AED] ring-0"
             />
         </button>
-    );
-}
-
-function MobileHeaderLink({
-    href,
-    icon,
-    label,
-}: {
-    href: string;
-    icon: "history";
-    label: string;
-}) {
-    return (
-        <Link
-            href={href}
-            title={label}
-            aria-label={label}
-            className="flex h-10 w-10 items-center justify-center rounded-[13px] border border-violet-200 bg-violet-50 transition active:bg-violet-100"
-        >
-            <AppIcon
-                name={icon}
-                tone="purple"
-                size="sm"
-                className="h-[18px] w-[18px] bg-transparent text-violet-700 ring-0"
-            />
-        </Link>
     );
 }
 
@@ -1014,6 +1026,28 @@ function FilterSelect({
             >
                 {children}
             </select>
+        </label>
+    );
+}
+
+function FilterDate({
+    label,
+    value,
+    onChange,
+}: {
+    label: string;
+    value: string;
+    onChange: (value: string) => void;
+}) {
+    return (
+        <label className="flex flex-col gap-1">
+            <span className="text-[11px] font-semibold text-[#71717a]">{label}</span>
+            <input
+                type="date"
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                className={selectClassName("w-full")}
+            />
         </label>
     );
 }

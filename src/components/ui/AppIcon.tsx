@@ -12,10 +12,12 @@ export type AppIconName =
     | "filter"
     | "history"
     | "lead"
+    | "location"
     | "lock"
     | "map"
     | "more"
     | "pause"
+    | "phone"
     | "play"
     | "plus"
     | "power"
@@ -127,10 +129,17 @@ export function AppIcon({
                         <path d="M21 8v8M17 12h8" />
                     </>
                 ) : null}
+                {name === "location" ? (
+                    <>
+                        <path d="M12 2a7 7 0 0 1 7 7c0 5.25-7 13-7 13S5 14.25 5 9a7 7 0 0 1 7-7Z" />
+                        <circle cx="12" cy="9" r="2.5" />
+                    </>
+                ) : null}
                 {name === "lock" ? <path d="M7 11V8a5 5 0 0 1 10 0v3M6 11h12v10H6V11Z" /> : null}
                 {name === "map" ? <path d="M9 18 3 21V6l6-3 6 3 6-3v15l-6 3-6-3ZM9 3v15M15 6v15" /> : null}
                 {name === "more" ? <path d="M5 12h.01M12 12h.01M19 12h.01" /> : null}
                 {name === "pause" ? <path d="M8 5v14M16 5v14" /> : null}
+                {name === "phone" ? <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.1-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.2.9.4 1.8.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.2a2 2 0 0 1 2.1-.5c1 .3 1.9.5 2.8.7A2 2 0 0 1 22 16.9Z" /> : null}
                 {name === "play" ? <path d="m8 5 12 7-12 7V5Z" /> : null}
                 {name === "plus" ? <path d="M12 5v14M5 12h14" /> : null}
                 {name === "power" ? <path d="M12 2v10M18.4 6.6a9 9 0 1 1-12.8 0" /> : null}
