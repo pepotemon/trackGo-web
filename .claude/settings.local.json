@@ -7,7 +7,8 @@
       "Bash(node --check \"C:/Users/helle/trackgo-web/functions/src/cron/reminderMissingInfo.js\")",
       "Bash(node --check \"C:/Users/helle/trackgo-web/functions/src/bot/intents.js\")",
       "Bash(xargs ls *)",
-      "Bash(node *)"
+      "Bash(node *)",
+      "Bash(npx next *)"
     ]
   }
 }

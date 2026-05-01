@@ -709,192 +709,192 @@ function MobileAccountingPage({
     const roi = summary?.roi ?? null;
 
     return (
-        <div className="-mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] max-w-[100vw] overflow-x-hidden bg-[#0B1220] bg-[linear-gradient(rgba(3,10,20,0.62),rgba(3,10,20,0.62)),url('/brand/trackgo-bg-map.png')] bg-cover bg-center px-3 pb-6 pt-2 text-[#F9FAFB]">
-            <div className="mb-2 flex items-center gap-2">
-                <div className="min-w-0 flex-1">
-                    <h1 className="truncate text-[18px] font-black text-white">
-                        Contabilidad
-                    </h1>
-                    <p className="mt-0.5 truncate text-[11px] font-extrabold text-[#9CA3AF]">
-                        Semana · <span className="text-white">{week.startKey}</span> /{" "}
-                        <span className="text-white">{week.endKey}</span>
-                    </p>
-                </div>
+        <div className="-mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] max-w-[100vw] bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.10),transparent_36%),linear-gradient(180deg,#fbfaff_0%,#f6f3ff_52%,#f8fafc_100%)] pb-6 text-[#101936]">
 
-                {onExport ? (
+            {/* STICKY HEADER */}
+            <div className="sticky top-0 z-20 bg-[#fbfaff]/96 px-3 pb-3 pt-3 backdrop-blur-md">
+
+                {/* TITLE ROW */}
+                <div className="mb-3 flex items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                        <h1 className="truncate text-[20px] font-black tracking-[-0.03em] text-[#101936]">
+                            Contabilidad
+                        </h1>
+                        <p className="mt-0.5 truncate text-[11px] font-semibold text-[#66739A]">
+                            {week.startKey} · {week.endKey}
+                            {" · "}
+                            <MobileStatusPill status={weekStatus} inline />
+                        </p>
+                    </div>
+
+                    {onExport ? (
+                        <MobileAccountingIconButton icon="download" label="Exportar" onClick={onExport} />
+                    ) : null}
+
                     <MobileAccountingIconButton
-                        icon="download"
-                        label="Exportar"
-                        onClick={onExport}
+                        icon="wallet"
+                        label="Inversión"
+                        active={activeTab === "investment"}
+                        onClick={() => setActiveTab(activeTab === "investment" ? "overview" : "investment")}
                     />
-                ) : null}
 
-                <MobileAccountingIconButton
-                    icon="wallet"
-                    label="Inversión"
-                    active={activeTab === "investment"}
-                    onClick={() =>
-                        setActiveTab(activeTab === "investment" ? "overview" : "investment")
-                    }
-                />
+                    <MobileAccountingIconButton
+                        icon={isClosed ? "unlock" : "lock"}
+                        label={isClosed ? "Reabrir" : "Cerrar"}
+                        disabled={savingWeek || (!summary && !isClosed)}
+                        active={isClosed}
+                        onClick={isClosed ? onReopenWeek : onCloseWeek}
+                    />
 
-                <MobileAccountingIconButton
-                    icon={isClosed ? "unlock" : "lock"}
-                    label={isClosed ? "Reabrir" : "Cerrar"}
-                    disabled={savingWeek || (!summary && !isClosed)}
-                    onClick={isClosed ? onReopenWeek : onCloseWeek}
-                />
-
-                <MobileAccountingIconButton
-                    icon="refresh"
-                    label="Actualizar"
-                    disabled={loading}
-                    onClick={onRefresh}
-                />
-            </div>
-
-            <div className="mb-2 flex items-center justify-between gap-2 rounded-[14px] border border-[#1F2937] bg-[#0F172A]/90 p-2">
-                <button
-                    type="button"
-                    onClick={() => setWeekOffset((v) => v - 1)}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-white/[0.08] bg-white/[0.04] text-white"
-                >
-                    <MobileAccountingIcon name="arrowLeft" />
-                </button>
-
-                <div className="min-w-0 flex-1 text-center">
-                    <div className="truncate text-[11px] font-black text-[#CBD5E1]">
-                        {week.startKey} · {week.endKey}
-                    </div>
-                    <div className="mt-0.5 text-[10px] font-extrabold text-[#9CA3AF]">
-                        {weekOffset === 0 ? "Semana actual" : "Semana histórica"}
-                    </div>
+                    <MobileAccountingIconButton
+                        icon="refresh"
+                        label="Actualizar"
+                        disabled={loading}
+                        onClick={onRefresh}
+                    />
                 </div>
 
-                <button
-                    type="button"
-                    onClick={() => setWeekOffset((v) => v + 1)}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-white/[0.08] bg-white/[0.04] text-white"
-                >
-                    <MobileAccountingIcon name="arrowRight" />
-                </button>
-
-                {weekOffset !== 0 ? (
+                {/* WEEK NAVIGATION */}
+                <div className="flex items-center gap-2 rounded-[14px] border border-[#E8E7FB] bg-white px-2 py-2 shadow-sm">
                     <button
                         type="button"
-                        onClick={() => setWeekOffset(0)}
-                        className="h-9 rounded-[12px] border border-blue-400/20 bg-blue-500/10 px-3 text-[11px] font-black text-[#93C5FD]"
+                        onClick={() => setWeekOffset((v) => v - 1)}
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] text-[#7C3AED] transition active:bg-[#f3f0ff]"
                     >
-                        Actual
+                        <MobileAccountingIcon name="arrowLeft" />
                     </button>
-                ) : null}
-            </div>
 
-            <div className="mb-2 flex items-center justify-between gap-2">
-                <MobileAccountingPill
-                    icon="users"
-                    label={`${usersCount} usuarios`}
-                />
-                <MobileAccountingPill
-                    icon="activity"
-                    label={`${eventsCount} eventos`}
-                />
-                <MobileStatusPill status={weekStatus} />
-            </div>
-
-            {loading || !summary ? (
-                <div className="mt-8 rounded-[18px] border border-[#1F2937] bg-[#111827] p-5 text-center text-[13px] font-black text-[#9CA3AF]">
-                    Cargando contabilidad...
-                </div>
-            ) : activeTab === "investment" ? (
-                <div className="rounded-[18px] border border-[#1F2937] bg-[#111827] p-4">
-                    <div className="text-[14px] font-black text-white">
-                        Configuración de inversión
+                    <div className="min-w-0 flex-1 text-center">
+                        <div className="truncate text-[11px] font-black text-[#101936]">
+                            {week.startKey} · {week.endKey}
+                        </div>
+                        <div className="mt-0.5 text-[10px] font-semibold text-[#66739A]">
+                            {weekOffset === 0 ? "Semana actual" : "Semana histórica"}
+                        </div>
                     </div>
-                    <p className="mt-1 text-[12px] font-bold text-[#9CA3AF]">
-                        Usa desktop para editar grupos con más comodidad. La lógica sigue activa aquí.
-                    </p>
+
                     <button
                         type="button"
-                        onClick={() => setActiveTab("overview")}
-                        className="mt-4 h-11 w-full rounded-[14px] bg-blue-600 text-[13px] font-black text-white"
+                        onClick={() => setWeekOffset((v) => v + 1)}
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] text-[#7C3AED] transition active:bg-[#f3f0ff]"
                     >
-                        Volver al resumen
+                        <MobileAccountingIcon name="arrowRight" />
                     </button>
+
+                    {weekOffset !== 0 ? (
+                        <button
+                            type="button"
+                            onClick={() => setWeekOffset(0)}
+                            className="h-9 rounded-[12px] border border-violet-200 bg-violet-50 px-3 text-[11px] font-black text-[#7C3AED] transition active:bg-violet-100"
+                        >
+                            Actual
+                        </button>
+                    ) : null}
                 </div>
-            ) : (
-                <>
-                    <div className="mb-2 grid grid-cols-2 gap-2">
-                        <MobileMoneyCard
-                            title="Ganancia real"
-                            value={money(real)}
-                            caption={`ROI ${formatPercent(roi)}`}
-                            tone={real >= 0 ? "green" : "red"}
-                            icon="cash"
-                        />
-                        <MobileMoneyCard
-                            title="Ganancia bruta"
-                            value={money(gross)}
-                            caption="Visitas + suscripciones"
-                            tone="blue"
-                            icon="chart"
-                        />
-                    </div>
 
-                    <div className="mb-2 rounded-[18px] border border-[#1F2937] bg-[#111827] p-3">
-                        <div className="mb-3 flex items-center justify-between gap-2">
-                            <div>
-                                <div className="text-[13px] font-black text-white">
-                                    Resultado semanal
+                {/* QUICK PILLS */}
+                <div className="mt-2 flex gap-2">
+                    <MobileAccountingPill icon="users" label={`${usersCount} usuarios`} />
+                    <MobileAccountingPill icon="activity" label={`${eventsCount} eventos`} />
+                </div>
+            </div>
+
+            {/* CONTENT */}
+            <div className="px-3 pt-3">
+                {loading || !summary ? (
+                    <div className="mt-10 flex flex-col items-center gap-3 text-center">
+                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f3f0ff]">
+                            <svg className="tg-spin h-7 w-7 text-[#7C3AED]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                                <path d="M21 12a9 9 0 1 1-3.1-6.8" />
+                            </svg>
+                        </div>
+                        <p className="text-[13px] font-semibold text-[#66739A]">Cargando contabilidad</p>
+                    </div>
+                ) : activeTab === "investment" ? (
+                    <div className="rounded-[16px] border border-[#E8E7FB] bg-white p-4 shadow-sm">
+                        <div className="text-[14px] font-black text-[#101936]">
+                            Configuración de inversión
+                        </div>
+                        <p className="mt-1 text-[12px] font-semibold text-[#66739A]">
+                            Usa desktop para editar grupos con más comodidad. La lógica sigue activa aquí.
+                        </p>
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab("overview")}
+                            className="mt-4 min-h-[46px] w-full rounded-[14px] bg-[#7C3AED] text-[13px] font-black text-white transition active:bg-violet-700"
+                        >
+                            Volver al resumen
+                        </button>
+                    </div>
+                ) : (
+                    <>
+                        {/* MONEY CARDS */}
+                        <div className="mb-3 grid grid-cols-2 gap-2">
+                            <MobileMoneyCard
+                                title="Ganancia real"
+                                value={money(real)}
+                                caption={`ROI ${formatPercent(roi)}`}
+                                tone={real >= 0 ? "green" : "red"}
+                                icon="cash"
+                            />
+                            <MobileMoneyCard
+                                title="Ganancia bruta"
+                                value={money(gross)}
+                                caption="Visitas + suscripciones"
+                                tone="blue"
+                                icon="chart"
+                            />
+                        </div>
+
+                        {/* WEEKLY RESULT BREAKDOWN */}
+                        <div className="mb-3 rounded-[16px] border border-[#E8E7FB] bg-white p-3 shadow-[0_4px_18px_rgba(91,33,255,0.07)]">
+                            <div className="mb-3 flex items-center justify-between gap-2">
+                                <div>
+                                    <div className="text-[13px] font-black text-[#101936]">Resultado semanal</div>
+                                    <div className="mt-0.5 text-[11px] font-semibold text-[#66739A]">Bruta menos inversión</div>
                                 </div>
-                                <div className="mt-0.5 text-[11px] font-bold text-[#9CA3AF]">
-                                    Bruta menos inversión
+                                <div className={[
+                                    "rounded-full border px-3 py-1.5 text-[11px] font-black",
+                                    real >= 0
+                                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                        : "border-red-200 bg-red-50 text-red-600",
+                                ].join(" ")}>
+                                    {money(real)}
                                 </div>
                             </div>
-                            <div className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1.5 text-[11px] font-black text-[#86EFAC]">
-                                {money(real)}
+                            <div className="grid grid-cols-3 gap-2">
+                                <MobileTinyMetric label="Bruta" value={money(gross)} tone="green" />
+                                <MobileTinyMetric label="Inversión" value={money(investmentValue)} tone="amber" />
+                                <MobileTinyMetric label="Real" value={money(real)} tone={real >= 0 ? "green" : "red"} />
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-3 gap-2">
-                            <MobileTinyMetric label="Bruta" value={money(gross)} color="#86EFAC" />
-                            <MobileTinyMetric label="Inversión" value={money(investmentValue)} color="#FDE68A" />
-                            <MobileTinyMetric label="Real" value={money(real)} color={real >= 0 ? "#86EFAC" : "#FCA5A5"} />
+                        {/* ACTIVITY STATS */}
+                        <div className="mb-3 grid grid-cols-3 gap-2">
+                            <MobileStatBox label="Asig." value={summary.assigned} icon="users" tone="amber" />
+                            <MobileStatBox label="Vis." value={summary.visited} icon="check" tone="green" />
+                            <MobileStatBox label="Rech." value={summary.rejected} icon="close" tone="red" />
                         </div>
-                    </div>
 
-                    <div className="mb-2 grid grid-cols-3 gap-2">
-                        <MobileStatBox label="Asig." value={summary.assigned} icon="users" color="#FDE68A" />
-                        <MobileStatBox label="Vis." value={summary.visited} icon="check" color="#86EFAC" />
-                        <MobileStatBox label="Rech." value={summary.rejected} icon="close" color="#FCA5A5" />
-                    </div>
-
-                    <div className="rounded-[18px] border border-[#1F2937] bg-[#111827]">
-                        <div className="border-b border-white/[0.08] px-3 py-3">
-                            <div className="text-[13px] font-black text-white">
-                                Usuarios
+                        {/* USER LIST */}
+                        <div className="overflow-hidden rounded-[16px] border border-[#E8E7FB] bg-white shadow-[0_4px_18px_rgba(91,33,255,0.07)]">
+                            <div className="border-b border-[#E8E7FB] px-3 py-3">
+                                <div className="text-[13px] font-black text-[#101936]">Usuarios</div>
+                                <div className="mt-0.5 text-[11px] font-semibold text-[#66739A]">Resultado por usuario</div>
                             </div>
-                            <div className="mt-0.5 text-[11px] font-bold text-[#9CA3AF]">
-                                Resultado por usuario
+                            <div className="divide-y divide-[#E8E7FB]">
+                                {summary.rows
+                                    .filter((row) =>
+                                        row.assigned > 0 || row.visited > 0 || row.rejected > 0 || Math.abs(row.real) > 0
+                                    )
+                                    .map((row) => (
+                                        <MobileAccountingUserRow key={row.userId} row={row} />
+                                    ))}
                             </div>
                         </div>
-
-                        <div className="divide-y divide-white/[0.08]">
-                            {summary.rows
-                                .filter(
-                                    (row) =>
-                                        row.assigned > 0 ||
-                                        row.visited > 0 ||
-                                        row.rejected > 0 ||
-                                        Math.abs(row.real) > 0
-                                )
-                                .map((row) => (
-                                    <MobileAccountingUserRow key={row.userId} row={row} />
-                                ))}
-                        </div>
-                    </div>
-                </>
-            )}
+                    </>
+                )}
+            </div>
         </div>
     );
 }
@@ -920,10 +920,10 @@ function MobileAccountingIconButton({
             title={label}
             aria-label={label}
             className={[
-                "flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border text-white disabled:opacity-50",
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border shadow-sm transition disabled:opacity-50",
                 active
-                    ? "border-blue-400/25 bg-blue-500/15"
-                    : "border-[#1F2937] bg-[#0F172A]",
+                    ? "border-violet-200 bg-violet-50 text-[#7C3AED] active:bg-violet-100"
+                    : "border-[#E8E7FB] bg-white text-[#66739A] active:bg-[#f3f0ff]",
             ].join(" ")}
         >
             <MobileAccountingIcon name={icon} />
@@ -939,23 +939,30 @@ function MobileAccountingPill({
     label: string;
 }) {
     return (
-        <div className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-[12px] border border-white/[0.08] bg-white/[0.04] px-2 py-2 text-[11px] font-black text-[#CBD5E1]">
-            <MobileAccountingIcon name={icon} />
+        <div className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-[12px] border border-[#E8E7FB] bg-white px-2 py-2 text-[11px] font-semibold text-[#66739A] shadow-sm">
+            <span className="text-[#7C3AED]"><MobileAccountingIcon name={icon} /></span>
             <span className="truncate">{label}</span>
         </div>
     );
 }
 
-function MobileStatusPill({ status }: { status: WeeklyInvestmentDoc["status"] }) {
-    const label =
-        status === "closed" ? "Cerrada" : status === "review" ? "Revisión" : "Abierta";
+function MobileStatusPill({ status, inline }: { status: WeeklyInvestmentDoc["status"]; inline?: boolean }) {
+    const label = status === "closed" ? "Cerrada" : status === "review" ? "Revisión" : "Abierta";
 
     const cls =
         status === "closed"
-            ? "border-emerald-400/25 bg-emerald-400/10 text-[#86EFAC]"
+            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
             : status === "review"
-                ? "border-yellow-300/25 bg-yellow-300/10 text-[#FDE68A]"
-                : "border-blue-400/25 bg-blue-500/10 text-[#93C5FD]";
+                ? "border-amber-200 bg-amber-50 text-amber-700"
+                : "border-blue-200 bg-blue-50 text-blue-700";
+
+    if (inline) {
+        return (
+            <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-black ${cls}`}>
+                {label}
+            </span>
+        );
+    }
 
     return (
         <div className={`flex flex-1 items-center justify-center rounded-[12px] border px-2 py-2 text-[11px] font-black ${cls}`}>
@@ -977,22 +984,29 @@ function MobileMoneyCard({
     tone: "green" | "red" | "blue";
     icon: MobileAccountingIconName;
 }) {
-    const color =
-        tone === "green" ? "#86EFAC" : tone === "red" ? "#FCA5A5" : "#93C5FD";
+    const valueClass =
+        tone === "green" ? "text-emerald-600" : tone === "red" ? "text-red-500" : "text-blue-600";
+
+    const iconClass =
+        tone === "green"
+            ? "border-emerald-200 bg-emerald-50 text-emerald-600"
+            : tone === "red"
+                ? "border-red-200 bg-red-50 text-red-500"
+                : "border-blue-200 bg-blue-50 text-blue-600";
 
     return (
-        <div className="rounded-[18px] border border-[#1F2937] bg-[#111827] p-3">
+        <div className="rounded-[16px] border border-[#E8E7FB] bg-white p-3 shadow-[0_4px_18px_rgba(91,33,255,0.07)]">
             <div className="mb-2 flex items-center justify-between gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-[12px] border border-blue-400/20 bg-blue-500/10 text-[#93C5FD]">
+                <div className={`flex h-8 w-8 items-center justify-center rounded-[10px] border ${iconClass}`}>
                     <MobileAccountingIcon name={icon} />
                 </div>
-                <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-1 text-[10px] font-black" style={{ color }}>
+                <span className="rounded-full border border-[#E8E7FB] bg-[#f8f7ff] px-2 py-1 text-[9px] font-black text-[#66739A]">
                     SEMANA
                 </span>
             </div>
-            <div className="truncate text-[12px] font-black text-white">{title}</div>
-            <div className="mt-1 truncate text-[17px] font-black text-white">{value}</div>
-            <div className="mt-1 truncate text-[10px] font-bold text-[#9CA3AF]">{caption}</div>
+            <div className="truncate text-[11px] font-semibold text-[#66739A]">{title}</div>
+            <div className={`mt-1 truncate text-[17px] font-black ${valueClass}`}>{value}</div>
+            <div className="mt-1 truncate text-[10px] font-medium text-[#98A2B3]">{caption}</div>
         </div>
     );
 }
@@ -1000,18 +1014,22 @@ function MobileMoneyCard({
 function MobileTinyMetric({
     label,
     value,
-    color,
+    tone,
 }: {
     label: string;
     value: string;
-    color: string;
+    tone: "green" | "red" | "amber" | "blue";
 }) {
+    const valueClass =
+        tone === "green" ? "text-emerald-600"
+        : tone === "red" ? "text-red-500"
+        : tone === "amber" ? "text-amber-600"
+        : "text-blue-600";
+
     return (
-        <div className="rounded-[13px] border border-white/[0.08] bg-white/[0.05] px-2 py-2">
-            <div className="truncate text-[10px] font-black text-[#9CA3AF]">{label}</div>
-            <div className="mt-1 truncate text-[12px] font-black" style={{ color }}>
-                {value}
-            </div>
+        <div className="rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] px-2 py-2">
+            <div className="truncate text-[9px] font-black uppercase tracking-[0.06em] text-[#98A2B3]">{label}</div>
+            <div className={`mt-1 truncate text-[12px] font-black ${valueClass}`}>{value}</div>
         </div>
     );
 }
@@ -1020,20 +1038,21 @@ function MobileStatBox({
     label,
     value,
     icon,
-    color,
+    tone,
 }: {
     label: string;
     value: number;
     icon: MobileAccountingIconName;
-    color: string;
+    tone: "green" | "red" | "amber";
 }) {
+    const colorClass =
+        tone === "green" ? "text-emerald-600" : tone === "red" ? "text-red-500" : "text-amber-600";
+
     return (
-        <div className="flex h-[42px] items-center justify-center gap-2 rounded-[14px] border border-white/[0.08] bg-[#111827] px-2">
-            <span style={{ color }}>
-                <MobileAccountingIcon name={icon} />
-            </span>
-            <span className="text-[13px] font-black text-white">{value}</span>
-            <span className="truncate text-[10px] font-black text-[#9CA3AF]">{label}</span>
+        <div className="flex items-center justify-center gap-1.5 rounded-[14px] border border-[#E8E7FB] bg-white px-2 py-3 shadow-sm">
+            <span className={colorClass}><MobileAccountingIcon name={icon} /></span>
+            <span className="text-[14px] font-black text-[#101936]">{value}</span>
+            <span className="truncate text-[9px] font-semibold text-[#66739A]">{label}</span>
         </div>
     );
 }
@@ -1047,31 +1066,22 @@ function MobileAccountingUserRow({
         <div className="px-3 py-3">
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13px] font-black text-white">
-                        {row.name}
-                    </div>
-                    <div className="mt-0.5 truncate text-[11px] font-bold text-[#9CA3AF]">
-                        {row.billingMode === "weekly_subscription"
-                            ? "Suscripción semanal"
-                            : "Por visita"}
+                    <div className="truncate text-[13px] font-black text-[#101936]">{row.name}</div>
+                    <div className="mt-0.5 truncate text-[11px] font-semibold text-[#66739A]">
+                        {row.billingMode === "weekly_subscription" ? "Suscripción semanal" : "Por visita"}
                     </div>
                 </div>
-
-                <div
-                    className={
-                        row.real >= 0
-                            ? "text-right text-[13px] font-black text-[#86EFAC]"
-                            : "text-right text-[13px] font-black text-[#FCA5A5]"
-                    }
-                >
+                <div className={[
+                    "shrink-0 text-right text-[13px] font-black",
+                    row.real >= 0 ? "text-emerald-600" : "text-red-500",
+                ].join(" ")}>
                     {money(row.real)}
                 </div>
             </div>
-
             <div className="mt-2 grid grid-cols-3 gap-1.5">
-                <MobileTinyMetric label="Asig." value={String(row.assigned)} color="#FDE68A" />
-                <MobileTinyMetric label="Vis." value={String(row.visited)} color="#86EFAC" />
-                <MobileTinyMetric label="Rech." value={String(row.rejected)} color="#FCA5A5" />
+                <MobileTinyMetric label="Asig." value={String(row.assigned)} tone="amber" />
+                <MobileTinyMetric label="Vis." value={String(row.visited)} tone="green" />
+                <MobileTinyMetric label="Rech." value={String(row.rejected)} tone="red" />
             </div>
         </div>
     );
