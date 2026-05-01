@@ -187,7 +187,7 @@ export default function AdminLeadsPage() {
                     "leads_mobile_queue",
                     JSON.stringify(filteredLeads.map((l) => l.id))
                 );
-            } catch {}
+            } catch { }
         }
     }, [filteredLeads, loading]);
 
@@ -497,7 +497,7 @@ function MobileLeadQueue({
                     <LeadStatCard
                         label="Revisar"
                         value={stats.pendingReview}
-                        icon="search"
+                        icon="lead"
                         color="text-blue-500"
                         active={filters.status === "pending_review"}
                         onClick={() => onPatchFilters({ status: filters.status === "pending_review" ? "all" : "pending_review" })}
