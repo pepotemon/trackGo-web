@@ -521,7 +521,7 @@ function MobileLeadQueue({
                     <MobileHeaderButton
                         onClick={onOpenCoverage}
                         disabled={loading || !leads.length}
-                        icon="link"
+                        icon="map"
                         label="Cobertura"
                     />
                     <Link
@@ -531,7 +531,7 @@ function MobileLeadQueue({
                         className="flex h-10 w-10 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-white shadow-sm transition active:bg-[#f3f0ff]"
                     >
                         <AppIcon
-                            name="assign"
+                            name="link"
                             tone="purple"
                             size="sm"
                             className="h-[18px] w-[18px] bg-transparent text-[#7C3AED] ring-0"
@@ -552,7 +552,7 @@ function MobileLeadQueue({
                     <LeadStatCard
                         label="Incompl."
                         value={stats.incomplete}
-                        icon="clock"
+                        icon="edit"
                         color="text-amber-500"
                         active={filters.status === "incomplete"}
                         onClick={() => onPatchFilters({ status: filters.status === "incomplete" ? "all" : "incomplete" })}
@@ -560,7 +560,7 @@ function MobileLeadQueue({
                     <LeadStatCard
                         label="No aptos"
                         value={stats.notSuitable}
-                        icon="ban"
+                        icon="pause"
                         color="text-red-500"
                         active={filters.status === "not_suitable"}
                         onClick={() => onPatchFilters({ status: filters.status === "not_suitable" ? "all" : "not_suitable" })}
@@ -685,7 +685,7 @@ function LeadStatCard({
 }: {
     label: string;
     value: number;
-    icon: "search" | "clock" | "ban" | "filter";
+    icon: "search" | "clock" | "ban" | "filter" | "edit" | "pause";
     color: string;
     active: boolean;
     onClick: () => void;
@@ -1068,7 +1068,7 @@ function MobileHeaderButton({
     onClick,
     disabled,
 }: {
-    icon: "assign" | "users" | "link";
+    icon: "assign" | "users" | "link" | "map";
     label: string;
     onClick: () => void;
     disabled?: boolean;

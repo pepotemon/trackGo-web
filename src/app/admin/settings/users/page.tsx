@@ -536,180 +536,156 @@ function MobileUsersView({
     onBillingFilter: (value: BillingFilter) => void;
 }) {
     return (
-        <div className="-mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] max-w-[100vw] overflow-x-hidden bg-[#0B1220] bg-[linear-gradient(rgba(3,10,20,0.62),rgba(3,10,20,0.62)),url('/brand/trackgo-bg-map.png')] bg-cover bg-center px-3 pb-4 pt-2 text-[#F9FAFB]">
-            <div className="mb-2 flex items-center gap-2">
-                <div className="min-w-0 flex-1">
-                    <h1 className="truncate text-[19px] font-black text-white">Usuarios</h1>
-                    <p className="mt-0.5 truncate text-[11px] font-extrabold text-[#9CA3AF]">
-                        <span className="font-black text-white">{stats.active}</span> activos ·{" "}
-                        <span className="font-black text-white">{stats.total}</span> total
-                    </p>
-                </div>
+        <div className="-mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] max-w-[100vw] bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.10),transparent_36%),linear-gradient(180deg,#fbfaff_0%,#f6f3ff_52%,#f8fafc_100%)] pb-6 text-[#101936]">
 
-                <button
-                    type="button"
-                    onClick={onCreate}
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-violet-400/25 bg-violet-500/10 text-white"
-                    aria-label="Crear usuario"
-                    title="Crear usuario"
-                >
-                    <AppIcon
-                        name="plus"
-                        tone="purple"
-                        size="sm"
-                        className="h-5 w-5 bg-transparent text-white ring-0"
-                    />
-                </button>
+            {/* STICKY HEADER */}
+            <div className="sticky top-0 z-20 bg-[#fbfaff]/96 px-3 pb-3 pt-3 backdrop-blur-md">
 
-                <button
-                    type="button"
-                    onClick={onRefresh}
-                    disabled={loading}
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-[#1F2937] bg-[#0F172A] text-white disabled:opacity-50"
-                    aria-label="Actualizar"
-                    title="Actualizar"
-                >
-                    <AppIcon
-                        name="refresh"
-                        tone="slate"
-                        size="sm"
-                        className="h-5 w-5 bg-transparent text-white ring-0"
-                    />
-                </button>
-            </div>
-
-            <div className="mb-2 grid grid-cols-4 gap-1.5">
-                <MobileStat label="Usuarios" value={stats.total} icon="users" color="text-[#93C5FD]" />
-                <MobileStat label="Activos" value={stats.active} icon="check" color="text-[#86EFAC]" />
-                <MobileStat label="Admins" value={stats.admins} icon="assign" color="text-[#C4B5FD]" />
-                <MobileStat label="Subs." value={stats.weekly} icon="lead" color="text-[#FDE68A]" />
-            </div>
-
-            <div className="mb-2 flex h-[40px] items-center gap-2 rounded-[13px] border border-[#1F2937] bg-[#0F172A] px-3">
-                <AppIcon
-                    name="search"
-                    tone="slate"
-                    size="sm"
-                    className="h-5 w-5 bg-transparent text-[#9CA3AF] ring-0"
-                />
-                <input
-                    value={search}
-                    onChange={(event) => onSearch(event.target.value)}
-                    placeholder="Buscar usuario..."
-                    className="min-w-0 flex-1 bg-transparent text-[13px] font-bold text-white outline-none placeholder:text-[#9CA3AF]"
-                />
-                {search ? (
-                    <button
-                        type="button"
-                        onClick={() => onSearch("")}
-                        className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-white/[0.06] text-white"
-                    >
-                        ×
-                    </button>
-                ) : null}
-            </div>
-
-            <div className="mb-2 rounded-[14px] border border-[#1F2937] bg-[#0F172A]/90 p-2.5">
-                <div className="flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 items-center gap-2">
-                        <AppIcon
-                            name="filter"
-                            tone="blue"
-                            size="sm"
-                            className="h-5 w-5 bg-transparent text-[#93C5FD] ring-0"
-                        />
-                        <p className="truncate text-[12px] font-black text-[#CBD5E1]">
-                            Filtros del equipo
-                            {activeFiltersCount > 0 ? ` · ${activeFiltersCount}` : ""}
+                {/* TITLE ROW */}
+                <div className="mb-3 flex items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                        <h1 className="truncate text-[20px] font-black tracking-[-0.03em] text-[#101936]">Usuarios</h1>
+                        <p className="mt-0.5 truncate text-[11px] font-semibold text-[#66739A]">
+                            <span className="font-black text-[#7C3AED]">{stats.active}</span> activos ·{" "}
+                            <span className="font-black text-[#101936]">{stats.total}</span> total
                         </p>
                     </div>
-
                     <button
                         type="button"
-                        onClick={onToggleFilters}
-                        className="rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-[11px] font-black text-[#DDEAFE]"
+                        onClick={onCreate}
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-white shadow-sm transition active:bg-[#f3f0ff]"
+                        aria-label="Crear usuario"
+                        title="Crear usuario"
                     >
-                        {filtersOpen ? "Ocultar" : "Filtros"}
+                        <AppIcon name="plus" tone="purple" size="sm" className="h-[18px] w-[18px] bg-transparent text-[#7C3AED] ring-0" />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onRefresh}
+                        disabled={loading}
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-white shadow-sm transition active:bg-[#f3f0ff] disabled:opacity-50"
+                        aria-label="Actualizar"
+                        title="Actualizar"
+                    >
+                        <AppIcon name="refresh" tone="purple" size="sm" className="h-[18px] w-[18px] bg-transparent text-[#7C3AED] ring-0" />
                     </button>
                 </div>
 
-                {filtersOpen ? (
-                    <div className="mt-3 grid gap-2">
-                        <MobileField label="Rol">
-                            <select
-                                value={roleFilter}
-                                onChange={(event) => onRoleFilter(event.target.value as RoleFilter)}
-                                className="h-10 rounded-[13px] border border-[#1F2937] bg-[#111827] px-3 text-[12px] font-black text-white outline-none"
-                            >
-                                <option value="all">Todos los roles</option>
-                                <option value="admin">Admins</option>
-                                <option value="user">Vendedores</option>
-                            </select>
-                        </MobileField>
+                {/* STAT CARDS */}
+                <div className="mb-3 grid grid-cols-4 gap-2">
+                    <MobileStat label="Total" value={stats.total} icon="users" tone="blue" />
+                    <MobileStat label="Activos" value={stats.active} icon="check" tone="green" />
+                    <MobileStat label="Admins" value={stats.admins} icon="assign" tone="purple" />
+                    <MobileStat label="Subs." value={stats.weekly} icon="lead" tone="amber" />
+                </div>
 
-                        <MobileField label="Auto-asignación">
-                            <select
-                                value={autoFilter}
-                                onChange={(event) => onAutoFilter(event.target.value as AutoFilter)}
-                                className="h-10 rounded-[13px] border border-[#1F2937] bg-[#111827] px-3 text-[12px] font-black text-white outline-none"
-                            >
-                                <option value="all">Todos</option>
-                                <option value="on">Auto ON</option>
-                                <option value="off">Auto OFF</option>
-                            </select>
-                        </MobileField>
-
-                        <MobileField label="Modelo de cobro">
-                            <select
-                                value={billingFilter}
-                                onChange={(event) =>
-                                    onBillingFilter(event.target.value as BillingFilter)
-                                }
-                                className="h-10 rounded-[13px] border border-[#1F2937] bg-[#111827] px-3 text-[12px] font-black text-white outline-none"
-                            >
-                                <option value="all">Todos los modelos</option>
-                                <option value="per_visit">Por visita</option>
-                                <option value="weekly_subscription">Suscripción</option>
-                            </select>
-                        </MobileField>
-
-                        {activeFiltersCount > 0 ? (
-                            <button
-                                type="button"
-                                onClick={onResetFilters}
-                                className="min-h-10 rounded-[13px] border border-white/[0.08] bg-white/[0.04] px-3 text-[12px] font-black text-white"
-                            >
-                                Limpiar filtros
+                {/* SEARCH + FILTER BUTTON */}
+                <div className="flex gap-2">
+                    <div className="flex h-[46px] flex-1 items-center gap-2 rounded-[14px] border border-[#E8E7FB] bg-white px-3 shadow-[0_2px_12px_rgba(91,33,255,0.07)]">
+                        <AppIcon name="search" tone="purple" size="sm" className="h-5 w-5 shrink-0 bg-transparent text-[#98A2B3] ring-0" />
+                        <input
+                            value={search}
+                            onChange={(event) => onSearch(event.target.value)}
+                            placeholder="Buscar usuario..."
+                            className="min-w-0 flex-1 bg-transparent font-semibold text-[#101936] outline-none placeholder:text-[#98A2B3]"
+                            style={{ fontSize: "16px" }}
+                        />
+                        {search ? (
+                            <button type="button" onClick={() => onSearch("")} className="flex h-7 w-7 items-center justify-center rounded-full bg-[#f3f0ff] text-[16px] text-[#7C3AED] transition active:bg-violet-200">
+                                ×
                             </button>
                         ) : null}
                     </div>
-                ) : null}
+                    <button
+                        type="button"
+                        onClick={onToggleFilters}
+                        className="relative flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-[14px] border border-[#E8E7FB] bg-white shadow-[0_2px_12px_rgba(91,33,255,0.07)] transition active:bg-[#f3f0ff]"
+                        aria-label="Filtros"
+                    >
+                        <AppIcon name="filter" tone="purple" size="sm" className="h-5 w-5 bg-transparent text-[#7C3AED] ring-0" />
+                        {activeFiltersCount > 0 ? (
+                            <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#7C3AED] text-[9px] font-black text-white">
+                                {activeFiltersCount}
+                            </span>
+                        ) : null}
+                    </button>
+                </div>
             </div>
 
-            <div className="grid min-w-0 gap-1.5 overflow-x-hidden">
-                {loading ? (
-                    <UsersTableState
-                        icon="refresh"
-                        title="Cargando usuarios"
-                        body="Estamos preparando el equipo."
-                    />
-                ) : users.length === 0 ? (
-                    <UsersTableState
-                        icon="filter"
-                        title="Sin resultados"
-                        body="No hay usuarios con ese filtro."
-                    />
-                ) : (
-                    users.map((user) => (
-                        <UserMobileCard
-                            key={user.id}
-                            user={user}
-                            selected={selectedUserId === user.id}
-                            onSelect={() => onSelectUser(user.id)}
-                        />
-                    ))
-                )}
+            {/* USER LIST */}
+            <div className="px-3 pt-3">
+                <div className="grid min-w-0 gap-2">
+                    {loading ? (
+                        <UsersTableState icon="refresh" title="Cargando usuarios" body="Estamos preparando el equipo." />
+                    ) : users.length === 0 ? (
+                        <UsersTableState icon="filter" title="Sin resultados" body="No hay usuarios con ese filtro." />
+                    ) : (
+                        users.map((user) => (
+                            <UserMobileCard
+                                key={user.id}
+                                user={user}
+                                selected={selectedUserId === user.id}
+                                onSelect={() => onSelectUser(user.id)}
+                            />
+                        ))
+                    )}
+                </div>
             </div>
+
+            {/* FILTER BOTTOM SHEET */}
+            {filtersOpen ? (
+                <div className="fixed inset-0 z-50 flex items-end">
+                    <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" onClick={onToggleFilters} />
+                    <div className="relative w-full rounded-t-[24px] bg-white px-4 pb-8 pt-4 shadow-2xl">
+                        <div className="mb-4 flex items-center justify-between">
+                            <div>
+                                <h3 className="text-[16px] font-black text-[#101936]">Filtros</h3>
+                                {activeFiltersCount > 0 ? (
+                                    <p className="mt-0.5 text-[11px] font-semibold text-[#7C3AED]">{activeFiltersCount} activos</p>
+                                ) : null}
+                            </div>
+                            <button type="button" onClick={onToggleFilters} className="flex h-9 w-9 items-center justify-center rounded-full bg-[#f3f0ff] text-[20px] text-[#7C3AED] transition active:bg-violet-200">
+                                ×
+                            </button>
+                        </div>
+
+                        <div className="grid gap-3">
+                            <MobileField label="Rol">
+                                <select value={roleFilter} onChange={(e) => onRoleFilter(e.target.value as RoleFilter)} className="h-11 w-full rounded-[14px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 text-[13px] font-semibold text-[#101936] outline-none">
+                                    <option value="all">Todos los roles</option>
+                                    <option value="admin">Admins</option>
+                                    <option value="user">Vendedores</option>
+                                </select>
+                            </MobileField>
+                            <MobileField label="Auto-asignación">
+                                <select value={autoFilter} onChange={(e) => onAutoFilter(e.target.value as AutoFilter)} className="h-11 w-full rounded-[14px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 text-[13px] font-semibold text-[#101936] outline-none">
+                                    <option value="all">Todos</option>
+                                    <option value="on">Auto ON</option>
+                                    <option value="off">Auto OFF</option>
+                                </select>
+                            </MobileField>
+                            <MobileField label="Modelo de cobro">
+                                <select value={billingFilter} onChange={(e) => onBillingFilter(e.target.value as BillingFilter)} className="h-11 w-full rounded-[14px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 text-[13px] font-semibold text-[#101936] outline-none">
+                                    <option value="all">Todos los modelos</option>
+                                    <option value="per_visit">Por visita</option>
+                                    <option value="weekly_subscription">Suscripción</option>
+                                </select>
+                            </MobileField>
+                        </div>
+
+                        <div className="mt-4 flex gap-2">
+                            {activeFiltersCount > 0 ? (
+                                <button type="button" onClick={() => { onResetFilters(); onToggleFilters(); }} className="flex-1 rounded-[14px] border border-[#E8E7FB] py-3 text-[13px] font-black text-[#66739A] transition active:bg-[#f3f0ff]">
+                                    Limpiar
+                                </button>
+                            ) : null}
+                            <button type="button" onClick={onToggleFilters} className="min-h-[46px] flex-1 rounded-[14px] bg-[#7C3AED] text-[13px] font-black text-white transition active:bg-violet-700">
+                                Aplicar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
         </div>
     );
 }
@@ -718,27 +694,26 @@ function MobileStat({
     label,
     value,
     icon,
-    color,
+    tone,
 }: {
     label: string;
     value: number;
     icon: Parameters<typeof AppIcon>[0]["name"];
-    color: string;
+    tone: "blue" | "green" | "purple" | "amber";
 }) {
+    const colorClass =
+        tone === "blue" ? "text-blue-500"
+        : tone === "green" ? "text-emerald-500"
+        : tone === "purple" ? "text-violet-500"
+        : "text-amber-500";
+
     return (
-        <div className="min-w-0 rounded-[13px] border border-white/[0.08] bg-white/[0.035] px-1.5 py-2">
+        <div className="min-w-0 rounded-[13px] border border-[#E8E7FB] bg-white px-1.5 py-2 shadow-sm">
             <div className="flex items-center justify-center gap-1">
-                <AppIcon
-                    name={icon}
-                    tone="slate"
-                    size="sm"
-                    className={`h-4 w-4 bg-transparent ring-0 ${color}`}
-                />
-                <span className="text-[12px] font-black text-white">{value}</span>
+                <AppIcon name={icon} tone="slate" size="sm" className={`h-4 w-4 bg-transparent ring-0 ${colorClass}`} />
+                <span className="text-[12px] font-black text-[#101936]">{value}</span>
             </div>
-            <div className="mt-1 truncate text-center text-[9px] font-black text-[#9CA3AF]">
-                {label}
-            </div>
+            <div className="mt-1 truncate text-center text-[9px] font-black text-[#66739A]">{label}</div>
         </div>
     );
 }
@@ -746,7 +721,7 @@ function MobileStat({
 function MobileField({ label, children }: { label: string; children: ReactNode }) {
     return (
         <label className="grid gap-1">
-            <span className="text-[11px] font-black text-[#9CA3AF]">{label}</span>
+            <span className="text-[11px] font-semibold text-[#66739A]">{label}</span>
             {children}
         </label>
     );
@@ -910,15 +885,19 @@ function UsersTableState({
 }) {
     return (
         <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
-            <AppIcon
-                name={icon}
-                tone={icon === "refresh" ? "purple" : "slate"}
-                size="lg"
-            />
-            <div className="mt-3 text-[13px] font-black text-[#F9FAFB] xl:font-bold xl:text-[#101936]">
+            {icon === "refresh" ? (
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f3f0ff]">
+                    <svg className="tg-spin h-7 w-7 text-[#7C3AED]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                        <path d="M21 12a9 9 0 1 1-3.1-6.8" />
+                    </svg>
+                </div>
+            ) : (
+                <AppIcon name={icon} tone="slate" size="lg" />
+            )}
+            <div className="mt-3 text-[13px] font-bold text-[#101936]">
                 {title}
             </div>
-            <div className="mt-1 text-[12px] font-bold text-[#9CA3AF] xl:font-medium xl:text-[#66739a]">
+            <div className="mt-1 text-[12px] font-medium text-[#66739a]">
                 {body}
             </div>
         </div>
@@ -941,35 +920,29 @@ function UserMobileCard({
             type="button"
             onClick={onSelect}
             className={[
-                "block w-full max-w-full overflow-hidden rounded-[15px] border text-left transition",
+                "block w-full max-w-full overflow-hidden rounded-[16px] border text-left transition",
                 selected
-                    ? "border-blue-400/30 bg-blue-500/16"
-                    : "border-[#1F2937] bg-[#111827] active:bg-[#0F172A]",
+                    ? "border-violet-200 bg-violet-50"
+                    : "border-[#E8E7FB] bg-white shadow-[0_2px_12px_rgba(91,33,255,0.05)] active:bg-[#f3f0ff]",
             ].join(" ")}
         >
-            <div className="p-2.5">
+            <div className="p-3">
                 <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-2.5">
                         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[13px] bg-gradient-to-br from-[#7c3aed] to-[#2563eb] text-[13px] font-black text-white shadow-sm">
                             {(user.name || user.email || "U").slice(0, 1).toUpperCase()}
                         </div>
-
                         <div className="min-w-0">
-                            <div className="truncate text-[13px] font-black text-[#F9FAFB]">
-                                {user.name || "Usuario"}
-                            </div>
-                            <div className="mt-0.5 truncate text-[11px] font-extrabold text-[#9CA3AF]">
-                                {user.email || "Sin correo registrado"}
-                            </div>
+                            <div className="truncate text-[13px] font-black text-[#101936]">{user.name || "Usuario"}</div>
+                            <div className="mt-0.5 truncate text-[11px] font-semibold text-[#66739A]">{user.email || "Sin correo registrado"}</div>
                         </div>
                     </div>
-
                     <Badge tone={user.active ? "green" : "red"}>
                         {user.active ? "Activo" : "Inactivo"}
                     </Badge>
                 </div>
 
-                <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
                     <Badge tone={user.role === "admin" ? "blue" : "gray"}>
                         {user.role === "admin" ? "Admin" : "Vendedor"}
                     </Badge>
@@ -981,14 +954,9 @@ function UserMobileCard({
                     </Badge>
                 </div>
 
-                <div className="mt-3 flex items-center gap-2 rounded-[12px] border border-blue-400/20 bg-blue-500/[0.08] px-3 py-2">
-                    <AppIcon
-                        name="map"
-                        tone="slate"
-                        size="sm"
-                        className="h-4 w-4 bg-transparent text-[#93C5FD] ring-0"
-                    />
-                    <div className="min-w-0 flex-1 truncate text-[11px] font-black text-[#93C5FD]">
+                <div className="mt-2.5 flex items-center gap-2 rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 py-2">
+                    <AppIcon name="map" tone="purple" size="sm" className="h-4 w-4 bg-transparent text-[#7C3AED] ring-0" />
+                    <div className="min-w-0 flex-1 truncate text-[11px] font-semibold text-[#66739A]">
                         {coverageLabel(user)}
                     </div>
                 </div>
@@ -1414,7 +1382,7 @@ function EditUserModal({
                     </EditorBlock>
                 ) : null}
 
-                <div className="flex flex-col-reverse gap-2 border-t border-[#f0f1f2] pt-4 sm:flex-row sm:justify-end">
+                <div className="flex flex-wrap gap-2 border-t border-[#f0f1f2] pt-4">
                     <IconButton
                         icon="power"
                         label={active ? "Dejar inactivo al guardar" : "Dejar activo al guardar"}
@@ -1427,6 +1395,7 @@ function EditUserModal({
                                 : "border-emerald-200 text-emerald-600 hover:bg-emerald-50"
                         }
                     />
+                    <div className="flex-1" />
                     <IconButton
                         icon="check"
                         label={saving ? "Guardando" : "Guardar cambios"}
@@ -1589,7 +1558,7 @@ function Choice({
             onClick={onClick}
             className={
                 active
-                    ? "rounded-lg border border-[#171717] bg-black px-3 py-2 text-[12px] font-semibold text-white"
+                    ? "rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-[12px] font-semibold text-[#7C3AED] transition"
                     : "rounded-lg border border-[#e5e7eb] bg-white px-3 py-2 text-[12px] font-semibold text-[#52525b] transition hover:bg-[#f9fafb]"
             }
         >

@@ -103,6 +103,7 @@ export default function ClientDetailPage() {
     const [rejectReason, setRejectReason] = useState<ClientRejectedReason>("no_le_interesa");
     const [rejectText, setRejectText] = useState("");
     const [err, setErr] = useState<string | null>(null);
+    const [quickActionsOpen, setQuickActionsOpen] = useState(false);
 
     async function refreshEvents() {
         const nextEvents = await listClientDailyEvents(clientId);
@@ -241,71 +242,258 @@ export default function ClientDetailPage() {
     return (
         <div className="mx-auto w-full max-w-[1220px]">
 
-            {/* MOBILE HEADER */}
-            <div className="xl:hidden -mx-3 -mt-4 flex items-center gap-2 border-b border-[#E8E7FB] bg-white px-3 py-3">
-                <button
-                    type="button"
-                    onClick={() => router.back()}
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-[#f8f7ff] transition active:bg-[#f3f0ff]"
-                    aria-label="Volver"
-                >
-                    <AppIcon name="arrowLeft" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#101936] ring-0" />
-                </button>
+            {/* ====================== MOBILE LAYOUT ====================== */}
+            <div className="xl:hidden -mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.10),transparent_36%),linear-gradient(180deg,#fbfaff_0%,#f6f3ff_52%,#f8fafc_100%)] pb-6 text-[#101936]">
 
-                <div className="min-w-0 flex-1">
-                    {loadingClient ? (
-                        <p className="text-[13px] font-semibold text-[#66739A]">Cargando...</p>
-                    ) : (
-                        <>
-                            <p className="truncate text-[14px] font-black text-[#101936]">{displayName(client)}</p>
-                            {client?.business || client?.phone ? (
-                                <p className="truncate text-[10px] font-semibold text-[#66739A]">
-                                    {client.business || client.phone}
-                                </p>
-                            ) : null}
-                        </>
-                    )}
+                {/* STICKY HEADER */}
+                <div className="sticky top-0 z-20 bg-[#fbfaff]/96 backdrop-blur-md">
+                    <div className="flex items-center gap-2 px-3 py-2.5">
+                        <button
+                            type="button"
+                            onClick={() => router.back()}
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-[#E8E7FB] bg-white shadow-sm transition active:bg-[#f3f0ff]"
+                            aria-label="Volver"
+                        >
+                            <AppIcon name="arrowLeft" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#101936] ring-0" />
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setQuickActionsOpen(true)}
+                            className="min-w-0 flex-1 text-left transition active:opacity-70"
+                        >
+                            {loadingClient ? (
+                                <p className="text-[13px] font-semibold text-[#66739A]">Cargando...</p>
+                            ) : (
+                                <>
+                                    <p className="truncate text-[14px] font-black text-[#101936]">{displayName(client)}</p>
+                                    <p className="truncate text-[10px] font-semibold text-[#66739A]">
+                                        {[client?.phone, client?.location?.displayLabel].filter(Boolean).join(" · ") || "Sin datos"}
+                                    </p>
+                                </>
+                            )}
+                        </button>
+
+                        {client ? (
+                            <span className={[
+                                "shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-black",
+                                status === "visited"
+                                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                    : status === "rejected"
+                                        ? "border-red-200 bg-red-50 text-red-600"
+                                        : "border-amber-200 bg-amber-50 text-amber-700",
+                            ].join(" ")}>
+                                {clientStatusLabel[status]}
+                            </span>
+                        ) : null}
+                    </div>
+
+                    {err ? (
+                        <div className="mx-3 mb-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-semibold text-red-600">
+                            {err}
+                        </div>
+                    ) : null}
                 </div>
 
-                {client ? (
-                    <Badge tone={clientStatusTone[status]}>{clientStatusLabel[status]}</Badge>
+                {/* CONTENT */}
+                <div className="px-3 pt-3">
+
+                    {/* STAT CARDS */}
+                    <div className="mb-3 grid grid-cols-4 gap-2">
+                        <div className="rounded-[13px] border border-[#E8E7FB] bg-white px-1.5 py-2 shadow-sm">
+                            <div className="text-center text-[12px] font-black text-emerald-600">{visited}</div>
+                            <div className="mt-1 truncate text-center text-[9px] font-black text-[#66739A]">Visitados</div>
+                        </div>
+                        <div className="rounded-[13px] border border-[#E8E7FB] bg-white px-1.5 py-2 shadow-sm">
+                            <div className="text-center text-[12px] font-black text-red-500">{rejected}</div>
+                            <div className="mt-1 truncate text-center text-[9px] font-black text-[#66739A]">Rechazados</div>
+                        </div>
+                        <div className="rounded-[13px] border border-[#E8E7FB] bg-white px-1.5 py-2 shadow-sm">
+                            <div className="truncate text-center text-[12px] font-black text-violet-600">{money(totalAmount)}</div>
+                            <div className="mt-1 truncate text-center text-[9px] font-black text-[#66739A]">Monto</div>
+                        </div>
+                        <div className="rounded-[13px] border border-[#E8E7FB] bg-white px-1.5 py-2 shadow-sm">
+                            <div className="truncate text-center text-[12px] font-black text-[#101936]">{events.length}</div>
+                            <div className="mt-1 truncate text-center text-[9px] font-black text-[#66739A]">Eventos</div>
+                        </div>
+                    </div>
+
+                    {/* STATUS ACTIONS */}
+                    <div className="mb-3 grid grid-cols-3 gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setRejectOpen(true)}
+                            disabled={!client || savingStatus || status === "rejected"}
+                            className="flex min-h-[42px] items-center justify-center gap-1.5 rounded-[13px] border border-red-200 bg-white text-[11px] font-black text-red-600 shadow-sm transition active:bg-red-50 disabled:opacity-40"
+                        >
+                            <AppIcon name="close" tone="slate" size="sm" className="h-4 w-4 bg-transparent text-red-500 ring-0" />
+                            Rechazar
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setConfirmStatus("pending")}
+                            disabled={!client || savingStatus || status === "pending"}
+                            className="flex min-h-[42px] items-center justify-center gap-1.5 rounded-[13px] border border-amber-200 bg-white text-[11px] font-black text-amber-700 shadow-sm transition active:bg-amber-50 disabled:opacity-40"
+                        >
+                            <AppIcon name="refresh" tone="slate" size="sm" className="h-4 w-4 bg-transparent text-amber-600 ring-0" />
+                            Revertir
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setConfirmStatus("visited")}
+                            disabled={!client || savingStatus || status === "visited"}
+                            className="flex min-h-[42px] items-center justify-center gap-1.5 rounded-[13px] border border-emerald-200 bg-white text-[11px] font-black text-emerald-700 shadow-sm transition active:bg-emerald-50 disabled:opacity-40"
+                        >
+                            <AppIcon name="check" tone="slate" size="sm" className="h-4 w-4 bg-transparent text-emerald-600 ring-0" />
+                            Visitado
+                        </button>
+                    </div>
+
+                    {/* CLIENT INFO CARD */}
+                    <div className="mb-3 rounded-[16px] border border-[#E8E7FB] bg-white p-3 shadow-[0_4px_18px_rgba(91,33,255,0.07)]">
+                        <div className="mb-2 text-[11px] font-black uppercase tracking-[0.06em] text-[#98A2B3]">Datos del cliente</div>
+                        <div className="space-y-2 text-[12px]">
+                            <MobileInfoRow label="Teléfono" value={client?.phone || "Sin teléfono"} />
+                            <MobileInfoRow label="Negocio" value={client?.business || "Sin negocio"} />
+                            <MobileInfoRow label="Ciudad" value={client?.location?.displayLabel || client?.location?.adminCityLabel || "Sin ciudad"} />
+                            <MobileInfoRow label="Asignado" value={assignedUser?.name || assignedUser?.email || (client?.assignedTo ? "Asignado" : "Sin asignar")} />
+                        </div>
+                        {status === "rejected" && (rejectedReason || rejectedReasonText) ? (
+                            <div className="mt-3 rounded-[10px] border border-red-100 bg-red-50 px-3 py-2">
+                                <div className="text-[10px] font-black uppercase tracking-[0.06em] text-red-400">Motivo de rechazo</div>
+                                <p className="mt-1 text-[12px] font-semibold text-red-700">{rejectedReason || rejectedReasonText}</p>
+                            </div>
+                        ) : null}
+                    </div>
+
+                    {/* EVENT HISTORY */}
+                    <div className="overflow-hidden rounded-[16px] border border-[#E8E7FB] bg-white shadow-[0_4px_18px_rgba(91,33,255,0.07)]">
+                        <div className="border-b border-[#E8E7FB] px-3 py-3">
+                            <div className="text-[13px] font-black text-[#101936]">Historial</div>
+                            <div className="mt-0.5 text-[11px] font-semibold text-[#66739A]">{events.length} eventos registrados</div>
+                        </div>
+                        {loadingEvents ? (
+                            <div className="flex flex-col items-center gap-3 py-8 text-center">
+                                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#f3f0ff]">
+                                    <svg className="tg-spin h-6 w-6 text-[#7C3AED]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                                        <path d="M21 12a9 9 0 1 1-3.1-6.8" />
+                                    </svg>
+                                </div>
+                                <p className="text-[13px] font-semibold text-[#66739A]">Cargando historial</p>
+                            </div>
+                        ) : events.length === 0 ? (
+                            <div className="py-8 text-center text-[13px] font-medium text-[#66739A]">
+                                Sin eventos registrados.
+                            </div>
+                        ) : (
+                            <div className="divide-y divide-[#E8E7FB]">
+                                {events.map((event) => {
+                                    const user = userMap.get(event.userId);
+                                    return (
+                                        <div key={event.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                                            <div className="min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                    <span className={[
+                                                        "rounded-full border px-2 py-0.5 text-[9px] font-black",
+                                                        event.type === "visited"
+                                                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                                            : event.type === "rejected"
+                                                                ? "border-red-200 bg-red-50 text-red-600"
+                                                                : "border-amber-200 bg-amber-50 text-amber-700",
+                                                    ].join(" ")}>
+                                                        {eventLabel[event.type]}
+                                                    </span>
+                                                    <span className="truncate text-[11px] font-semibold text-[#66739A]">
+                                                        {user?.name || "Usuario"}
+                                                    </span>
+                                                </div>
+                                                <div className="mt-0.5 text-[10px] font-medium text-[#98A2B3]">
+                                                    {event.dayKey} · {formatDate(event.createdAt)}
+                                                </div>
+                                            </div>
+                                            <div className="shrink-0 text-[12px] font-black text-[#101936]">
+                                                {money(resolveAmount(event))}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* QUICK ACTIONS BOTTOM SHEET */}
+                {quickActionsOpen ? (
+                    <div className="fixed inset-0 z-50 flex items-end">
+                        <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" onClick={() => setQuickActionsOpen(false)} />
+                        <div className="relative w-full rounded-t-[24px] bg-white px-4 pb-8 pt-4 shadow-2xl">
+                            <div className="mb-4 flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                    <h3 className="truncate text-[16px] font-black text-[#101936]">{displayName(client)}</h3>
+                                    <p className="mt-0.5 truncate text-[12px] font-semibold text-[#66739A]">
+                                        {[client?.phone, client?.location?.displayLabel].filter(Boolean).join(" · ") || "Sin datos"}
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setQuickActionsOpen(false)}
+                                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f3f0ff] text-[20px] text-[#7C3AED] transition active:bg-violet-200"
+                                >
+                                    ×
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-4 gap-3">
+                                <Link
+                                    href={`/admin/leads/${clientId}`}
+                                    className="flex flex-col items-center gap-2 rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] py-4 transition active:bg-[#f3f0ff]"
+                                    onClick={() => setQuickActionsOpen(false)}
+                                >
+                                    <AppIcon name="chat" tone="purple" size="sm" className="h-6 w-6 bg-transparent text-[#7C3AED] ring-0" />
+                                    <span className="text-[10px] font-black text-[#66739A]">Chat</span>
+                                </Link>
+
+                                {client?.location?.mapsUrl ? (
+                                    <Link
+                                        href={client.location.mapsUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="flex flex-col items-center gap-2 rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] py-4 transition active:bg-[#f3f0ff]"
+                                        onClick={() => setQuickActionsOpen(false)}
+                                    >
+                                        <AppIcon name="map" tone="green" size="sm" className="h-6 w-6 bg-transparent text-emerald-600 ring-0" />
+                                        <span className="text-[10px] font-black text-[#66739A]">Maps</span>
+                                    </Link>
+                                ) : null}
+
+                                {client?.phone ? (
+                                    <Link
+                                        href={`https://wa.me/${client.phone.replace(/\D/g, "")}`}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="flex flex-col items-center gap-2 rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] py-4 transition active:bg-[#f3f0ff]"
+                                        onClick={() => setQuickActionsOpen(false)}
+                                    >
+                                        <AppIcon name="chat" tone="green" size="sm" className="h-6 w-6 bg-transparent text-emerald-600 ring-0" />
+                                        <span className="text-[10px] font-black text-[#66739A]">WhatsApp</span>
+                                    </Link>
+                                ) : null}
+
+                                <button
+                                    type="button"
+                                    className="flex flex-col items-center gap-2 rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] py-4 transition active:bg-[#f3f0ff]"
+                                    onClick={() => { setQuickActionsOpen(false); setEditOpen(true); }}
+                                >
+                                    <AppIcon name="edit" tone="purple" size="sm" className="h-6 w-6 bg-transparent text-[#7C3AED] ring-0" />
+                                    <span className="text-[10px] font-black text-[#66739A]">Editar</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 ) : null}
             </div>
 
-            {/* MOBILE ACTION BAR */}
-            <div className="xl:hidden -mx-3 mb-4 grid grid-cols-3 gap-2 border-b border-[#E8E7FB] bg-white px-3 pb-3 pt-2">
-                <button
-                    type="button"
-                    onClick={() => setRejectOpen(true)}
-                    disabled={!client || savingStatus || status === "rejected"}
-                    className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-[12px] border border-red-200 bg-red-50 text-[12px] font-bold text-red-600 transition active:bg-red-100 disabled:opacity-40"
-                >
-                    <AppIcon name="close" tone="slate" size="sm" className="h-4 w-4 bg-transparent text-red-500 ring-0" />
-                    Rechazar
-                </button>
-
-                <button
-                    type="button"
-                    onClick={() => setConfirmStatus("pending")}
-                    disabled={!client || savingStatus || status === "pending"}
-                    className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-[12px] border border-amber-200 bg-amber-50 text-[12px] font-bold text-amber-700 transition active:bg-amber-100 disabled:opacity-40"
-                >
-                    <AppIcon name="refresh" tone="slate" size="sm" className="h-4 w-4 bg-transparent text-amber-600 ring-0" />
-                    Revertir
-                </button>
-
-                <button
-                    type="button"
-                    onClick={() => setConfirmStatus("visited")}
-                    disabled={!client || savingStatus || status === "visited"}
-                    className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-[12px] border border-emerald-200 bg-emerald-50 text-[12px] font-bold text-emerald-700 transition active:bg-emerald-100 disabled:opacity-40"
-                >
-                    <AppIcon name="check" tone="slate" size="sm" className="h-4 w-4 bg-transparent text-emerald-600 ring-0" />
-                    Visitado
-                </button>
-            </div>
-
-            {/* DESKTOP HEADER */}
+            {/* ====================== DESKTOP LAYOUT ====================== */}
             <div className="hidden xl:block">
                 <PageHeader
                     title={displayName(client)}
@@ -315,7 +503,7 @@ export default function ClientDetailPage() {
                         <>
                             <QuickLink href="/admin/activity" icon="activity" label="Actividad" />
                             <QuickLink href={`/admin/leads/${clientId}`} icon="chat" label="Chat" />
-                            {client?.location.mapsUrl ? (
+                            {client?.location?.mapsUrl ? (
                                 <QuickLink href={client.location.mapsUrl} icon="map" label="Maps" external />
                             ) : null}
                             <IconButton
@@ -347,166 +535,167 @@ export default function ClientDetailPage() {
                         </>
                     }
                 />
-            </div>
 
-            {err ? (
-                <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] font-semibold text-red-600">
-                    {err}
-                </div>
-            ) : null}
+                {err ? (
+                    <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] font-semibold text-red-600">
+                        {err}
+                    </div>
+                ) : null}
 
-            <section className="mb-4 grid gap-2 md:grid-cols-3 xl:grid-cols-5">
-                <ClientMiniStat label="Estado" value={clientStatusLabel[status]} caption={formatDate(client?.raw?.statusAt as number | null) || "Actual"} tone={clientStatusTone[status]} />
-                <ClientMiniStat label="Eventos" value={String(events.length)} caption="Historial" tone="blue" />
-                <ClientMiniStat label="Visitados" value={String(visited)} caption="Positivos" tone="green" />
-                <ClientMiniStat label="Rechazados" value={String(rejected)} caption="Negativos" tone="red" />
-                <ClientMiniStat label="Monto" value={money(totalAmount)} caption="Registrado" tone="purple" />
-            </section>
+                <section className="mb-4 grid gap-2 md:grid-cols-3 xl:grid-cols-5">
+                    <ClientMiniStat label="Estado" value={clientStatusLabel[status]} caption={formatDate(client?.raw?.statusAt as number | null) || "Actual"} tone={clientStatusTone[status]} />
+                    <ClientMiniStat label="Eventos" value={String(events.length)} caption="Historial" tone="blue" />
+                    <ClientMiniStat label="Visitados" value={String(visited)} caption="Positivos" tone="green" />
+                    <ClientMiniStat label="Rechazados" value={String(rejected)} caption="Negativos" tone="red" />
+                    <ClientMiniStat label="Monto" value={money(totalAmount)} caption="Registrado" tone="purple" />
+                </section>
 
-            <section className="grid gap-4 xl:grid-cols-[360px_1fr]">
-                <aside className="space-y-4">
-                    <Card className="overflow-hidden">
-                        <CardHeader title="Perfil" subtitle="Datos normalizados del cliente" />
-                        <div className="border-t border-[#eef1f5] p-4">
-                        {loadingClient ? (
-                            <p className="text-[13px] font-medium text-[#667085]">Cargando cliente...</p>
-                        ) : !client ? (
-                            <p className="text-[13px] font-medium text-red-500">Cliente no encontrado.</p>
-                        ) : (
-                            <div className="space-y-4">
-                                <div className="flex items-start gap-3">
-                                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#7c3aed] to-[#4f46e5] text-[18px] font-black text-white shadow-[0_14px_30px_rgba(91,33,255,0.22)]">
-                                        {displayName(client).slice(0, 1).toUpperCase()}
-                                    </div>
-                                    <div className="min-w-0">
-                                    <h2 className="truncate text-[20px] font-bold tracking-[-0.03em] text-[#101936]">
-                                        {displayName(client)}
-                                    </h2>
-                                    <p className="mt-1 text-[12px] font-medium text-[#667085]">
-                                        {client.business || client.phone || client.id}
-                                    </p>
-                                    </div>
-                                </div>
-
-                                <div className="flex flex-wrap gap-2">
-                                    <Badge tone={clientStatusTone[status]}>{clientStatusLabel[status]}</Badge>
-                                    {client.verificationStatus ? (
-                                        <Badge tone="blue">{client.verificationStatus}</Badge>
-                                    ) : null}
-                                    {client.location.outOfCoverage ? (
-                                        <Badge tone="yellow">Fuera cobertura</Badge>
-                                    ) : null}
-                                </div>
-
-                                <div className="space-y-2 text-[12px] font-medium">
-                                    <Info label="Telefono" value={client.phone || "Sin telefono"} />
-                                    <Info label="Negocio" value={client.business || "Sin negocio"} />
-                                    <Info label="Ciudad" value={client.location.displayLabel || client.location.adminCityLabel || "Sin ciudad"} />
-                                    <Info label="Asignado a" value={assignedUser?.name || assignedUser?.email || (client.assignedTo ? "Usuario asignado" : "Sin asignar")} />
-                                    <Info label="Actualizado" value={formatDate(client.updatedAt)} />
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-2 pt-1">
-                                    <SmallAction href={`/admin/leads/${clientId}`} icon="chat" label="Chat" />
-                                    <button
-                                        type="button"
-                                        onClick={() => setEditOpen(true)}
-                                        className="inline-flex h-10 items-center justify-center rounded-xl border border-[#e8e7fb] bg-[#fbfaff] text-[#7c3aed] transition hover:bg-[#f5f3ff]"
-                                        aria-label="Editar lead"
-                                        title="Editar lead"
-                                    >
-                                        <AppIcon name="edit" tone="purple" size="sm" plain />
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                        </div>
-                    </Card>
-
-                    <Card className="overflow-hidden">
-                        <CardHeader title="Trazabilidad" subtitle="Estado operativo" />
-                        <div className="space-y-2 border-t border-[#eef1f5] p-4 text-[12px] font-medium">
-                            <Info label="Ultimo evento" value={latestEvent ? `${eventLabel[latestEvent.type]} - ${formatDate(latestEvent.createdAt)}` : "Sin eventos"} />
-                            <Info label="Mensajes" value={String(messages.length)} />
-                            <Info label="Pendiente actual" value={pending ? "Si" : "No"} />
-                        </div>
-                    </Card>
-
-                    {status === "rejected" ? (
-                        <Card className="overflow-hidden border-red-100">
-                            <CardHeader title="Motivo de rechazo" subtitle="Registro del ultimo cierre" />
+                <section className="grid gap-4 xl:grid-cols-[360px_1fr]">
+                    <aside className="space-y-4">
+                        <Card className="overflow-hidden">
+                            <CardHeader title="Perfil" subtitle="Datos normalizados del cliente" />
                             <div className="border-t border-[#eef1f5] p-4">
-                            <p className="text-[12px] font-medium leading-5 text-[#667085]">
-                                {rejectedReason || "Sin motivo estructurado"}
-                            </p>
-                            {rejectedReasonText ? (
-                                <p className="mt-2 rounded-md bg-[#f9fafb] px-3 py-2 text-[12px] font-medium text-[#344054]">
-                                    {rejectedReasonText}
-                                </p>
-                            ) : null}
+                                {loadingClient ? (
+                                    <p className="text-[13px] font-medium text-[#667085]">Cargando cliente...</p>
+                                ) : !client ? (
+                                    <p className="text-[13px] font-medium text-red-500">Cliente no encontrado.</p>
+                                ) : (
+                                    <div className="space-y-4">
+                                        <div className="flex items-start gap-3">
+                                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#7c3aed] to-[#4f46e5] text-[18px] font-black text-white shadow-[0_14px_30px_rgba(91,33,255,0.22)]">
+                                                {displayName(client).slice(0, 1).toUpperCase()}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <h2 className="truncate text-[20px] font-bold tracking-[-0.03em] text-[#101936]">
+                                                    {displayName(client)}
+                                                </h2>
+                                                <p className="mt-1 text-[12px] font-medium text-[#667085]">
+                                                    {client.business || client.phone || client.id}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-wrap gap-2">
+                                            <Badge tone={clientStatusTone[status]}>{clientStatusLabel[status]}</Badge>
+                                            {client.verificationStatus ? (
+                                                <Badge tone="blue">{client.verificationStatus}</Badge>
+                                            ) : null}
+                                            {client.location.outOfCoverage ? (
+                                                <Badge tone="yellow">Fuera cobertura</Badge>
+                                            ) : null}
+                                        </div>
+
+                                        <div className="space-y-2 text-[12px] font-medium">
+                                            <Info label="Telefono" value={client.phone || "Sin telefono"} />
+                                            <Info label="Negocio" value={client.business || "Sin negocio"} />
+                                            <Info label="Ciudad" value={client.location.displayLabel || client.location.adminCityLabel || "Sin ciudad"} />
+                                            <Info label="Asignado a" value={assignedUser?.name || assignedUser?.email || (client.assignedTo ? "Usuario asignado" : "Sin asignar")} />
+                                            <Info label="Actualizado" value={formatDate(client.updatedAt)} />
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-2 pt-1">
+                                            <SmallAction href={`/admin/leads/${clientId}`} icon="chat" label="Chat" />
+                                            <button
+                                                type="button"
+                                                onClick={() => setEditOpen(true)}
+                                                className="inline-flex h-10 items-center justify-center rounded-xl border border-[#e8e7fb] bg-[#fbfaff] text-[#7c3aed] transition hover:bg-[#f5f3ff]"
+                                                aria-label="Editar lead"
+                                                title="Editar lead"
+                                            >
+                                                <AppIcon name="edit" tone="purple" size="sm" plain />
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </Card>
-                    ) : null}
-                </aside>
 
-                <Card className="overflow-hidden">
-                    <CardHeader title="Historial operativo" subtitle="Eventos diarios que alimentan Activity y Contabilidad" />
+                        <Card className="overflow-hidden">
+                            <CardHeader title="Trazabilidad" subtitle="Estado operativo" />
+                            <div className="space-y-2 border-t border-[#eef1f5] p-4 text-[12px] font-medium">
+                                <Info label="Ultimo evento" value={latestEvent ? `${eventLabel[latestEvent.type]} - ${formatDate(latestEvent.createdAt)}` : "Sin eventos"} />
+                                <Info label="Mensajes" value={String(messages.length)} />
+                                <Info label="Pendiente actual" value={pending ? "Si" : "No"} />
+                            </div>
+                        </Card>
 
-                    <div className="overflow-x-auto">
-                        <table className="w-full min-w-[760px] border-collapse">
-                            <thead>
-                                <tr className="border-b border-[#eef1f5] text-left text-[11px] font-medium text-[#667085]">
-                                    <th className="px-4 py-3">Estado</th>
-                                    <th className="px-4 py-3">Usuario</th>
-                                    <th className="px-4 py-3">Dia</th>
-                                    <th className="px-4 py-3 text-right">Monto</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {loadingEvents ? (
-                                    <tr>
-                                        <td colSpan={4} className="p-8 text-center text-[13px] font-medium text-[#667085]">
-                                            Cargando actividad...
-                                        </td>
+                        {status === "rejected" ? (
+                            <Card className="overflow-hidden border-red-100">
+                                <CardHeader title="Motivo de rechazo" subtitle="Registro del ultimo cierre" />
+                                <div className="border-t border-[#eef1f5] p-4">
+                                    <p className="text-[12px] font-medium leading-5 text-[#667085]">
+                                        {rejectedReason || "Sin motivo estructurado"}
+                                    </p>
+                                    {rejectedReasonText ? (
+                                        <p className="mt-2 rounded-md bg-[#f9fafb] px-3 py-2 text-[12px] font-medium text-[#344054]">
+                                            {rejectedReasonText}
+                                        </p>
+                                    ) : null}
+                                </div>
+                            </Card>
+                        ) : null}
+                    </aside>
+
+                    <Card className="overflow-hidden">
+                        <CardHeader title="Historial operativo" subtitle="Eventos diarios que alimentan Activity y Contabilidad" />
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full min-w-[760px] border-collapse">
+                                <thead>
+                                    <tr className="border-b border-[#eef1f5] text-left text-[11px] font-medium text-[#667085]">
+                                        <th className="px-4 py-3">Estado</th>
+                                        <th className="px-4 py-3">Usuario</th>
+                                        <th className="px-4 py-3">Dia</th>
+                                        <th className="px-4 py-3 text-right">Monto</th>
                                     </tr>
-                                ) : events.length ? (
-                                    events.map((event) => {
-                                        const user = userMap.get(event.userId);
-                                        return (
-                                            <tr key={event.id} className="border-b border-[#eef1f5] last:border-0">
-                                                <td className="px-4 py-3">
-                                                    <Badge tone={eventTone[event.type]}>{eventLabel[event.type]}</Badge>
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <div className="text-[12px] font-semibold text-[#344054]">
-                                                        {user?.name || user?.email || "Usuario"}
-                                                    </div>
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    <div className="text-[12px] font-semibold text-[#344054]">{event.dayKey || "-"}</div>
-                                                    <div className="mt-0.5 text-[11px] font-medium text-[#667085]">
-                                                        {formatDate(event.createdAt)}
-                                                    </div>
-                                                </td>
-                                                <td className="px-4 py-3 text-right text-[12px] font-semibold text-[#172033]">
-                                                    {money(resolveAmount(event))}
-                                                </td>
-                                            </tr>
-                                        );
-                                    })
-                                ) : (
-                                    <tr>
-                                        <td colSpan={4} className="p-8 text-center text-[13px] font-medium text-[#667085]">
-                                            Sin eventos diarios para este cliente.
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                </Card>
-            </section>
+                                </thead>
+                                <tbody>
+                                    {loadingEvents ? (
+                                        <tr>
+                                            <td colSpan={4} className="p-8 text-center text-[13px] font-medium text-[#667085]">
+                                                Cargando actividad...
+                                            </td>
+                                        </tr>
+                                    ) : events.length ? (
+                                        events.map((event) => {
+                                            const user = userMap.get(event.userId);
+                                            return (
+                                                <tr key={event.id} className="border-b border-[#eef1f5] last:border-0">
+                                                    <td className="px-4 py-3">
+                                                        <Badge tone={eventTone[event.type]}>{eventLabel[event.type]}</Badge>
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <div className="text-[12px] font-semibold text-[#344054]">
+                                                            {user?.name || user?.email || "Usuario"}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <div className="text-[12px] font-semibold text-[#344054]">{event.dayKey || "-"}</div>
+                                                        <div className="mt-0.5 text-[11px] font-medium text-[#667085]">
+                                                            {formatDate(event.createdAt)}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right text-[12px] font-semibold text-[#172033]">
+                                                        {money(resolveAmount(event))}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                    ) : (
+                                        <tr>
+                                            <td colSpan={4} className="p-8 text-center text-[13px] font-medium text-[#667085]">
+                                                Sin eventos diarios para este cliente.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </Card>
+                </section>
+            </div>
 
+            {/* SHARED MODALS */}
             <Modal
                 open={rejectOpen}
                 onClose={() => setRejectOpen(false)}
@@ -693,6 +882,15 @@ function Info({ label, value }: { label: string; value: string }) {
         <div className="flex items-center justify-between gap-3">
             <span className="text-[#667085]">{label}</span>
             <span className="truncate text-right font-semibold text-[#172033]">{value || "-"}</span>
+        </div>
+    );
+}
+
+function MobileInfoRow({ label, value }: { label: string; value: string }) {
+    return (
+        <div className="flex items-center justify-between gap-3">
+            <span className="shrink-0 text-[#98A2B3]">{label}</span>
+            <span className="min-w-0 truncate text-right font-semibold text-[#101936]">{value || "-"}</span>
         </div>
     );
 }
