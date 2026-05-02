@@ -257,11 +257,7 @@ export default function ClientDetailPage() {
                             <AppIcon name="arrowLeft" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#101936] ring-0" />
                         </button>
 
-                        <button
-                            type="button"
-                            onClick={() => setQuickActionsOpen(true)}
-                            className="min-w-0 flex-1 text-left transition active:opacity-70"
-                        >
+                        <div className="min-w-0 flex-1">
                             {loadingClient ? (
                                 <p className="text-[13px] font-semibold text-[#66739A]">Cargando...</p>
                             ) : (
@@ -272,7 +268,7 @@ export default function ClientDetailPage() {
                                     </p>
                                 </>
                             )}
-                        </button>
+                        </div>
 
                         {client ? (
                             <span className={[
@@ -286,6 +282,19 @@ export default function ClientDetailPage() {
                                 {clientStatusLabel[status]}
                             </span>
                         ) : null}
+
+                        <button
+                            type="button"
+                            onClick={() => setQuickActionsOpen(true)}
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-[#E8E7FB] bg-white shadow-sm transition active:bg-[#f3f0ff]"
+                            aria-label="Acciones"
+                        >
+                            <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#66739A]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="12" cy="5" r="1" fill="currentColor" />
+                                <circle cx="12" cy="12" r="1" fill="currentColor" />
+                                <circle cx="12" cy="19" r="1" fill="currentColor" />
+                            </svg>
+                        </button>
                     </div>
 
                     {err ? (
@@ -316,37 +325,6 @@ export default function ClientDetailPage() {
                             <div className="truncate text-center text-[12px] font-black text-[#101936]">{events.length}</div>
                             <div className="mt-1 truncate text-center text-[9px] font-black text-[#66739A]">Eventos</div>
                         </div>
-                    </div>
-
-                    {/* STATUS ACTIONS */}
-                    <div className="mb-3 grid grid-cols-3 gap-2">
-                        <button
-                            type="button"
-                            onClick={() => setRejectOpen(true)}
-                            disabled={!client || savingStatus || status === "rejected"}
-                            className="flex min-h-[42px] items-center justify-center gap-1.5 rounded-[13px] border border-red-200 bg-white text-[11px] font-black text-red-600 shadow-sm transition active:bg-red-50 disabled:opacity-40"
-                        >
-                            <AppIcon name="close" tone="slate" size="sm" className="h-4 w-4 bg-transparent text-red-500 ring-0" />
-                            Rechazar
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setConfirmStatus("pending")}
-                            disabled={!client || savingStatus || status === "pending"}
-                            className="flex min-h-[42px] items-center justify-center gap-1.5 rounded-[13px] border border-amber-200 bg-white text-[11px] font-black text-amber-700 shadow-sm transition active:bg-amber-50 disabled:opacity-40"
-                        >
-                            <AppIcon name="refresh" tone="slate" size="sm" className="h-4 w-4 bg-transparent text-amber-600 ring-0" />
-                            Revertir
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setConfirmStatus("visited")}
-                            disabled={!client || savingStatus || status === "visited"}
-                            className="flex min-h-[42px] items-center justify-center gap-1.5 rounded-[13px] border border-emerald-200 bg-white text-[11px] font-black text-emerald-700 shadow-sm transition active:bg-emerald-50 disabled:opacity-40"
-                        >
-                            <AppIcon name="check" tone="slate" size="sm" className="h-4 w-4 bg-transparent text-emerald-600 ring-0" />
-                            Visitado
-                        </button>
                     </div>
 
                     {/* CLIENT INFO CARD */}
@@ -443,6 +421,38 @@ export default function ClientDetailPage() {
                                 </button>
                             </div>
 
+                            {/* STATUS ACTIONS */}
+                            <div className="mb-4 grid grid-cols-3 gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => { setQuickActionsOpen(false); setRejectOpen(true); }}
+                                    disabled={!client || savingStatus || status === "rejected"}
+                                    className="flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-[16px] border border-red-200 bg-red-50 text-[11px] font-black text-red-600 shadow-sm transition active:bg-red-100 disabled:opacity-40"
+                                >
+                                    <AppIcon name="close" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-red-500 ring-0" />
+                                    Rechazar
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => { setQuickActionsOpen(false); setConfirmStatus("pending"); }}
+                                    disabled={!client || savingStatus || status === "pending"}
+                                    className="flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-[16px] border border-amber-200 bg-amber-50 text-[11px] font-black text-amber-700 shadow-sm transition active:bg-amber-100 disabled:opacity-40"
+                                >
+                                    <AppIcon name="refresh" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-amber-600 ring-0" />
+                                    Revertir
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => { setQuickActionsOpen(false); setConfirmStatus("visited"); }}
+                                    disabled={!client || savingStatus || status === "visited"}
+                                    className="flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-[16px] border border-emerald-200 bg-emerald-50 text-[11px] font-black text-emerald-700 shadow-sm transition active:bg-emerald-100 disabled:opacity-40"
+                                >
+                                    <AppIcon name="check" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-emerald-600 ring-0" />
+                                    Visitado
+                                </button>
+                            </div>
+
+                            {/* LINK ACTIONS */}
                             <div className="grid grid-cols-4 gap-3">
                                 <Link
                                     href={`/admin/leads/${clientId}`}

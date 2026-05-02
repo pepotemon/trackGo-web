@@ -22,6 +22,7 @@ import type {
 import {
     AppIcon,
     Badge,
+    Button,
     Card,
     Field,
     IconButton,
@@ -1082,14 +1083,10 @@ function CreateUserModal({
                 </EditorBlock>
 
                 <div className="flex flex-col-reverse gap-2 border-t border-[#f0f1f2] pt-4 sm:flex-row sm:justify-end">
-                    <IconButton icon="close" label="Cancelar" onClick={onClose} />
-                    <IconButton
-                        icon="check"
-                        label={saving ? "Creando" : "Crear usuario"}
-                        variant="primary"
-                        onClick={create}
-                        disabled={saving}
-                    />
+                    <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+                    <Button variant="primary" onClick={create} disabled={saving}>
+                        {saving ? "Creando..." : "Crear usuario"}
+                    </Button>
                 </div>
             </div>
         </Modal>
@@ -1252,7 +1249,7 @@ function EditUserModal({
             subtitle="Modifica perfil, rol, auto-asignación y contabilidad."
         >
             <div className="space-y-4">
-                <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+                <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     <MiniTab icon="user" active={activeTab === "profile"} onClick={() => setActiveTab("profile")}>Perfil</MiniTab>
                     <MiniTab icon="map" active={activeTab === "coverage"} onClick={() => setActiveTab("coverage")}>Cobertura</MiniTab>
                     <MiniTab icon="shield" active={activeTab === "role"} onClick={() => setActiveTab("role")}>Rol</MiniTab>
@@ -1438,27 +1435,22 @@ function EditUserModal({
                     </EditorBlock>
                 ) : null}
 
-                <div className="flex flex-wrap gap-2 border-t border-[#f0f1f2] pt-4">
-                    <IconButton
-                        icon="power"
-                        label={active ? "Dejar inactivo al guardar" : "Dejar activo al guardar"}
-                        variant={active ? "danger" : "secondary"}
+                <div className="flex flex-col-reverse gap-2 border-t border-[#f0f1f2] pt-4 sm:flex-row sm:justify-end">
+                    <Button
+                        variant={active ? "danger" : "ghost"}
                         onClick={() => setActive((value) => !value)}
                         disabled={saving}
-                        className={
-                            active
-                                ? ""
-                                : "border-emerald-200 text-emerald-600 hover:bg-emerald-50"
-                        }
-                    />
-                    <div className="flex-1" />
-                    <IconButton
-                        icon="check"
-                        label={saving ? "Guardando" : "Guardar cambios"}
+                        className={!active ? "border-emerald-200 text-emerald-600 hover:bg-emerald-50" : undefined}
+                    >
+                        {active ? "Desactivar usuario" : "Activar usuario"}
+                    </Button>
+                    <Button
                         variant="primary"
                         onClick={save}
                         disabled={saving}
-                    />
+                    >
+                        {saving ? "Guardando..." : "Guardar cambios"}
+                    </Button>
                 </div>
             </div>
         </Modal>
@@ -1641,11 +1633,16 @@ function MiniTab({
             className={
                 active
                     ? "inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-br from-[#7c3aed] to-[#2563eb] px-3 py-2 text-[11px] font-semibold text-white shadow-sm"
-                    : "inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-[#e5e7eb] bg-white px-3 py-2 text-[11px] font-semibold text-[#71717a] hover:bg-[#f8f7ff] hover:text-[#4f46e5]"
+                    : "inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-[#e5e7eb] bg-white px-2 py-2 text-[11px] font-semibold text-[#71717a] hover:bg-[#f8f7ff] hover:text-[#4f46e5]"
             }
         >
             <Icon name={icon} />
-            {children}
+            <span className={[
+                "overflow-hidden transition-all duration-200",
+                active ? "max-w-[80px] opacity-100" : "max-w-0 opacity-0",
+            ].join(" ")}>
+                {children}
+            </span>
         </button>
     );
 }

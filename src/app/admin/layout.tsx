@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { TrackGoLogo } from "@/components/brand/TrackGoLogo";
 
@@ -38,7 +38,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     const router = useRouter();
     const pathname = usePathname();
     const { firebaseUser, isAdmin, loading, logout } = useAuth();
-    const [sidebarSearch, setSidebarSearch] = useState("");
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [now, setNow] = useState(() => new Date());
 
@@ -59,13 +58,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     async function handleLogout() {
         await logout();
         router.replace("/login");
-    }
-
-    function handleSidebarSearch(event: FormEvent<HTMLFormElement>) {
-        event.preventDefault();
-        const query = sidebarSearch.trim();
-        setMobileMenuOpen(false);
-        router.push(query ? `/admin/leads?search=${encodeURIComponent(query)}` : "/admin/leads");
     }
 
     useEffect(() => {
@@ -105,24 +97,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                     <TrackGoLogo size="lg" />
                 </div>
 
-                <form className="mb-4" onSubmit={handleSidebarSearch}>
-                    <label className="flex h-9 items-center gap-2 rounded-xl border border-[#d9d2ff] bg-white/80 px-2 text-[#5b4ea6] shadow-sm shadow-violet-200/60">
-                        <NavIcon name="search" />
-                        <input
-                            value={sidebarSearch}
-                            onChange={(event) => setSidebarSearch(event.target.value)}
-                            placeholder="Buscar lead..."
-                            className="min-w-0 flex-1 bg-transparent text-[12px] font-medium text-[#364260] outline-none placeholder:text-[#7c70ba]"
-                        />
-                        <button
-                            type="submit"
-                            className="rounded border border-[#e4e7ec] bg-white px-1.5 py-0.5 text-[10px] font-bold text-[#6d5fb4]"
-                        >
-                            Ir
-                        </button>
-                    </label>
-                </form>
-
                 <nav className="space-y-5">
                     <NavSection title="Navegación" items={NAV_MAIN} />
                     <NavSection title="Configurar" items={NAV_SETTINGS} />
@@ -152,9 +126,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                     open={mobileMenuOpen}
                     onClose={() => setMobileMenuOpen(false)}
                     onLogout={handleLogout}
-                    onSearch={handleSidebarSearch}
-                    search={sidebarSearch}
-                    setSearch={setSidebarSearch}
                     adminLabel={adminLabel}
                     liveDate={liveDate}
                     pathname={pathname}
@@ -268,9 +239,6 @@ function MobileDrawer({
     open,
     onClose,
     onLogout,
-    onSearch,
-    search,
-    setSearch,
     adminLabel,
     liveDate,
     pathname,
@@ -278,9 +246,6 @@ function MobileDrawer({
     open: boolean;
     onClose: () => void;
     onLogout: () => void;
-    onSearch: (event: FormEvent<HTMLFormElement>) => void;
-    search: string;
-    setSearch: (value: string) => void;
     adminLabel: string;
     liveDate: string;
     pathname: string;
@@ -308,18 +273,6 @@ function MobileDrawer({
                         ×
                     </button>
                 </div>
-
-                <form className="mb-5" onSubmit={onSearch}>
-                    <label className="flex h-11 items-center gap-2 rounded-2xl border border-[#e4e7ec] bg-white px-3 text-[#7c3aed] shadow-sm">
-                        <NavIcon name="search" />
-                        <input
-                            value={search}
-                            onChange={(event) => setSearch(event.target.value)}
-                            placeholder="Buscar lead, teléfono..."
-                            className="min-w-0 flex-1 bg-transparent text-[13px] font-semibold text-[#172033] outline-none placeholder:text-[#98a2b3]"
-                        />
-                    </label>
-                </form>
 
                 <nav className="space-y-5">
                     <MobileNavSection title="Navegación" items={NAV_MAIN} pathname={pathname} onClose={onClose} />

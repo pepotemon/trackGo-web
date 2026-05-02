@@ -233,7 +233,7 @@ export default function LeadChatPage() {
         <div className="mx-auto w-full max-w-[1220px]">
 
             {/* ====================== MOBILE LAYOUT (xl:hidden) ====================== */}
-            <div className="xl:hidden -mx-3 -mt-4 flex h-[calc(100vh-5.5rem)] flex-col bg-white">
+            <div className="xl:hidden -mx-3 -mt-4 flex h-[calc(100dvh-6rem)] flex-col bg-white">
 
                 {/* STICKY HEADER — pressable for quick actions */}
                 <div className="shrink-0 border-b border-[#E8E7FB] bg-white">
@@ -267,7 +267,11 @@ export default function LeadChatPage() {
                             <span className="shrink-0 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-600">
                                 Humano
                             </span>
-                        ) : null}
+                        ) : (
+                            <span className="shrink-0 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-black text-violet-600">
+                                Bot
+                            </span>
+                        )}
 
                         {prevId ? (
                             <Link

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 export function Modal({
     open,
@@ -15,6 +15,16 @@ export function Modal({
     children: ReactNode;
     onClose: () => void;
 }) {
+    useEffect(() => {
+        if (!open) return;
+        window.history.pushState({ modal: true }, "");
+        const handlePop = () => onClose();
+        window.addEventListener("popstate", handlePop);
+        return () => {
+            window.removeEventListener("popstate", handlePop);
+        };
+    }, [open, onClose]);
+
     if (!open) return null;
 
     const maxWidth = size === "sm" ? "max-w-sm" : size === "lg" ? "max-w-3xl" : "max-w-xl";
@@ -40,15 +50,6 @@ export function Modal({
                             </p>
                         ) : null}
                     </div>
-
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        aria-label="Cerrar modal"
-                        className="rounded-full border border-[#e8e7fb] bg-white px-2 py-1 text-[20px] leading-none text-[#66739a] shadow-sm hover:bg-[#f2f4f7] hover:text-[#101936]"
-                    >
-                        x
-                    </button>
                 </div>
 
                 <div className="overflow-y-auto bg-white p-4 text-[#101936] sm:p-5">

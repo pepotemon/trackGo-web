@@ -43,7 +43,7 @@ import {
 
 type AccountingTab = "overview" | "investment";
 type AccountingMetric = "real" | "gross" | "visited" | "rejected" | "assigned" | "cost";
-type ChartMode = "trend" | "bars" | "mix" | "share";
+type ChartMode = "trend" | "bars" | "share";
 type ChartPoint = {
     dayKey: string;
     label: string;
@@ -472,6 +472,13 @@ export default function AccountingPage() {
                     eventsCount={events.length}
                     loading={loading}
                     summary={summary}
+                    events={events}
+                    assignments={assignments}
+                    startDate={week.startDate}
+                    endDate={week.endDate}
+                    users={users}
+                    investment={investment}
+                    investmentGroups={investmentGroups}
                     weekStatus={weekStatus}
                     isClosed={isClosed}
                     activeTab={activeTab}
@@ -481,6 +488,9 @@ export default function AccountingPage() {
                     onCloseWeek={() => setCloseOpen(true)}
                     onReopenWeek={() => setReopenOpen(true)}
                     savingWeek={savingWeek}
+                    onInvestmentSaved={setInvestment}
+                    onGroupsSaved={setInvestmentGroups}
+                    onError={setErr}
                 />
             </div>
 
@@ -641,19 +651,20 @@ export default function AccountingPage() {
                     </div>
 
                     <div className="flex flex-col-reverse gap-2 border-t border-[#eef1f5] pt-4 sm:flex-row sm:justify-end">
-                        <IconButton
-                            icon="close"
-                            label="Cancelar"
+                        <Button
+                            variant="ghost"
                             onClick={() => setCloseOpen(false)}
                             disabled={savingWeek}
-                        />
-                        <IconButton
-                            icon="lock"
-                            label={savingWeek ? "Cerrando" : "Cerrar semana"}
+                        >
+                            Cancelar
+                        </Button>
+                        <Button
                             variant="primary"
                             onClick={handleCloseWeek}
                             disabled={savingWeek || !summary}
-                        />
+                        >
+                            {savingWeek ? "Cerrando..." : "Cerrar semana"}
+                        </Button>
                     </div>
                 </div>
             </Modal>
@@ -670,19 +681,20 @@ export default function AccountingPage() {
                     </div>
 
                     <div className="flex flex-col-reverse gap-2 border-t border-[#eef1f5] pt-4 sm:flex-row sm:justify-end">
-                        <IconButton
-                            icon="close"
-                            label="Cancelar"
+                        <Button
+                            variant="ghost"
                             onClick={() => setReopenOpen(false)}
                             disabled={savingWeek}
-                        />
-                        <IconButton
-                            icon="unlock"
-                            label={savingWeek ? "Reabriendo" : "Reabrir semana"}
+                        >
+                            Cancelar
+                        </Button>
+                        <Button
                             variant="danger"
                             onClick={handleReopenWeek}
                             disabled={savingWeek || !investment}
-                        />
+                        >
+                            {savingWeek ? "Reabriendo..." : "Reabrir semana"}
+                        </Button>
                     </div>
                 </div>
             </Modal>
@@ -697,6 +709,13 @@ function MobileAccountingPage({
     eventsCount,
     loading,
     summary,
+    events,
+    assignments,
+    startDate,
+    endDate,
+    users,
+    investment,
+    investmentGroups,
     weekStatus,
     isClosed,
     activeTab,
@@ -706,6 +725,9 @@ function MobileAccountingPage({
     onCloseWeek,
     onReopenWeek,
     savingWeek,
+    onInvestmentSaved,
+    onGroupsSaved,
+    onError,
 }: {
     week: ReturnType<typeof weekRangeKeysMonToSun>;
     weekOffset: number;
@@ -714,6 +736,13 @@ function MobileAccountingPage({
     eventsCount: number;
     loading: boolean;
     summary: AccountingSummary | null;
+    events: DailyEventDoc[];
+    assignments: AccountingAssignmentDoc[];
+    startDate: Date;
+    endDate: Date;
+    users: UserDoc[];
+    investment: WeeklyInvestmentDoc | null;
+    investmentGroups: InvestmentGroupDoc[];
     weekStatus: WeeklyInvestmentDoc["status"];
     isClosed: boolean;
     activeTab: AccountingTab;
@@ -723,11 +752,47 @@ function MobileAccountingPage({
     onCloseWeek: () => void;
     onReopenWeek: () => void;
     savingWeek: boolean;
+    onInvestmentSaved: (investment: WeeklyInvestmentDoc) => void;
+    onGroupsSaved: (groups: InvestmentGroupDoc[]) => void;
+    onError: (msg: string | null) => void;
 }) {
+    const [chartMetric, setChartMetric] = useState<AccountingMetric>("real");
+    const [chartMode, setChartMode] = useState<ChartMode>("trend");
+    const [rankingMetric, setRankingMetric] = useState<AccountingMetric>("real");
+    const [usersOpen, setUsersOpen] = useState(false);
+
     const real = summary?.real ?? 0;
     const gross = summary?.gross ?? 0;
     const investmentValue = summary?.investment ?? 0;
     const roi = summary?.roi ?? null;
+
+    const activeRows = useMemo(() => {
+        if (!summary) return [];
+        return summary.rows.filter((row) =>
+            row.assigned > 0 || row.visited > 0 || row.rejected > 0 || Math.abs(row.real) > 0
+        );
+    }, [summary]);
+
+    const rankedRows = useMemo(() => {
+        return [...activeRows].sort((a, b) =>
+            accountingMetricValue(b, rankingMetric) - accountingMetricValue(a, rankingMetric)
+        );
+    }, [activeRows, rankingMetric]);
+
+    const chartRows = useMemo(() => {
+        return [...activeRows]
+            .sort((a, b) => Math.abs(accountingMetricValue(b, chartMetric)) - Math.abs(accountingMetricValue(a, chartMetric)))
+            .slice(0, 8);
+    }, [activeRows, chartMetric]);
+
+    const maxChartValue = Math.max(1, ...chartRows.map((row) => Math.abs(accountingMetricValue(row, chartMetric))));
+
+    const chartSeries = useMemo(() => {
+        return buildDailyChartSeries(events, assignments, startDate, endDate, chartMetric);
+    }, [events, assignments, startDate, endDate, chartMetric]);
+
+    const chartMeta = ACCOUNTING_METRICS[chartMetric];
+    const rankingMeta = ACCOUNTING_METRICS[rankingMetric];
 
     return (
         <div className="-mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] max-w-[100vw] bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.10),transparent_36%),linear-gradient(180deg,#fbfaff_0%,#f6f3ff_52%,#f8fafc_100%)] pb-6 text-[#101936]">
@@ -832,20 +897,34 @@ function MobileAccountingPage({
                         <p className="text-[13px] font-semibold text-[#66739A]">Cargando contabilidad</p>
                     </div>
                 ) : activeTab === "investment" ? (
-                    <div className="rounded-[16px] border border-[#E8E7FB] bg-white p-4 shadow-sm">
-                        <div className="text-[14px] font-black text-[#101936]">
-                            Configuración de inversión
+                    <div className="rounded-[16px] border border-[#E8E7FB] bg-white shadow-[0_4px_18px_rgba(91,33,255,0.07)]">
+                        <div className="flex items-center justify-between border-b border-[#E8E7FB] px-3 py-3">
+                            <div>
+                                <div className="text-[13px] font-black text-[#101936]">Configuración de inversión</div>
+                                <div className="mt-0.5 text-[11px] font-semibold text-[#66739A]">{week.startKey} · {week.endKey}</div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab("overview")}
+                                className="rounded-[10px] border border-[#E8E7FB] bg-white px-3 py-1.5 text-[11px] font-bold text-[#66739A] transition active:bg-[#f3f0ff]"
+                            >
+                                ← Resumen
+                            </button>
                         </div>
-                        <p className="mt-1 text-[12px] font-semibold text-[#66739A]">
-                            Usa desktop para editar grupos con más comodidad. La lógica sigue activa aquí.
-                        </p>
-                        <button
-                            type="button"
-                            onClick={() => setActiveTab("overview")}
-                            className="mt-4 min-h-[46px] w-full rounded-[14px] bg-[#7C3AED] text-[13px] font-black text-white transition active:bg-violet-700"
-                        >
-                            Volver al resumen
-                        </button>
+                        <div className="p-3">
+                            <InvestmentContent
+                                weekStartKey={week.startKey}
+                                weekEndKey={week.endKey}
+                                users={users}
+                                investment={investment}
+                                investmentGroups={investmentGroups}
+                                useCatalogDefaults={weekOffset === 0}
+                                isClosed={isClosed}
+                                onSaved={onInvestmentSaved}
+                                onGroupsSaved={onGroupsSaved}
+                                onError={onError}
+                            />
+                        </div>
                     </div>
                 ) : (
                     <>
@@ -883,11 +962,47 @@ function MobileAccountingPage({
                                     {money(real)}
                                 </div>
                             </div>
-                            <div className="grid grid-cols-3 gap-2">
+                            <div className="mb-3 grid grid-cols-3 gap-2">
                                 <MobileTinyMetric label="Bruta" value={money(gross)} tone="green" />
                                 <MobileTinyMetric label="Inversión" value={money(investmentValue)} tone="amber" />
                                 <MobileTinyMetric label="Real" value={money(real)} tone={real >= 0 ? "green" : "red"} />
                             </div>
+
+                            {/* CHART CONTROLS */}
+                            <div className="mb-2 flex gap-2">
+                                <select
+                                    value={chartMetric}
+                                    onChange={(e) => setChartMetric(e.target.value as AccountingMetric)}
+                                    className="h-9 min-w-0 flex-1 rounded-xl border border-[#e8e7fb] bg-[#f8f7ff] px-2 text-[11px] font-bold text-[#344054] outline-none"
+                                >
+                                    <option value="real">Ganancia real</option>
+                                    <option value="gross">Ganancia bruta</option>
+                                    <option value="assigned">Asignados</option>
+                                    <option value="visited">Visitados</option>
+                                    <option value="rejected">Rechazados</option>
+                                    <option value="cost">Costo</option>
+                                </select>
+                                <select
+                                    value={chartMode}
+                                    onChange={(e) => setChartMode(e.target.value as ChartMode)}
+                                    className="h-9 min-w-0 flex-1 rounded-xl border border-[#e8e7fb] bg-[#f8f7ff] px-2 text-[11px] font-bold text-[#344054] outline-none"
+                                >
+                                    <option value="trend">Línea</option>
+                                    <option value="bars">Barras</option>
+                                    <option value="share">Participación</option>
+                                </select>
+                            </div>
+
+                            <div className="text-[10px] font-bold uppercase tracking-[0.06em] text-[#8a93ad] mb-1">
+                                {chartMeta.label}
+                            </div>
+                            <AccountingChart
+                                rows={chartRows}
+                                series={chartSeries}
+                                metric={chartMetric}
+                                mode={chartMode}
+                                maxValue={maxChartValue}
+                            />
                         </div>
 
                         {/* ACTIVITY STATS */}
@@ -897,22 +1012,84 @@ function MobileAccountingPage({
                             <MobileStatBox label="Rech." value={summary.rejected} icon="close" tone="red" />
                         </div>
 
-                        {/* USER LIST */}
-                        <div className="overflow-hidden rounded-[16px] border border-[#E8E7FB] bg-white shadow-[0_4px_18px_rgba(91,33,255,0.07)]">
-                            <div className="border-b border-[#E8E7FB] px-3 py-3">
-                                <div className="text-[13px] font-black text-[#101936]">Usuarios</div>
-                                <div className="mt-0.5 text-[11px] font-semibold text-[#66739A]">Resultado por usuario</div>
+                        {/* RANKING */}
+                        <div className="mb-3 overflow-hidden rounded-[16px] border border-[#E8E7FB] bg-white shadow-[0_4px_18px_rgba(91,33,255,0.07)]">
+                            <div className="flex items-center justify-between border-b border-[#E8E7FB] px-3 py-3">
+                                <div>
+                                    <div className="text-[13px] font-black text-[#101936]">Ranking</div>
+                                    <div className="mt-0.5 text-[11px] font-semibold text-[#66739A]">Por {rankingMeta.label.toLowerCase()}</div>
+                                </div>
+                                <select
+                                    value={rankingMetric}
+                                    onChange={(e) => setRankingMetric(e.target.value as AccountingMetric)}
+                                    className="h-8 rounded-xl border border-[#e8e7fb] bg-[#f8f7ff] px-2 text-[11px] font-bold text-[#344054] outline-none"
+                                >
+                                    <option value="real">Ganancia real</option>
+                                    <option value="visited">Visitados</option>
+                                    <option value="assigned">Asignados</option>
+                                    <option value="rejected">Rechazados</option>
+                                    <option value="gross">Bruta</option>
+                                    <option value="cost">Costo</option>
+                                </select>
                             </div>
                             <div className="divide-y divide-[#E8E7FB]">
-                                {summary.rows
-                                    .filter((row) =>
-                                        row.assigned > 0 || row.visited > 0 || row.rejected > 0 || Math.abs(row.real) > 0
-                                    )
-                                    .map((row) => (
-                                        <MobileAccountingUserRow key={row.userId} row={row} />
-                                    ))}
+                                {rankedRows.map((row, index) => (
+                                    <div key={row.userId} className="flex items-center gap-3 px-3 py-2.5">
+                                        <span className="w-5 shrink-0 text-center text-[11px] font-black text-[#98a2b3]">
+                                            {index + 1}
+                                        </span>
+                                        <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-[#172033]">
+                                            {row.name}
+                                        </span>
+                                        <span className={metricValueClass(rankingMetric, accountingMetricValue(row, rankingMetric))}>
+                                            {rankingMeta.format(accountingMetricValue(row, rankingMetric))}
+                                        </span>
+                                    </div>
+                                ))}
+                                {rankedRows.length === 0 && (
+                                    <div className="px-3 py-4 text-center text-[12px] font-semibold text-[#98a2b3]">
+                                        Sin datos esta semana
+                                    </div>
+                                )}
                             </div>
                         </div>
+
+                        {/* USER LIST (optional via modal) */}
+                        <button
+                            type="button"
+                            onClick={() => setUsersOpen(true)}
+                            className="mb-3 flex h-12 w-full items-center justify-between rounded-[16px] border border-[#E8E7FB] bg-white px-3 shadow-[0_4px_18px_rgba(91,33,255,0.07)] active:bg-[#f8f7ff]"
+                        >
+                            <div className="flex items-center gap-2">
+                                <span className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-violet-50 text-[#7C3AED]">
+                                    <MobileAccountingIcon name="users" />
+                                </span>
+                                <span className="text-[13px] font-black text-[#101936]">Detalle por usuario</span>
+                            </div>
+                            <span className="text-[11px] font-semibold text-[#7C3AED]">{activeRows.length} usuarios →</span>
+                        </button>
+
+                        {/* USERS MODAL */}
+                        {usersOpen && (
+                            <div className="fixed inset-0 z-50 flex items-end justify-center bg-[#101936]/25 backdrop-blur-md" onClick={() => setUsersOpen(false)}>
+                                <div className="flex max-h-[82vh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-[#e8e7fb] bg-white shadow-[0_28px_80px_rgba(16,25,54,0.24)]" onClick={(e) => e.stopPropagation()}>
+                                    <div className="flex shrink-0 items-center justify-between border-b border-[#eef1f5] bg-gradient-to-r from-white to-[#f8f7ff] px-4 py-4">
+                                        <div>
+                                            <h2 className="text-[16px] font-black text-[#101936]">Usuarios</h2>
+                                            <p className="mt-0.5 text-[12px] font-semibold text-[#66739a]">Resultado por usuario</p>
+                                        </div>
+                                        <button type="button" onClick={() => setUsersOpen(false)} className="rounded-full border border-[#e8e7fb] bg-white px-2 py-1 text-[20px] leading-none text-[#66739a]">×</button>
+                                    </div>
+                                    <div className="overflow-y-auto divide-y divide-[#E8E7FB]">
+                                        {summary.rows
+                                            .filter((row) => row.assigned > 0 || row.visited > 0 || row.rejected > 0 || Math.abs(row.real) > 0)
+                                            .map((row) => (
+                                                <MobileAccountingUserRow key={row.userId} row={row} />
+                                            ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </>
                 )}
             </div>
@@ -2299,7 +2476,6 @@ function DashboardContent({
                                 >
                                     <option value="trend">Linea semanal</option>
                                     <option value="bars">Barras</option>
-                                    <option value="mix">Comparativo</option>
                                     <option value="share">Participacion</option>
                                 </select>
                             </div>
@@ -2801,52 +2977,6 @@ function AccountingChart({
                             <span className={metricValueClass(metric, value)}>
                                 {meta.format(value)}
                             </span>
-                        </div>
-                    );
-                })}
-            </div>
-        );
-    }
-
-    if (mode === "mix") {
-        return (
-            <div className="mt-4 grid gap-3 md:grid-cols-2 sm:mt-6">
-                {rows.map((row, index) => {
-                    const value = accountingMetricValue(row, metric);
-                    const visitPct = row.assigned > 0 ? Math.round((row.visited / row.assigned) * 100) : 0;
-                    const rejectPct = row.assigned > 0 ? Math.round((row.rejected / row.assigned) * 100) : 0;
-
-                    return (
-                        <div
-                            key={row.userId}
-                            className="tg-chart-row rounded-2xl border border-[#eef1f5] bg-[#fcfcff] p-3"
-                            style={{ animationDelay: `${index * 0.06}s` }}
-                        >
-                            <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                    <div className="truncate text-[12px] font-bold text-[#172033]">{row.name}</div>
-                                    <div className="mt-0.5 text-[11px] font-semibold text-[#98a2b3]">
-                                        {row.assigned} asignados
-                                    </div>
-                                </div>
-                                <div className={metricValueClass(metric, value)}>
-                                    {meta.format(value)}
-                                </div>
-                            </div>
-                            <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-[#eef1f7]">
-                                <div
-                                    className="tg-chart-hbar bg-emerald-500"
-                                    style={{ width: `${visitPct}%`, animationDelay: `${0.18 + index * 0.06}s` }}
-                                />
-                                <div
-                                    className="tg-chart-hbar bg-red-400"
-                                    style={{ width: `${rejectPct}%`, animationDelay: `${0.28 + index * 0.06}s` }}
-                                />
-                            </div>
-                            <div className="mt-2 flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.04em] text-[#98a2b3]">
-                                <span>{row.visited} visitados</span>
-                                <span>{row.rejected} rechazados</span>
-                            </div>
                         </div>
                     );
                 })}

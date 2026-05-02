@@ -33,10 +33,10 @@ function defaultFilters(): LeadFilters {
     };
 }
 
-const DEFAULT_PAGE_SIZE = 80;
+const DEFAULT_PAGE_SIZE = 150;
 const FILTERED_PAGE_SIZE = 150;
 const MIN_FILTERED_RESULTS = 50;
-const MAX_AUTO_FETCH_PAGES = 4;
+const MAX_AUTO_FETCH_PAGES = 20;
 
 const CITY_FILTER_FIELDS = new Set<LeadQueueCityField>([
     "geoAdminCityNormalized",
@@ -284,13 +284,15 @@ export function useAdminLeadQueue() {
                 nextHasMore = page.hasMore;
                 pagesFetched += 1;
 
-                const visible = filterLeads(Array.from(map.values()), activeFilters).length;
-                const shouldKeepFilling =
-                    reset &&
-                    hasClientSideFilters(activeFilters) &&
-                    visible < MIN_FILTERED_RESULTS;
+                // loadMore: always stop after 1 page
+                if (!reset) break;
 
-                if (!shouldKeepFilling) break;
+                // reset + client-side filters: stop once we have enough visible results
+                if (hasClientSideFilters(activeFilters)) {
+                    const visible = filterLeads(Array.from(map.values()), activeFilters).length;
+                    if (visible >= MIN_FILTERED_RESULTS) break;
+                }
+                // reset + no client-side filters: keep loading until hasMore is false (or cap)
             }
 
             if (requestId === requestSeq.current) {
