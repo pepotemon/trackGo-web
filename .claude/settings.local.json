@@ -8,7 +8,9 @@
       "Bash(node --check \"C:/Users/helle/trackgo-web/functions/src/bot/intents.js\")",
       "Bash(xargs ls *)",
       "Bash(node *)",
-      "Bash(npx next *)"
+      "Bash(npx next *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
