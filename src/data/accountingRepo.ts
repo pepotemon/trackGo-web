@@ -8,7 +8,9 @@ import {
     orderBy,
     query,
     setDoc,
+    updateDoc,
     where,
+    writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type {
@@ -527,4 +529,55 @@ export async function updateWeeklySubscriptionPayment(input: {
         },
         { merge: true }
     );
+}
+
+// Returns how many visited events a user has in a week (for UI counter)
+export async function countWeekVisitedEvents(
+    userId: string,
+    weekStartKey: string,
+    weekEndKey: string
+): Promise<number> {
+    const snap = await getDocs(query(
+        collection(db, "dailyEvents"),
+        where("userId", "==", userId),
+        where("dayKey", ">=", weekStartKey),
+        where("dayKey", "<=", weekEndKey),
+        where("type", "==", "visited"),
+        limit(500)
+    ));
+    return snap.docs.length;
+}
+
+// Batch-updates rateApplied + amount for all visited events of a user in the current week
+export async function batchUpdateWeekEventRates(
+    userId: string,
+    weekStartKey: string,
+    weekEndKey: string,
+    newRate: number
+): Promise<number> {
+    const snap = await getDocs(query(
+        collection(db, "dailyEvents"),
+        where("userId", "==", userId),
+        where("dayKey", ">=", weekStartKey),
+        where("dayKey", "<=", weekEndKey),
+        where("type", "==", "visited"),
+        limit(500)
+    ));
+
+    if (snap.empty) return 0;
+
+    const batch = writeBatch(db);
+    for (const d of snap.docs) {
+        batch.update(d.ref, { rateApplied: newRate, amount: newRate });
+    }
+    await batch.commit();
+    return snap.docs.length;
+}
+
+// Updates the rate of a single visited event
+export async function updateDailyEventRate(eventId: string, newRate: number): Promise<void> {
+    await updateDoc(doc(db, "dailyEvents", eventId), {
+        rateApplied: newRate,
+        amount: newRate,
+    });
 }

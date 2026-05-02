@@ -11,6 +11,7 @@ import {
     listAccountingUsers,
     listDailyEventsByRange,
     reopenWeeklyInvestment,
+    updateDailyEventRate,
     updateWeeklySubscriptionPayment,
     upsertInvestmentGroup,
     upsertWeeklyInvestment,
@@ -101,6 +102,16 @@ function summaryNumber(summary: AccountingSummary, key: keyof AccountingSummary)
 function safeNumber(value: unknown, fallback = 0) {
     const n = Number(value);
     return Number.isFinite(n) ? n : fallback;
+}
+
+function effectiveRate(event: DailyEventDoc): number {
+    const amount = safeNumber(event.amount, NaN);
+    if (Number.isFinite(amount)) return amount;
+    const amountSnapshot = safeNumber(event.amountSnapshot, NaN);
+    if (Number.isFinite(amountSnapshot)) return amountSnapshot;
+    const rateApplied = safeNumber(event.rateApplied, NaN);
+    if (Number.isFinite(rateApplied)) return rateApplied;
+    return safeNumber(event.ratePerVisitSnapshot, 0);
 }
 
 function subscriptionAmount(user: UserDoc) {
@@ -423,6 +434,15 @@ export default function AccountingPage() {
         }
     }
 
+    function handlePatchEvents(patches: { id: string; rateApplied: number; amount: number }[]) {
+        setEvents((prev) =>
+            prev.map((event) => {
+                const patch = patches.find((p) => p.id === event.id);
+                return patch ? { ...event, rateApplied: patch.rateApplied, amount: patch.amount } : event;
+            })
+        );
+    }
+
     async function handleReopenWeek() {
         setErr(null);
         setSavingWeek(true);
@@ -582,6 +602,7 @@ export default function AccountingPage() {
                                 endDate={week.endDate}
                                 isClosed={isClosed}
                                 onToggleSubscriptionPayment={toggleSubscriptionPayment}
+                                onPatchEvents={handlePatchEvents}
                             />
                         ) : (
                             <InvestmentContent
@@ -2204,6 +2225,7 @@ function DashboardContent({
     endDate,
     isClosed,
     onToggleSubscriptionPayment,
+    onPatchEvents,
 }: {
     summary: AccountingSummary;
     events: DailyEventDoc[];
@@ -2212,10 +2234,12 @@ function DashboardContent({
     endDate: Date;
     isClosed: boolean;
     onToggleSubscriptionPayment: (row: AccountingSummary["rows"][number]) => void;
+    onPatchEvents: (patches: { id: string; rateApplied: number; amount: number }[]) => void;
 }) {
     const [rankingMetric, setRankingMetric] = useState<AccountingMetric>("real");
     const [chartMetric, setChartMetric] = useState<AccountingMetric>("real");
     const [chartMode, setChartMode] = useState<ChartMode>("trend");
+    const [editingUserId, setEditingUserId] = useState<string | null>(null);
     const activeRows = useMemo(() => {
         return summary.rows.filter((row) => {
             return row.assigned > 0
@@ -2448,7 +2472,12 @@ function DashboardContent({
                                                     {row.subscriptionPaid ? "Pagada" : "Marcar pago"}
                                                 </Button>
                                             ) : (
-                                                <span className="text-[11px] font-semibold text-[#98a2b3]">-</span>
+                                                <Button
+                                                    onClick={() => setEditingUserId(row.userId)}
+                                                    disabled={isClosed}
+                                                >
+                                                    Tarifas
+                                                </Button>
                                             )}
                                         </td>
                                     </tr>
@@ -2458,7 +2487,126 @@ function DashboardContent({
                     </div>
                 </div>
             </Card>
+
+            {editingUserId ? (
+                <UserEventsModal
+                    userId={editingUserId}
+                    userName={activeRows.find((r) => r.userId === editingUserId)?.name ?? editingUserId}
+                    events={events}
+                    onClose={() => setEditingUserId(null)}
+                    onSaved={(patches) => {
+                        onPatchEvents(patches);
+                        setEditingUserId(null);
+                    }}
+                />
+            ) : null}
         </div>
+    );
+}
+
+function UserEventsModal({
+    userId,
+    userName,
+    events,
+    onClose,
+    onSaved,
+}: {
+    userId: string;
+    userName: string;
+    events: DailyEventDoc[];
+    onClose: () => void;
+    onSaved: (patches: { id: string; rateApplied: number; amount: number }[]) => void;
+}) {
+    const userEvents = useMemo(
+        () => events.filter((e) => e.userId === userId && e.type === "visited"),
+        [events, userId]
+    );
+
+    const [rates, setRates] = useState<Record<string, string>>(() => {
+        const initial: Record<string, string> = {};
+        for (const event of userEvents) {
+            initial[event.id] = String(effectiveRate(event));
+        }
+        return initial;
+    });
+    const [saving, setSaving] = useState(false);
+    const [saveError, setSaveError] = useState<string | null>(null);
+
+    async function handleSave() {
+        setSaving(true);
+        setSaveError(null);
+
+        try {
+            const patches: { id: string; rateApplied: number; amount: number }[] = [];
+
+            for (const event of userEvents) {
+                const original = effectiveRate(event);
+                const newRate = safeNumber(rates[event.id], original);
+                if (Math.abs(newRate - original) > 0.001) {
+                    await updateDailyEventRate(event.id, newRate);
+                    patches.push({ id: event.id, rateApplied: newRate, amount: newRate });
+                }
+            }
+
+            onSaved(patches);
+        } catch (error) {
+            setSaveError(error instanceof Error ? error.message : "No se pudieron guardar las tarifas.");
+            setSaving(false);
+        }
+    }
+
+    return (
+        <Modal open onClose={onClose} title="Editar tarifas" subtitle={userName} size="sm">
+            <div className="space-y-3">
+                {userEvents.length === 0 ? (
+                    <p className="py-2 text-[13px] font-medium text-[#667085]">Sin visitas registradas esta semana.</p>
+                ) : (
+                    <div className="divide-y divide-[#eef1f5]">
+                        {userEvents.map((event) => (
+                            <div key={event.id} className="flex items-center gap-3 py-2.5">
+                                <div className="min-w-0 flex-1">
+                                    <div className="truncate text-[12px] font-semibold text-[#172033]">
+                                        {event.name || event.business || event.clientId}
+                                    </div>
+                                    <div className="text-[11px] font-medium text-[#98a2b3]">{event.dayKey}</div>
+                                </div>
+                                <div className="w-24 shrink-0">
+                                    <Input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={rates[event.id] ?? ""}
+                                        onChange={(e) =>
+                                            setRates((prev) => ({ ...prev, [event.id]: e.target.value }))
+                                        }
+                                        disabled={saving}
+                                    />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {saveError ? (
+                    <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-semibold text-red-600">
+                        {saveError}
+                    </div>
+                ) : null}
+
+                <div className="flex flex-col-reverse gap-2 border-t border-[#eef1f5] pt-3 sm:flex-row sm:justify-end">
+                    <IconButton icon="close" label="Cancelar" onClick={onClose} disabled={saving} />
+                    {userEvents.length > 0 ? (
+                        <IconButton
+                            icon="check"
+                            label={saving ? "Guardando..." : "Guardar"}
+                            variant="primary"
+                            onClick={handleSave}
+                            disabled={saving}
+                        />
+                    ) : null}
+                </div>
+            </div>
+        </Modal>
     );
 }
 

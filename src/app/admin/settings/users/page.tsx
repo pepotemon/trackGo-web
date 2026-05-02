@@ -10,6 +10,8 @@ import {
     updateUserProfile,
     updateUserRole,
 } from "@/data/usersRepo";
+import { batchUpdateWeekEventRates, countWeekVisitedEvents } from "@/data/accountingRepo";
+import { weekRangeKeysMonToSun } from "@/lib/date";
 import type {
     UserBillingMode,
     UserDoc,
@@ -1129,6 +1131,8 @@ function EditUserModal({
     const [coverageCountry, setCoverageCountry] = useState("Brasil");
     const [coverageState, setCoverageState] = useState("");
     const [coverageCity, setCoverageCity] = useState("");
+    const [applyToCurrentWeek, setApplyToCurrentWeek] = useState(false);
+    const [weekVisitCount, setWeekVisitCount] = useState<number | null>(null);
 
     useEffect(() => {
         if (!user) return;
@@ -1154,8 +1158,29 @@ function EditUserModal({
             setCoverageCountry("Brasil");
             setCoverageState("");
             setCoverageCity("");
+            setApplyToCurrentWeek(false);
+            setWeekVisitCount(null);
         });
     }, [user]);
+
+    // Fetch current-week visit count when billing tab is active and rate has changed
+    useEffect(() => {
+        if (!user || activeTab !== "billing" || billingMode !== "per_visit") return;
+        const newRate = safeNumber(ratePerVisit, 0);
+        const oldRate = safeNumber(user.ratePerVisit, 0);
+        if (newRate === oldRate) {
+            setApplyToCurrentWeek(false);
+            setWeekVisitCount(null);
+            return;
+        }
+        const { startKey, endKey } = weekRangeKeysMonToSun();
+        let cancelled = false;
+        countWeekVisitedEvents(user.id, startKey, endKey).then((count) => {
+            if (!cancelled) setWeekVisitCount(count);
+        });
+        return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [ratePerVisit, activeTab, billingMode]);
 
     if (!user) return null;
 
@@ -1200,6 +1225,15 @@ function EditUserModal({
             const normalizedCoverage = await updateUserGeoCoverage(user.id, coverageList);
             patch.geoCoverage = normalizedCoverage;
             patch.primaryGeoCoverageLabel = normalizedCoverage[0]?.displayLabel ?? null;
+
+            if (
+                applyToCurrentWeek &&
+                billingMode === "per_visit" &&
+                safeNumber(ratePerVisit, 0) !== safeNumber(user.ratePerVisit, 0)
+            ) {
+                const { startKey, endKey } = weekRangeKeysMonToSun();
+                await batchUpdateWeekEventRates(user.id, startKey, endKey, safeNumber(ratePerVisit, 0));
+            }
 
             await onPatch(user.id, patch);
             onClose();
@@ -1340,12 +1374,34 @@ function EditUserModal({
                         </div>
 
                         {billingMode === "per_visit" ? (
+                            <>
                             <Field label="Tarifa por visita">
                                 <Input
                                     value={ratePerVisit}
                                     onChange={(e) => setRatePerVisit(onlyNumberLike(e.target.value))}
                                 />
                             </Field>
+                            {weekVisitCount !== null && (
+                                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3">
+                                    <input
+                                        type="checkbox"
+                                        checked={applyToCurrentWeek}
+                                        onChange={(e) => setApplyToCurrentWeek(e.target.checked)}
+                                        className="mt-0.5 h-4 w-4 shrink-0 accent-amber-500"
+                                    />
+                                    <div>
+                                        <p className="text-[12px] font-bold text-amber-800">
+                                            Actualizar visitas de esta semana
+                                        </p>
+                                        <p className="mt-0.5 text-[11px] font-semibold text-amber-600">
+                                            {weekVisitCount === 0
+                                                ? "Sin visitas registradas esta semana."
+                                                : `Aplicará la nueva tarifa a ${weekVisitCount} visita${weekVisitCount !== 1 ? "s" : ""} ya registradas en la semana actual.`}
+                                        </p>
+                                    </div>
+                                </label>
+                            )}
+                            </>
                         ) : (
                             <div className="grid grid-cols-2 gap-3">
                                 <Field label="Cuota semanal">
