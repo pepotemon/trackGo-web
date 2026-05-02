@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useAutoAssignLogs, type AssignViewMode } from "@/features/leads/useAutoAssignLogs";
-import { listAllAutoAssignLogsForRange } from "@/data/autoAssignLogsRepo";
+import { listAllAutoAssignLogsForRange, listAssignedClientsByRange } from "@/data/autoAssignLogsRepo";
 import type {
     AutoAssignLogDoc,
     AutoAssignLogFilters,
@@ -278,6 +278,7 @@ export default function AutoAssignLogsPage() {
                 onClose={() => setUserBreakdownOpen(false)}
                 startKey={filters.startKey}
                 endKey={filters.endKey}
+                users={users}
             />
         </div>
     );
@@ -916,18 +917,20 @@ function AssignmentQuickActionsModal({
     );
 }
 
-type BreakdownRow = { userId: string; name: string; total: number; auto: number; manual: number };
+type BreakdownRow = { userId: string; name: string; count: number };
 
 function UserBreakdownModal({
     open,
     onClose,
     startKey,
     endKey,
+    users,
 }: {
     open: boolean;
     onClose: () => void;
     startKey: string;
     endKey: string;
+    users: { id: string; name?: string | null; email?: string | null }[];
 }) {
     const [loadingBreakdown, setLoadingBreakdown] = useState(false);
     const [breakdownRows, setBreakdownRows] = useState<BreakdownRow[]>([]);
@@ -940,35 +943,29 @@ function UserBreakdownModal({
         setBreakdownRows([]);
         setBreakdownTotal(0);
 
-        listAllAutoAssignLogsForRange(startKey, endKey)
-            .then((logs) => {
+        listAssignedClientsByRange(startKey, endKey)
+            .then((items) => {
                 if (cancelled) return;
-                const map = new Map<string, BreakdownRow>();
-                for (const log of logs) {
-                    const id = log.userId ?? "unknown";
-                    const isAuto = !isManual(log);
-                    const existing = map.get(id);
-                    if (existing) {
-                        existing.total++;
-                        if (isAuto) existing.auto++; else existing.manual++;
-                    } else {
-                        map.set(id, {
-                            userId: id,
-                            name: log.userName || "Usuario",
-                            total: 1,
-                            auto: isAuto ? 1 : 0,
-                            manual: isAuto ? 0 : 1,
-                        });
-                    }
+                const map = new Map<string, number>();
+                for (const item of items) {
+                    map.set(item.userId, (map.get(item.userId) ?? 0) + 1);
                 }
-                setBreakdownRows(Array.from(map.values()).sort((a, b) => b.total - a.total));
-                setBreakdownTotal(logs.length);
+                const rows: BreakdownRow[] = Array.from(map.entries()).map(([uid, count]) => {
+                    const user = users.find((u) => u.id === uid);
+                    return {
+                        userId: uid,
+                        name: user?.name || user?.email || uid,
+                        count,
+                    };
+                }).sort((a, b) => b.count - a.count);
+                setBreakdownRows(rows);
+                setBreakdownTotal(items.length);
                 setLoadingBreakdown(false);
             })
             .catch(() => { if (!cancelled) setLoadingBreakdown(false); });
 
         return () => { cancelled = true; };
-    }, [open, startKey, endKey]);
+    }, [open, startKey, endKey, users]);
 
     const rangeLabel = startKey === endKey ? startKey : `${startKey} → ${endKey}`;
 
@@ -1001,13 +998,9 @@ function UserBreakdownModal({
                                 <AppIcon name="user" tone="purple" size="sm" className="h-7 w-7 shrink-0" />
                                 <div className="min-w-0 flex-1">
                                     <div className="truncate text-[13px] font-bold text-[#171717]">{row.name}</div>
-                                    <div className="mt-0.5 flex gap-2.5">
-                                        <span className="text-[10px] font-semibold text-emerald-600">{row.auto} auto</span>
-                                        <span className="text-[10px] font-semibold text-amber-600">{row.manual} manual</span>
-                                    </div>
                                 </div>
                                 <div className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-[12px] font-black text-violet-700">
-                                    {row.total}
+                                    {row.count}
                                 </div>
                             </div>
                         ))

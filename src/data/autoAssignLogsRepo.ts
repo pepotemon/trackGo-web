@@ -129,6 +129,32 @@ export async function writeManualAssignLog({
     });
 }
 
+export async function listAssignedClientsByRange(
+    startKey: string,
+    endKey: string,
+): Promise<{ clientId: string; userId: string }[]> {
+    const isSingleDay = startKey === endKey;
+    const constraints: QueryConstraint[] = [];
+
+    if (isSingleDay) {
+        constraints.push(where("assignedDayKey", "==", startKey));
+    } else {
+        constraints.push(where("assignedDayKey", ">=", startKey));
+        constraints.push(where("assignedDayKey", "<=", endKey));
+        constraints.push(orderBy("assignedDayKey", "asc"));
+    }
+
+    constraints.push(limit(10000));
+
+    const snap = await getDocs(query(collection(db, "clients"), ...constraints));
+    return snap.docs
+        .map((doc) => ({
+            clientId: doc.id,
+            userId: String(doc.data().assignedTo ?? ""),
+        }))
+        .filter((item) => item.userId);
+}
+
 export async function listAllAutoAssignLogsForRange(
     startKey: string,
     endKey: string,
