@@ -499,7 +499,8 @@ service cloud.firestore {
     // -------------------------
     match /autoAssignLogs/{logId} {
       allow read: if isAdmin();
-      allow write: if false;
+      allow create: if isAdmin();
+      allow update, delete: if false;
     }
 
     // -------------------------

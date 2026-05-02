@@ -379,7 +379,7 @@ export function useAdminLeadQueue() {
             });
             await assignLeadToUser(lead.id, userId);
             const assignedUser = users.find((u) => u.id === userId);
-            void writeManualAssignLog({
+            writeManualAssignLog({
                 leadId: lead.id,
                 leadName: lead.name,
                 leadPhone: lead.phone,
@@ -389,6 +389,8 @@ export function useAdminLeadQueue() {
                 leadGeoAdminStateLabel: lead.location.adminStateLabel,
                 userId,
                 userName: assignedUser?.name || assignedUser?.email || null,
+            }).catch((err: unknown) => {
+                setErr(errorMessage(err, "La asignación fue exitosa pero no se pudo registrar el log."));
             });
             setLeads((prev) => prev.filter((item) => item.id !== lead.id));
         } catch (e: unknown) {

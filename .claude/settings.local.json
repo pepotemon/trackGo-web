@@ -11,7 +11,8 @@
       "Bash(npx next *)",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(firebase deploy *)"
     ]
   }
 }

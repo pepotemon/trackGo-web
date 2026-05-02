@@ -653,14 +653,14 @@ export default function ActivityPage() {
                     try {
                         await assignLeadToUser(mobileAssigningRow.clientId, userId);
                         const assignedUser = users.find((u) => u.id === userId);
-                        void writeManualAssignLog({
+                        writeManualAssignLog({
                             leadId: mobileAssigningRow.clientId,
                             leadName: mobileAssigningRow.name,
                             leadPhone: mobileAssigningRow.phone,
                             leadBusiness: mobileAssigningRow.business,
                             userId,
                             userName: assignedUser?.name || assignedUser?.email || null,
-                        });
+                        }).catch(() => {});
                         setMobileAssigningRow(null);
                     } finally {
                         setMobileAssigning(false);
