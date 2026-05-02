@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useAutoAssignLogs, type AssignViewMode } from "@/features/leads/useAutoAssignLogs";
+import { listAllAutoAssignLogsForRange } from "@/data/autoAssignLogsRepo";
 import type {
     AutoAssignLogDoc,
     AutoAssignLogFilters,
@@ -106,20 +107,6 @@ export default function AutoAssignLogsPage() {
     const manualCount = useMemo(() => filteredLogs.filter(isManual).length, [filteredLogs]);
     const autoCount = filteredLogs.length - manualCount;
 
-    const userBreakdown = useMemo(() => {
-        const map = new Map<string, { userId: string; name: string; count: number }>();
-        for (const log of filteredLogs) {
-            const id = log.userId ?? "unknown";
-            const existing = map.get(id);
-            if (existing) {
-                existing.count++;
-            } else {
-                map.set(id, { userId: id, name: log.userName || "Usuario", count: 1 });
-            }
-        }
-        return Array.from(map.values()).sort((a, b) => b.count - a.count);
-    }, [filteredLogs]);
-
     function patchFilters(patch: Partial<AutoAssignLogFilters>) {
         setFilters((prev) => ({ ...prev, ...patch }));
     }
@@ -188,9 +175,9 @@ export default function AutoAssignLogsPage() {
                     <button
                         type="button"
                         onClick={() => setUserBreakdownOpen(true)}
-                        className="block w-full text-left transition hover:opacity-90 hover:scale-[1.01]"
+                        className="block w-full cursor-pointer rounded-2xl text-left ring-2 ring-blue-100 transition hover:ring-blue-300 hover:scale-[1.01] hover:shadow-md active:scale-[0.99]"
                     >
-                        <KpiCard label="Usuarios" value={stats.users} caption="Ver asignaciones por usuario" icon="users" tone="blue" />
+                        <KpiCard label="Usuarios" value={stats.users} caption="Ver detalle →" icon="users" tone="blue" />
                     </button>
                     <KpiCard label="Ciudad / Hub" value={stats.city + stats.hubCity} caption="Matches precisos" icon="map" tone="purple" />
                     <KpiCard label="Estado / País" value={stats.state + stats.country} caption="Matches amplios" icon="filter" tone="orange" />
@@ -289,8 +276,6 @@ export default function AutoAssignLogsPage() {
             <UserBreakdownModal
                 open={userBreakdownOpen}
                 onClose={() => setUserBreakdownOpen(false)}
-                rows={userBreakdown}
-                total={filteredLogs.length}
                 startKey={filters.startKey}
                 endKey={filters.endKey}
             />
@@ -497,7 +482,7 @@ function AssignStatCard({
 
     if (onClick) {
         return (
-            <button type="button" onClick={onClick} className={`${base} transition active:opacity-80`}>
+            <button type="button" onClick={onClick} className={`${base} ring-[1.5px] ring-blue-200 transition active:opacity-70 active:scale-[0.97]`}>
                 {content}
             </button>
         );
@@ -931,51 +916,104 @@ function AssignmentQuickActionsModal({
     );
 }
 
+type BreakdownRow = { userId: string; name: string; total: number; auto: number; manual: number };
+
 function UserBreakdownModal({
     open,
     onClose,
-    rows,
-    total,
     startKey,
     endKey,
 }: {
     open: boolean;
     onClose: () => void;
-    rows: Array<{ userId: string; name: string; count: number }>;
-    total: number;
     startKey: string;
     endKey: string;
 }) {
+    const [loadingBreakdown, setLoadingBreakdown] = useState(false);
+    const [breakdownRows, setBreakdownRows] = useState<BreakdownRow[]>([]);
+    const [breakdownTotal, setBreakdownTotal] = useState(0);
+
+    useEffect(() => {
+        if (!open) return;
+        let cancelled = false;
+        setLoadingBreakdown(true);
+        setBreakdownRows([]);
+        setBreakdownTotal(0);
+
+        listAllAutoAssignLogsForRange(startKey, endKey)
+            .then((logs) => {
+                if (cancelled) return;
+                const map = new Map<string, BreakdownRow>();
+                for (const log of logs) {
+                    const id = log.userId ?? "unknown";
+                    const isAuto = !isManual(log);
+                    const existing = map.get(id);
+                    if (existing) {
+                        existing.total++;
+                        if (isAuto) existing.auto++; else existing.manual++;
+                    } else {
+                        map.set(id, {
+                            userId: id,
+                            name: log.userName || "Usuario",
+                            total: 1,
+                            auto: isAuto ? 1 : 0,
+                            manual: isAuto ? 0 : 1,
+                        });
+                    }
+                }
+                setBreakdownRows(Array.from(map.values()).sort((a, b) => b.total - a.total));
+                setBreakdownTotal(logs.length);
+                setLoadingBreakdown(false);
+            })
+            .catch(() => { if (!cancelled) setLoadingBreakdown(false); });
+
+        return () => { cancelled = true; };
+    }, [open, startKey, endKey]);
+
+    const rangeLabel = startKey === endKey ? startKey : `${startKey} → ${endKey}`;
+
     return (
         <Modal
             open={open}
             onClose={onClose}
             title="Asignaciones por usuario"
-            subtitle={`${total} total · ${startKey === endKey ? startKey : `${startKey} → ${endKey}`}`}
+            subtitle={loadingBreakdown ? rangeLabel : `${breakdownTotal} total · ${rangeLabel}`}
             size="sm"
         >
-            <div className="max-h-[58vh] space-y-2 overflow-y-auto pr-1">
-                {rows.length === 0 ? (
-                    <div className="rounded-xl border border-[#e5e7eb] bg-[#fafafa] p-5 text-center text-[13px] font-semibold text-[#71717a]">
-                        Sin datos en este rango.
-                    </div>
-                ) : (
-                    rows.map((row) => (
-                        <div
-                            key={row.userId}
-                            className="flex items-center gap-3 rounded-xl border border-[#e5e7eb] bg-white px-3 py-2.5"
-                        >
-                            <AppIcon name="user" tone="purple" size="sm" className="h-7 w-7 shrink-0" />
-                            <div className="min-w-0 flex-1">
-                                <div className="truncate text-[13px] font-bold text-[#171717]">{row.name}</div>
-                            </div>
-                            <div className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-[12px] font-black text-violet-700">
-                                {row.count}
-                            </div>
+            {loadingBreakdown ? (
+                <div className="flex items-center justify-center py-10">
+                    <svg className="tg-spin h-7 w-7 text-violet-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                        <path d="M21 12a9 9 0 1 1-3.1-6.8" />
+                    </svg>
+                </div>
+            ) : (
+                <div className="max-h-[58vh] space-y-2 overflow-y-auto pr-1">
+                    {breakdownRows.length === 0 ? (
+                        <div className="rounded-xl border border-[#e5e7eb] bg-[#fafafa] p-5 text-center text-[13px] font-semibold text-[#71717a]">
+                            Sin datos en este rango.
                         </div>
-                    ))
-                )}
-            </div>
+                    ) : (
+                        breakdownRows.map((row) => (
+                            <div
+                                key={row.userId}
+                                className="flex items-center gap-3 rounded-xl border border-[#e5e7eb] bg-white px-3 py-2.5"
+                            >
+                                <AppIcon name="user" tone="purple" size="sm" className="h-7 w-7 shrink-0" />
+                                <div className="min-w-0 flex-1">
+                                    <div className="truncate text-[13px] font-bold text-[#171717]">{row.name}</div>
+                                    <div className="mt-0.5 flex gap-2.5">
+                                        <span className="text-[10px] font-semibold text-emerald-600">{row.auto} auto</span>
+                                        <span className="text-[10px] font-semibold text-amber-600">{row.manual} manual</span>
+                                    </div>
+                                </div>
+                                <div className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-[12px] font-black text-violet-700">
+                                    {row.total}
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+            )}
         </Modal>
     );
 }

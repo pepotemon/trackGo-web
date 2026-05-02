@@ -129,6 +129,28 @@ export async function writeManualAssignLog({
     });
 }
 
+export async function listAllAutoAssignLogsForRange(
+    startKey: string,
+    endKey: string,
+): Promise<AutoAssignLogDoc[]> {
+    const constraints: QueryConstraint[] = [];
+    const isSingleDay = startKey === endKey;
+
+    if (isSingleDay) {
+        constraints.push(where("dayKey", "==", startKey));
+        constraints.push(orderBy("createdAt", "desc"));
+    } else {
+        constraints.push(where("dayKey", ">=", startKey));
+        constraints.push(where("dayKey", "<=", endKey));
+        constraints.push(orderBy("dayKey", "desc"));
+    }
+
+    constraints.push(limit(2000));
+
+    const snap = await getDocs(query(collection(db, "autoAssignLogs"), ...constraints));
+    return snap.docs.map((doc) => normalizeAutoAssignLogDoc(doc.id, doc.data()));
+}
+
 export async function getAutoAssignLogPage({
     cursor,
     pageSize,
