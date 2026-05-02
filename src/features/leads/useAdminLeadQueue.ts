@@ -320,10 +320,8 @@ export function useAdminLeadQueue() {
         queueMicrotask(() => {
             void loadLeadsPage(true, effectiveFilters());
         });
-        // Search and assignment filters are applied locally, but reset still uses a
-        // larger page and backfills a few pages so large queues do not feel empty.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [filters.status, filters.city, filters.assignment, deferredSearch]);
+    }, [filters.status, filters.city, filters.startKey, filters.endKey, filters.assignment, deferredSearch]);
 
     async function setLeadStatus(lead: MetaLeadDoc, status: LeadReviewStatus) {
         setSavingId(lead.id);

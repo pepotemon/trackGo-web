@@ -338,7 +338,7 @@ export default function ActivityPage() {
         return total;
     }, [filters]);
 
-    const MAX_INITIAL_PAGES = 5;
+    const MAX_SAFETY_PAGES = 30;
 
     const loadInitial = useCallback(async (nextFilters: ActivityFilters) => {
         setLoading(true);
@@ -359,7 +359,8 @@ export default function ActivityPage() {
             let nextHasMore = true;
             let pages = 0;
 
-            while (nextHasMore && pages < MAX_INITIAL_PAGES) {
+            // Load all pages for the date range so stats are accurate
+            while (nextHasMore && pages < MAX_SAFETY_PAGES) {
                 const page = await listActivityEventsPage({
                     startKey: nextFilters.startKey,
                     endKey: nextFilters.endKey,

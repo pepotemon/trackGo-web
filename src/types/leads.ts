@@ -157,7 +157,8 @@ export type AutoAssignLogDoc = {
 };
 
 export type AutoAssignLogFilters = {
-    dayKey: string;
+    startKey: string;
+    endKey: string;
     userId: string;
     matchType: LeadAutoAssignMatchType | "all";
     search: string;

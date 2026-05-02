@@ -132,20 +132,30 @@ export async function writeManualAssignLog({
 export async function getAutoAssignLogPage({
     cursor,
     pageSize,
-    dayKey,
+    startKey,
+    endKey,
     userId,
     matchType,
 }: {
     cursor?: AutoAssignLogPageCursor | null;
     pageSize?: number;
-    dayKey?: string;
+    startKey?: string;
+    endKey?: string;
     userId?: string;
     matchType?: LeadAutoAssignMatchType | "all";
 } = {}): Promise<AutoAssignLogPage> {
     const constraints: QueryConstraint[] = [];
 
-    if (dayKey) {
-        constraints.push(where("dayKey", "==", dayKey));
+    const isSingleDay = startKey && endKey && startKey === endKey;
+
+    if (isSingleDay) {
+        constraints.push(where("dayKey", "==", startKey));
+    } else {
+        if (startKey) constraints.push(where("dayKey", ">=", startKey));
+        if (endKey) constraints.push(where("dayKey", "<=", endKey));
+        if (startKey || endKey) {
+            constraints.push(orderBy("dayKey", "desc"));
+        }
     }
 
     if (userId) {
@@ -156,7 +166,9 @@ export async function getAutoAssignLogPage({
         constraints.push(where("matchType", "==", matchType));
     }
 
-    constraints.push(orderBy("createdAt", "desc"));
+    if (isSingleDay || (!startKey && !endKey)) {
+        constraints.push(orderBy("createdAt", "desc"));
+    }
 
     if (cursor) {
         constraints.push(startAfter(cursor as QueryDocumentSnapshot<DocumentData>));

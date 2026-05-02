@@ -5,6 +5,7 @@ import {
     dayKeyFromDate,
     getAutoAssignLogPage,
 } from "@/data/autoAssignLogsRepo";
+import { weekRangeKeysMonToSun } from "@/lib/date";
 import { listAdminUsers } from "@/data/usersRepo";
 import type {
     AutoAssignLogDoc,
@@ -13,17 +14,24 @@ import type {
 } from "@/types/leads";
 import type { UserDoc } from "@/types/users";
 
+export type AssignViewMode = "day" | "week";
+
 const DEFAULT_PAGE_SIZE = 80;
 const FILTERED_PAGE_SIZE = 150;
 const MIN_FILTERED_RESULTS = 50;
 const MAX_AUTO_FETCH_PAGES = 4;
 
-const EMPTY_FILTERS: AutoAssignLogFilters = {
-    dayKey: dayKeyFromDate(new Date()),
-    userId: "all",
-    matchType: "all",
-    search: "",
-};
+function weekFilters(): AutoAssignLogFilters {
+    const { startKey, endKey } = weekRangeKeysMonToSun();
+    return { startKey, endKey, userId: "all", matchType: "all", search: "" };
+}
+
+function dayFilters(): AutoAssignLogFilters {
+    const today = dayKeyFromDate(new Date());
+    return { startKey: today, endKey: today, userId: "all", matchType: "all", search: "" };
+}
+
+const EMPTY_FILTERS: AutoAssignLogFilters = weekFilters();
 
 function norm(value: unknown) {
     return String(value ?? "").toLowerCase().trim();
@@ -77,6 +85,7 @@ function hasClientSideFilters(filters: AutoAssignLogFilters) {
 export function useAutoAssignLogs() {
     const [logs, setLogs] = useState<AutoAssignLogDoc[]>([]);
     const [users, setUsers] = useState<UserDoc[]>([]);
+    const [viewMode, setViewMode] = useState<AssignViewMode>("week");
     const [filters, setFilters] = useState<AutoAssignLogFilters>(EMPTY_FILTERS);
     const deferredSearch = useDeferredValue(filters.search);
     const [loading, setLoading] = useState(true);
@@ -94,17 +103,17 @@ export function useAutoAssignLogs() {
     const filteredLogs = useMemo(() => filterLogs(logs, filters), [filters, logs]);
 
     const stats = useMemo(() => {
-        const userIds = new Set(logs.map((log) => log.userId).filter(Boolean));
+        const userIds = new Set(filteredLogs.map((log) => log.userId).filter(Boolean));
 
         return {
-            total: logs.length,
+            total: filteredLogs.length,
             users: userIds.size,
-            city: logs.filter((log) => log.matchType === "city").length,
-            hubCity: logs.filter((log) => log.matchType === "hub_city").length,
-            state: logs.filter((log) => log.matchType === "state").length,
-            country: logs.filter((log) => log.matchType === "country").length,
+            city: filteredLogs.filter((log) => log.matchType === "city").length,
+            hubCity: filteredLogs.filter((log) => log.matchType === "hub_city").length,
+            state: filteredLogs.filter((log) => log.matchType === "state").length,
+            country: filteredLogs.filter((log) => log.matchType === "country").length,
         };
-    }, [logs]);
+    }, [filteredLogs]);
 
     async function loadUsers() {
         try {
@@ -139,7 +148,8 @@ export function useAutoAssignLogs() {
             while (nextHasMore && pagesFetched < MAX_AUTO_FETCH_PAGES) {
                 const page = await getAutoAssignLogPage({
                     cursor: nextCursor,
-                    dayKey: activeFilters.dayKey,
+                    startKey: activeFilters.startKey,
+                    endKey: activeFilters.endKey,
                     userId: activeFilters.userId === "all" ? "" : activeFilters.userId,
                     matchType: activeFilters.matchType,
                     pageSize,
@@ -189,17 +199,24 @@ export function useAutoAssignLogs() {
         queueMicrotask(() => {
             void loadLogPage(true, effectiveFilters);
         });
-        // Search is deferred so Firestore does not receive a request per keystroke.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [filters.dayKey, filters.userId, filters.matchType, deferredSearch]);
+    }, [filters.startKey, filters.endKey, filters.userId, filters.matchType, deferredSearch]);
+
+    function changeViewMode(mode: AssignViewMode) {
+        setViewMode(mode);
+        const next = mode === "day" ? dayFilters() : weekFilters();
+        setFilters(next);
+    }
 
     function resetFilters() {
-        setFilters(EMPTY_FILTERS);
+        const next = viewMode === "day" ? dayFilters() : weekFilters();
+        setFilters({ ...next, userId: "all", matchType: "all", search: "" });
     }
 
     return {
         users,
         filters,
+        viewMode,
         filteredLogs,
         stats,
         loading,
@@ -208,6 +225,7 @@ export function useAutoAssignLogs() {
         err,
         setFilters,
         resetFilters,
+        changeViewMode,
         reloadLogs: () => loadLogPage(true, effectiveFilters),
         loadMore: () => loadLogPage(false, effectiveFilters),
     };

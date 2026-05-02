@@ -107,7 +107,7 @@ export async function getAdminDashboardSnapshot({
             where("dayKey", "==", todayKey),
         ]),
         getLeadQueuePage({ pageSize: 8, statuses: QUEUE_STATUSES }),
-        getAutoAssignLogPage({ pageSize: 8, dayKey: todayKey }),
+        getAutoAssignLogPage({ pageSize: 8, startKey: todayKey, endKey: todayKey }),
         listAdminUsers(),
         countCollection("clients", withUpdatedAtRange([
             where("source", "==", "whatsapp_meta"),

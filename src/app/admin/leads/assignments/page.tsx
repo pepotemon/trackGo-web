@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useAutoAssignLogs } from "@/features/leads/useAutoAssignLogs";
+import { useAutoAssignLogs, type AssignViewMode } from "@/features/leads/useAutoAssignLogs";
 import type {
     AutoAssignLogDoc,
     AutoAssignLogFilters,
@@ -74,12 +74,14 @@ function leadGeo(log: AutoAssignLogDoc) {
 
 export default function AutoAssignLogsPage() {
     const [filterModalOpen, setFilterModalOpen] = useState(false);
+    const [userBreakdownOpen, setUserBreakdownOpen] = useState(false);
     const [actionLog, setActionLog] = useState<AutoAssignLogDoc | null>(null);
     const [quickLog, setQuickLog] = useState<AutoAssignLogDoc | null>(null);
 
     const {
         users,
         filters,
+        viewMode,
         filteredLogs,
         stats,
         loading,
@@ -88,6 +90,7 @@ export default function AutoAssignLogsPage() {
         err,
         setFilters,
         resetFilters,
+        changeViewMode,
         reloadLogs,
         loadMore,
     } = useAutoAssignLogs();
@@ -103,6 +106,20 @@ export default function AutoAssignLogsPage() {
     const manualCount = useMemo(() => filteredLogs.filter(isManual).length, [filteredLogs]);
     const autoCount = filteredLogs.length - manualCount;
 
+    const userBreakdown = useMemo(() => {
+        const map = new Map<string, { userId: string; name: string; count: number }>();
+        for (const log of filteredLogs) {
+            const id = log.userId ?? "unknown";
+            const existing = map.get(id);
+            if (existing) {
+                existing.count++;
+            } else {
+                map.set(id, { userId: id, name: log.userName || "Usuario", count: 1 });
+            }
+        }
+        return Array.from(map.values()).sort((a, b) => b.count - a.count);
+    }, [filteredLogs]);
+
     function patchFilters(patch: Partial<AutoAssignLogFilters>) {
         setFilters((prev) => ({ ...prev, ...patch }));
     }
@@ -117,12 +134,14 @@ export default function AutoAssignLogsPage() {
                     autoCount={autoCount}
                     manualCount={manualCount}
                     filters={filters}
+                    viewMode={viewMode}
                     users={users}
                     loading={loading}
                     loadingMore={loadingMore}
                     hasMore={hasMore}
                     filterModalOpen={filterModalOpen}
                     activeFiltersCount={activeFiltersCount}
+                    onChangeViewMode={changeViewMode}
                     onOpenFilters={() => setFilterModalOpen(true)}
                     onCloseFilters={() => setFilterModalOpen(false)}
                     onPatchFilters={patchFilters}
@@ -130,6 +149,7 @@ export default function AutoAssignLogsPage() {
                     onReload={reloadLogs}
                     onLoadMore={loadMore}
                     onOpenSheet={setActionLog}
+                    onOpenUserBreakdown={() => setUserBreakdownOpen(true)}
                 />
             </div>
 
@@ -164,8 +184,14 @@ export default function AutoAssignLogsPage() {
                 ) : null}
 
                 <section className="mb-4 grid grid-cols-4 gap-4">
-                    <KpiCard label="Asignaciones" value={stats.total} caption="Logs cargados" icon="assign" tone="green" />
-                    <KpiCard label="Usuarios" value={stats.users} caption="Recibieron leads" icon="users" tone="blue" />
+                    <KpiCard label="Asignaciones" value={stats.total} caption="En el rango seleccionado" icon="assign" tone="green" />
+                    <button
+                        type="button"
+                        onClick={() => setUserBreakdownOpen(true)}
+                        className="block w-full text-left transition hover:opacity-90 hover:scale-[1.01]"
+                    >
+                        <KpiCard label="Usuarios" value={stats.users} caption="Ver asignaciones por usuario" icon="users" tone="blue" />
+                    </button>
                     <KpiCard label="Ciudad / Hub" value={stats.city + stats.hubCity} caption="Matches precisos" icon="map" tone="purple" />
                     <KpiCard label="Estado / País" value={stats.state + stats.country} caption="Matches amplios" icon="filter" tone="orange" />
                 </section>
@@ -176,7 +202,7 @@ export default function AutoAssignLogsPage() {
                             <div>
                                 <h2 className="text-[14px] font-semibold text-[#171717]">Registros</h2>
                                 <p className="mt-0.5 text-[12px] font-medium text-[#9ca3af]">
-                                    {filteredLogs.length} visibles de {stats.total}
+                                    {filteredLogs.length} asignaciones · {filters.startKey} → {filters.endKey}
                                 </p>
                             </div>
                             <Input
@@ -187,14 +213,22 @@ export default function AutoAssignLogsPage() {
                             />
                         </div>
 
-                        <div className="grid grid-cols-3 gap-2">
-                            <Field label="Día">
-                                <Input
-                                    type="date"
-                                    value={filters.dayKey}
-                                    onChange={(e) => patchFilters({ dayKey: e.target.value })}
-                                />
-                            </Field>
+                        <div className="grid grid-cols-[160px_1fr_1fr_1fr] gap-2">
+                            <div className="grid h-10 grid-cols-2 rounded-xl border border-[#e5e7eb] bg-[#f8fafc] p-1">
+                                {(["day", "week"] as AssignViewMode[]).map((mode) => (
+                                    <button
+                                        key={mode}
+                                        type="button"
+                                        onClick={() => changeViewMode(mode)}
+                                        className={[
+                                            "rounded-lg text-[12px] font-black transition",
+                                            viewMode === mode ? "bg-[#7c3aed] text-white shadow-sm" : "text-[#667085] hover:bg-white",
+                                        ].join(" ")}
+                                    >
+                                        {mode === "day" ? "Día" : "Semana"}
+                                    </button>
+                                ))}
+                            </div>
                             <Field label="Usuario">
                                 <select
                                     value={filters.userId}
@@ -250,6 +284,16 @@ export default function AutoAssignLogsPage() {
 
             {/* Desktop quick actions */}
             <AssignmentQuickActionsModal log={quickLog} onClose={() => setQuickLog(null)} />
+
+            {/* User breakdown modal */}
+            <UserBreakdownModal
+                open={userBreakdownOpen}
+                onClose={() => setUserBreakdownOpen(false)}
+                rows={userBreakdown}
+                total={filteredLogs.length}
+                startKey={filters.startKey}
+                endKey={filters.endKey}
+            />
         </div>
     );
 }
@@ -262,12 +306,14 @@ function MobileAssignmentsView({
     autoCount,
     manualCount,
     filters,
+    viewMode,
     users,
     loading,
     loadingMore,
     hasMore,
     filterModalOpen,
     activeFiltersCount,
+    onChangeViewMode,
     onOpenFilters,
     onCloseFilters,
     onPatchFilters,
@@ -275,18 +321,21 @@ function MobileAssignmentsView({
     onReload,
     onLoadMore,
     onOpenSheet,
+    onOpenUserBreakdown,
 }: {
     logs: AutoAssignLogDoc[];
     stats: ReturnType<typeof useAutoAssignLogs>["stats"];
     autoCount: number;
     manualCount: number;
     filters: AutoAssignLogFilters;
+    viewMode: AssignViewMode;
     users: { id: string; name?: string | null; email?: string | null }[];
     loading: boolean;
     loadingMore: boolean;
     hasMore: boolean;
     filterModalOpen: boolean;
     activeFiltersCount: number;
+    onChangeViewMode: (mode: AssignViewMode) => void;
     onOpenFilters: () => void;
     onCloseFilters: () => void;
     onPatchFilters: (patch: Partial<AutoAssignLogFilters>) => void;
@@ -294,6 +343,7 @@ function MobileAssignmentsView({
     onReload: () => void;
     onLoadMore: () => void;
     onOpenSheet: (log: AutoAssignLogDoc) => void;
+    onOpenUserBreakdown: () => void;
 }) {
     return (
         <>
@@ -304,24 +354,32 @@ function MobileAssignmentsView({
 
                 {/* TITLE ROW */}
                 <div className="mb-3 flex items-center gap-2">
+                    <Link
+                        href="/admin/activity"
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-white shadow-sm transition active:bg-[#f3f0ff]"
+                        aria-label="Regresar"
+                    >
+                        <svg viewBox="0 0 24 24" className="h-5 w-5 text-[#7C3AED]" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M19 12H5M5 12l7-7M5 12l7 7" />
+                        </svg>
+                    </Link>
+
                     <div className="min-w-0 flex-1">
                         <h1 className="truncate text-[20px] font-black tracking-[-0.03em] text-[#101936]">
                             Asignaciones
                         </h1>
                         <p className="mt-0.5 text-[11px] font-semibold text-[#66739A]">
-                            <span className="font-black text-[#7C3AED]">{logs.length}</span> resultados
-                            {" · "}<span className="font-black text-[#101936]">{stats.total}</span> total
+                            <span className="font-black text-[#7C3AED]">{logs.length}</span> en el rango
                         </p>
                     </div>
 
-                    <Link
-                        href="/admin/leads"
-                        className="flex h-10 w-10 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-white shadow-sm transition active:bg-[#f3f0ff]"
-                        title="Leads"
-                        aria-label="Leads"
+                    <button
+                        type="button"
+                        onClick={() => onChangeViewMode(viewMode === "day" ? "week" : "day")}
+                        className="flex h-10 items-center rounded-[13px] border border-[#E8E7FB] bg-white px-3 text-[12px] font-black text-[#101936] shadow-sm transition active:bg-[#f3f0ff]"
                     >
-                        <AppIcon name="lead" tone="purple" size="sm" className="h-[18px] w-[18px] bg-transparent text-[#7C3AED] ring-0" />
-                    </Link>
+                        {viewMode === "day" ? "Día" : "Semana"}
+                    </button>
 
                     <button
                         type="button"
@@ -337,7 +395,7 @@ function MobileAssignmentsView({
                 {/* STAT CARDS */}
                 <div className="mb-3 grid grid-cols-4 gap-2">
                     <AssignStatCard label="Total" value={stats.total} color="text-violet-500" />
-                    <AssignStatCard label="Usuarios" value={stats.users} color="text-blue-500" />
+                    <AssignStatCard label="Usuarios" value={stats.users} color="text-blue-500" onClick={onOpenUserBreakdown} />
                     <AssignStatCard label="Auto" value={autoCount} color="text-emerald-500" />
                     <AssignStatCard label="Manual" value={manualCount} color="text-amber-500" />
                 </div>
@@ -422,17 +480,30 @@ function AssignStatCard({
     label,
     value,
     color,
+    onClick,
 }: {
     label: string;
     value: number;
     color: string;
+    onClick?: () => void;
 }) {
-    return (
-        <div className="min-w-0 rounded-[14px] border border-[#E8E7FB] bg-white px-1.5 py-2.5 text-center shadow-[0_4px_16px_rgba(91,33,255,0.06)]">
+    const base = "min-w-0 rounded-[14px] border border-[#E8E7FB] bg-white px-1.5 py-2.5 text-center shadow-[0_4px_16px_rgba(91,33,255,0.06)]";
+    const content = (
+        <>
             <div className={`text-[13px] font-black ${color}`}>{value}</div>
             <div className="mt-0.5 truncate text-[9px] font-semibold text-[#66739A]">{label}</div>
-        </div>
+        </>
     );
+
+    if (onClick) {
+        return (
+            <button type="button" onClick={onClick} className={`${base} transition active:opacity-80`}>
+                {content}
+            </button>
+        );
+    }
+
+    return <div className={base}>{content}</div>;
 }
 
 function AssignmentMobileCard({
@@ -562,15 +633,26 @@ function AssignMobileFiltersModal({
                 </div>
 
                 <div className="grid gap-3">
-                    <label className="grid gap-1">
-                        <span className="text-[10px] font-black uppercase tracking-[0.06em] text-[#66739A]">Día</span>
-                        <input
-                            type="date"
-                            value={filters.dayKey}
-                            onChange={(e) => onPatchFilters({ dayKey: e.target.value })}
-                            className="h-10 rounded-[13px] border border-[#E8E7FB] bg-white px-3 text-[13px] font-semibold text-[#101936] outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-violet-100"
-                        />
-                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                        <label className="grid gap-1">
+                            <span className="text-[10px] font-black uppercase tracking-[0.06em] text-[#66739A]">Desde</span>
+                            <input
+                                type="date"
+                                value={filters.startKey}
+                                onChange={(e) => onPatchFilters({ startKey: e.target.value })}
+                                className="h-10 rounded-[13px] border border-[#E8E7FB] bg-white px-3 text-[13px] font-semibold text-[#101936] outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-violet-100"
+                            />
+                        </label>
+                        <label className="grid gap-1">
+                            <span className="text-[10px] font-black uppercase tracking-[0.06em] text-[#66739A]">Hasta</span>
+                            <input
+                                type="date"
+                                value={filters.endKey}
+                                onChange={(e) => onPatchFilters({ endKey: e.target.value })}
+                                className="h-10 rounded-[13px] border border-[#E8E7FB] bg-white px-3 text-[13px] font-semibold text-[#101936] outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-violet-100"
+                            />
+                        </label>
+                    </div>
 
                     <label className="grid gap-1">
                         <span className="text-[10px] font-black uppercase tracking-[0.06em] text-[#66739A]">Usuario</span>
@@ -845,6 +927,55 @@ function AssignmentQuickActionsModal({
                     Esta asignación no tiene lead asociado.
                 </div>
             )}
+        </Modal>
+    );
+}
+
+function UserBreakdownModal({
+    open,
+    onClose,
+    rows,
+    total,
+    startKey,
+    endKey,
+}: {
+    open: boolean;
+    onClose: () => void;
+    rows: Array<{ userId: string; name: string; count: number }>;
+    total: number;
+    startKey: string;
+    endKey: string;
+}) {
+    return (
+        <Modal
+            open={open}
+            onClose={onClose}
+            title="Asignaciones por usuario"
+            subtitle={`${total} total · ${startKey === endKey ? startKey : `${startKey} → ${endKey}`}`}
+            size="sm"
+        >
+            <div className="max-h-[58vh] space-y-2 overflow-y-auto pr-1">
+                {rows.length === 0 ? (
+                    <div className="rounded-xl border border-[#e5e7eb] bg-[#fafafa] p-5 text-center text-[13px] font-semibold text-[#71717a]">
+                        Sin datos en este rango.
+                    </div>
+                ) : (
+                    rows.map((row) => (
+                        <div
+                            key={row.userId}
+                            className="flex items-center gap-3 rounded-xl border border-[#e5e7eb] bg-white px-3 py-2.5"
+                        >
+                            <AppIcon name="user" tone="purple" size="sm" className="h-7 w-7 shrink-0" />
+                            <div className="min-w-0 flex-1">
+                                <div className="truncate text-[13px] font-bold text-[#171717]">{row.name}</div>
+                            </div>
+                            <div className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-[12px] font-black text-violet-700">
+                                {row.count}
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
         </Modal>
     );
 }

@@ -524,19 +524,6 @@ function MobileLeadQueue({
                         icon="map"
                         label="Cobertura"
                     />
-                    <Link
-                        href="/admin/leads/assignments"
-                        title="Asignaciones"
-                        aria-label="Asignaciones"
-                        className="flex h-10 w-10 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-white shadow-sm transition active:bg-[#f3f0ff]"
-                    >
-                        <AppIcon
-                            name="link"
-                            tone="purple"
-                            size="sm"
-                            className="h-[18px] w-[18px] bg-transparent text-[#7C3AED] ring-0"
-                        />
-                    </Link>
                 </div>
 
                 {/* STAT CARDS */}
