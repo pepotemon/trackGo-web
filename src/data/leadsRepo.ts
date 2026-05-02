@@ -2,6 +2,7 @@ import {
     collection,
     deleteDoc,
     doc,
+    getDoc,
     limit,
     getDocs,
     orderBy,
@@ -426,6 +427,27 @@ function dayKeyFromMs(ms: number) {
     const m = String(d.getMonth() + 1).padStart(2, "0");
     const day = String(d.getDate()).padStart(2, "0");
     return `${y}-${m}-${day}`;
+}
+
+export async function getClientCurrentStates(
+    clientIds: string[]
+): Promise<Map<string, { status: string; assignedTo: string | null }>> {
+    if (!clientIds.length) return new Map();
+
+    const snapshots = await Promise.all(
+        clientIds.map((id) => getDoc(doc(db, "clients", id)))
+    );
+
+    const map = new Map<string, { status: string; assignedTo: string | null }>();
+    for (const snap of snapshots) {
+        if (snap.exists()) {
+            map.set(snap.id, {
+                status: String(snap.data().status ?? ""),
+                assignedTo: String(snap.data().assignedTo ?? "") || null,
+            });
+        }
+    }
+    return map;
 }
 
 export async function assignLeadToUser(leadId: string, userId: string) {

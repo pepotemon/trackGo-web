@@ -9,7 +9,7 @@ import {
     type ActivityCursor,
 } from "@/data/activityRepo";
 import { listAccountingUsers } from "@/data/accountingRepo";
-import { assignLeadToUser } from "@/data/leadsRepo";
+import { assignLeadToUser, getClientCurrentStates } from "@/data/leadsRepo";
 import { writeManualAssignLog } from "@/data/autoAssignLogsRepo";
 import { AssignUserModal } from "@/features/leads/AssignUserModal";
 import { dayKeyFromDate, weekRangeKeysMonToSun } from "@/lib/date";
@@ -1327,6 +1327,22 @@ function ActivityQuickActionsModal({
     );
 }
 
+type ClientFollowUp = { status: string; assignedTo: string | null };
+
+function followUpBadge(state: ClientFollowUp | undefined, originalUserId: string) {
+    if (!state) return null;
+    if (state.status === "visited") {
+        return <Badge tone="green">Visitado ✓</Badge>;
+    }
+    if (state.assignedTo && state.assignedTo !== originalUserId) {
+        return <Badge tone="yellow">Reasignado</Badge>;
+    }
+    if (state.status === "pending") {
+        return <Badge tone="blue">Pendiente</Badge>;
+    }
+    return null;
+}
+
 function ActivityListModal({
     mode,
     rows,
@@ -1340,6 +1356,16 @@ function ActivityListModal({
 }) {
     const [q, setQ] = useState("");
     const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set());
+    const [clientStates, setClientStates] = useState<Map<string, ClientFollowUp>>(new Map());
+
+    useEffect(() => {
+        if (mode !== "rejected" || !rows.length) {
+            setClientStates(new Map());
+            return;
+        }
+        const ids = [...new Set(rows.map((r) => r.clientId).filter(Boolean))];
+        getClientCurrentStates(ids).then(setClientStates).catch(() => {});
+    }, [mode, rows]);
 
     function toggleUser(userId: string) {
         setExpandedUsers((prev) => {
@@ -1456,6 +1482,7 @@ function ActivityListModal({
                                                         ) : null}
                                                     </Link>
                                                     <Badge tone={typeTone[row.type]}>{typeLabel[row.type]}</Badge>
+                                                    {followUpBadge(clientStates.get(row.clientId), row.userId)}
                                                     {onOpenSheet ? (
                                                         <button
                                                             type="button"
