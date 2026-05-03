@@ -341,8 +341,20 @@ service cloud.firestore {
 
       allow read: if signedIn() && resource.data.assignedTo == request.auth.uid;
 
-      // Vendor can read potential (unassigned pending_review) clients
+      // Vendor reads unassigned pending_review clients (Incompletos tab)
       allow read: if isUser() && resource.data.verificationStatus == "pending_review";
+
+      // Vendor reads not_suitable clients in their coverage (No Aptos tab)
+      allow read: if isUser() && resource.data.verificationStatus == "not_suitable";
+
+      // Vendor marks unassigned pending_review client as not_suitable
+      allow update: if isUser()
+        && resource.data.verificationStatus == "pending_review"
+        && (resource.data.assignedTo == null || resource.data.assignedTo == "")
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          "verificationStatus", "leadQuality", "verificationStatusChangedAt", "updatedAt"
+        ])
+        && request.resource.data.verificationStatus == "not_suitable";
 
       // Vendor can self-assign an unassigned pending_review client (Tomar)
       allow update: if isUser()

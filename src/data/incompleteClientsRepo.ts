@@ -1,8 +1,10 @@
 import {
     collection,
+    doc,
     limit,
     onSnapshot,
     query,
+    updateDoc,
     where,
     type Unsubscribe,
 } from "firebase/firestore";
@@ -34,20 +36,21 @@ export function dddCity(ddd: string): string {
     return BRAZIL_DDDS[ddd] ?? `DDD ${ddd}`;
 }
 
-/** Extracts the Brazilian DDD (area code) from a phone number string. */
 export function extractDDD(phone: string): string | null {
     const digits = phone.replace(/\D/g, "");
-    // Full international format: 55DDXXXXXXXX (12-13 digits)
     if (digits.startsWith("55") && digits.length >= 12) return digits.slice(2, 4);
-    // Without country code: DDXXXXXXXX (10-11 digits)
     if (digits.length >= 10 && digits.length <= 11) return digits.slice(0, 2);
     return null;
 }
 
+function matchesCoverage(lead: MetaLeadDoc, phoneCodes: string[]): boolean {
+    const ddd = extractDDD(lead.phone);
+    return ddd !== null && phoneCodes.includes(ddd);
+}
+
 /**
- * Real-time subscription to incomplete/potential clients in the vendor's coverage.
- * Returns clients with verificationStatus "pending_review" whose phone DDD
- * matches one of the vendor's configured phoneCodes.
+ * Incomplete clients: pending_review, not assigned to anyone, business field filled.
+ * These are clients who sent their business type but didn't complete the flow.
  */
 export function subscribeIncompleteClients(
     phoneCodes: string[],
@@ -69,10 +72,11 @@ export function subscribeIncompleteClients(
         (snap) => {
             const filtered = snap.docs
                 .map((d) => normalizeLeadDoc(d.id, d.data() as Record<string, unknown>))
-                .filter((lead) => {
-                    const ddd = extractDDD(lead.phone);
-                    return ddd !== null && phoneCodes.includes(ddd);
-                })
+                .filter((lead) =>
+                    matchesCoverage(lead, phoneCodes) &&
+                    !!lead.business &&           // must have business field
+                    !lead.assignedTo             // must not be assigned to anyone
+                )
                 .sort((a, b) => (b.lastInboundMessageAt ?? 0) - (a.lastInboundMessageAt ?? 0));
             callback(filtered);
         },
@@ -81,4 +85,49 @@ export function subscribeIncompleteClients(
             callback([]);
         }
     );
+}
+
+/**
+ * Not-suitable clients in vendor's coverage area.
+ * These were marked as not_suitable by this vendor or admin.
+ */
+export function subscribeNotSuitableClients(
+    phoneCodes: string[],
+    callback: (leads: MetaLeadDoc[]) => void
+): Unsubscribe {
+    if (!phoneCodes.length) {
+        callback([]);
+        return () => {};
+    }
+
+    const q = query(
+        collection(db, "clients"),
+        where("verificationStatus", "==", "not_suitable"),
+        limit(300)
+    );
+
+    return onSnapshot(
+        q,
+        (snap) => {
+            const filtered = snap.docs
+                .map((d) => normalizeLeadDoc(d.id, d.data() as Record<string, unknown>))
+                .filter((lead) => matchesCoverage(lead, phoneCodes))
+                .sort((a, b) => (b.verificationStatusChangedAt ?? b.lastInboundMessageAt ?? 0) - (a.verificationStatusChangedAt ?? a.lastInboundMessageAt ?? 0));
+            callback(filtered);
+        },
+        (err) => {
+            console.error("[subscribeNotSuitableClients]", err.message);
+            callback([]);
+        }
+    );
+}
+
+/** Mark an incomplete (pending_review, unassigned) client as not suitable. */
+export async function markClientNotSuitable(clientId: string): Promise<void> {
+    await updateDoc(doc(db, "clients", clientId), {
+        verificationStatus: "not_suitable",
+        leadQuality: "not_suitable",
+        verificationStatusChangedAt: Date.now(),
+        updatedAt: Date.now(),
+    });
 }

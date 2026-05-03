@@ -15,7 +15,7 @@ import {
 } from "@/types/userLeads";
 
 type HistoryFilter = "all" | "visited" | "rejected";
-type RangePreset = "week" | "7d" | "month" | "custom";
+type RangePreset = "all" | "week" | "7d" | "month" | "custom";
 
 const REJECTION_REASONS = Object.entries(REJECTED_REASON_LABELS) as [RejectedReason, string][];
 
@@ -86,7 +86,7 @@ export default function UserHistoryPage() {
     const [search, setSearch] = useState("");
     const [searchOpen, setSearchOpen] = useState(false);
 
-    const [rangePreset, setRangePreset] = useState<RangePreset>("week");
+    const [rangePreset, setRangePreset] = useState<RangePreset>("all");
     const [customStart, setCustomStart] = useState(thisWeekRange().startKey);
     const [customEnd, setCustomEnd] = useState(today);
     const [showCustom, setShowCustom] = useState(false);
@@ -112,28 +112,27 @@ export default function UserHistoryPage() {
         if (rangePreset === "week") return thisWeekRange();
         if (rangePreset === "7d") return last7DaysRange();
         if (rangePreset === "month") return thisMonthRange();
-        return { startKey: customStart, endKey: customEnd };
+        if (rangePreset === "custom") return { startKey: customStart, endKey: customEnd };
+        return { startKey: "", endKey: "" }; // "all" — no filter
     }, [rangePreset, customStart, customEnd]);
 
     // All visited/rejected leads, sorted by statusAt desc
     const historyLeads = useMemo(() => {
         return leads
             .filter((l) => l.status === "visited" || l.status === "rejected")
-            .sort((a, b) => {
-                const at = (x: MetaLeadDoc) => ((x as any).statusAt as number | null) ?? x.assignedAt ?? 0;
-                return at(b) - at(a);
-            });
+            .sort((a, b) => (b.statusAt ?? b.assignedAt ?? 0) - (a.statusAt ?? a.assignedAt ?? 0));
     }, [leads]);
 
     // Leads within the selected range
     const rangeLeads = useMemo(() => {
+        if (rangePreset === "all") return historyLeads;
         return historyLeads.filter((l) => {
-            const statusAt = (l as any).statusAt as number | null;
-            if (!statusAt) return false;
-            const key = new Date(statusAt).toISOString().slice(0, 10);
+            const ts = l.statusAt ?? l.assignedAt;
+            if (!ts) return true;
+            const key = new Date(ts).toISOString().slice(0, 10);
             return key >= startKey && key <= endKey;
         });
-    }, [historyLeads, startKey, endKey]);
+    }, [historyLeads, rangePreset, startKey, endKey]);
 
     const stats = useMemo(() => ({
         visited: rangeLeads.filter((l) => l.status === "visited").length,
@@ -166,8 +165,7 @@ export default function UserHistoryPage() {
         const groups: { label: string; items: MetaLeadDoc[] }[] = [];
         const seen = new Map<string, MetaLeadDoc[]>();
         for (const lead of filtered) {
-            const statusAt = (lead as any).statusAt as number | null;
-            const label = formatDateLabel(statusAt ?? lead.assignedAt);
+            const label = formatDateLabel(lead.statusAt ?? lead.assignedAt);
             if (!seen.has(label)) { seen.set(label, []); groups.push({ label, items: seen.get(label)! }); }
             seen.get(label)!.push(lead);
         }
@@ -175,9 +173,8 @@ export default function UserHistoryPage() {
     }, [filtered]);
 
     function canUndo(lead: MetaLeadDoc) {
-        const statusAt = (lead as any).statusAt as number | null;
-        if (!statusAt) return true;
-        return new Date(statusAt).toISOString().slice(0, 10) === today;
+        if (!lead.statusAt) return true;
+        return new Date(lead.statusAt).toISOString().slice(0, 10) === today;
     }
 
     function selectPreset(p: RangePreset) {
@@ -229,6 +226,7 @@ export default function UserHistoryPage() {
     }
 
     const PRESETS: { key: RangePreset; label: string }[] = [
+        { key: "all", label: "Todo" },
         { key: "week", label: "Esta semana" },
         { key: "7d", label: "7 días" },
         { key: "month", label: "Este mes" },
@@ -249,7 +247,7 @@ export default function UserHistoryPage() {
                             {rangePreset === "custom"
                                 ? formatRangeLabel(startKey, endKey)
                                 : PRESETS.find((p) => p.key === rangePreset)?.label}
-                            {" · "}{counts.all} prospectos
+                            {" · "}{counts.all} {counts.all === 1 ? "prospecto" : "prospectos"}
                         </p>
                     </div>
                     <button
@@ -542,7 +540,6 @@ function HistoryCard({
     onMaps: () => void;
 }) {
     const isVisited = lead.status === "visited";
-    const statusAt = (lead as any).statusAt as number | null;
 
     return (
         <div className={[
@@ -559,8 +556,8 @@ function HistoryCard({
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-1">
                         <StatusBadge status={lead.status} />
-                        {statusAt ? (
-                            <span className="text-[10px] font-semibold text-[#98A2B3]">{formatTime(statusAt)}</span>
+                        {lead.statusAt ? (
+                            <span className="text-[10px] font-semibold text-[#98A2B3]">{formatTime(lead.statusAt)}</span>
                         ) : null}
                     </div>
                 </div>
@@ -576,10 +573,10 @@ function HistoryCard({
                             <PinIcon /><span className="truncate">{lead.location.address}</span>
                         </div>
                     ) : null}
-                    {lead.status === "rejected" && (lead as any).rejectedReason ? (
+                    {lead.status === "rejected" && lead.rejectedReason ? (
                         <div className="flex items-center gap-1.5">
                             <span className="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-600">
-                                {REJECTED_REASON_LABELS[(lead as any).rejectedReason as RejectedReason] ?? (lead as any).rejectedReason}
+                                {REJECTED_REASON_LABELS[lead.rejectedReason as RejectedReason] ?? lead.rejectedReason}
                             </span>
                         </div>
                     ) : null}

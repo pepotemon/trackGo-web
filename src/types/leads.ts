@@ -37,6 +37,10 @@ export type MetaLeadDoc = {
     phone: string;
     waId?: string | null;
     status?: "pending" | "visited" | "rejected";
+    statusAt?: number | null;
+    statusBy?: string | null;
+    rejectedReason?: string | null;
+    rejectedReasonText?: string | null;
     source?: "manual" | "whatsapp_meta";
     parseStatus: LeadParseStatus;
     verificationStatus: LeadReviewStatus;
