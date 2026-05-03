@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { dddCity, extractDDD, subscribeIncompleteClients } from "@/data/incompleteClientsRepo";
-import { markLeadRejected, resetLeadPending } from "@/data/userLeadsRepo";
 import { assignLeadToUser } from "@/data/leadsRepo";
 import type { MetaLeadDoc } from "@/types/leads";
 import { REJECTED_REASON_LABELS, type RejectedReason } from "@/types/userLeads";
@@ -153,14 +152,10 @@ export default function UserPotencialPage() {
         if (r !== "otro") setRejectStep(2);
     }
 
-    async function confirmReject() {
-        if (!actionLead || !rejectReason || !userId) return;
-        setSaving(true);
-        try {
-            await markLeadRejected(actionLead, userId, rejectReason, rejectText);
-            doArchive(actionLead);
-            closeAction();
-        } catch { setSaving(false); }
+    function confirmReject() {
+        if (!actionLead || !rejectReason) return;
+        doArchive(actionLead);
+        closeAction();
     }
 
     async function confirmAccept() {
@@ -395,8 +390,8 @@ export default function UserPotencialPage() {
                             </div>
                             <div className="flex gap-2">
                                 <button type="button" onClick={() => setRejectStep(1)} className="flex-1 rounded-[14px] border border-[#E8E7FB] py-3 text-[13px] font-black text-[#66739A]">Atrás</button>
-                                <button type="button" onClick={confirmReject} disabled={saving} className="flex-1 rounded-[14px] bg-red-600 py-3 text-[13px] font-black text-white disabled:opacity-60">
-                                    {saving ? "Guardando..." : "Confirmar rechazo"}
+                                <button type="button" onClick={confirmReject} className="flex-1 rounded-[14px] bg-red-600 py-3 text-[13px] font-black text-white">
+                                    Confirmar rechazo
                                 </button>
                             </div>
                         </>

@@ -22,6 +22,13 @@ service cloud.firestore {
         && myUserDoc().data.active == true;
     }
 
+    function isUser() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && myUserDoc().data.role == "user"
+        && myUserDoc().data.active == true;
+    }
+
     function clientDoc(clientId) {
       return get(/databases/$(database)/documents/clients/$(clientId));
     }
@@ -333,6 +340,24 @@ service cloud.firestore {
       allow read, write: if isAdmin();
 
       allow read: if signedIn() && resource.data.assignedTo == request.auth.uid;
+
+      // Vendor can read potential (unassigned pending_review) clients
+      allow read: if isUser() && resource.data.verificationStatus == "pending_review";
+
+      // Vendor can self-assign an unassigned pending_review client (Tomar)
+      allow update: if isUser()
+        && resource.data.verificationStatus == "pending_review"
+        && (resource.data.assignedTo == null || resource.data.assignedTo == "")
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          "assignedTo", "assignedAt", "assignedDayKey",
+          "status", "statusBy", "statusAt",
+          "rejectedReason", "rejectedReasonText", "note",
+          "leadHistoryArchivedAt", "leadHistoryBucket", "updatedAt"
+        ])
+        && request.resource.data.assignedTo == request.auth.uid
+        && request.resource.data.status == "pending"
+        && request.resource.data.assignedAt is int
+        && request.resource.data.updatedAt is int;
 
       allow update: if signedIn()
         && resource.data.assignedTo == request.auth.uid

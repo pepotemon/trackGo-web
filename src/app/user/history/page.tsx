@@ -15,21 +15,32 @@ import {
 } from "@/types/userLeads";
 
 type HistoryFilter = "all" | "visited" | "rejected";
+type RangePreset = "week" | "7d" | "month" | "custom";
 
 const REJECTION_REASONS = Object.entries(REJECTED_REASON_LABELS) as [RejectedReason, string][];
 
 function todayKey() { return new Date().toISOString().slice(0, 10); }
 
-function weekRange(): { startKey: string; endKey: string } {
+function thisWeekRange(): { startKey: string; endKey: string } {
     const now = new Date();
     const day = now.getDay();
     const diff = day === 0 ? -6 : 1 - day;
     const mon = new Date(now); mon.setDate(now.getDate() + diff); mon.setHours(0, 0, 0, 0);
     const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
-    return {
-        startKey: mon.toISOString().slice(0, 10),
-        endKey: sun.toISOString().slice(0, 10),
-    };
+    return { startKey: mon.toISOString().slice(0, 10), endKey: sun.toISOString().slice(0, 10) };
+}
+
+function last7DaysRange(): { startKey: string; endKey: string } {
+    const end = new Date(); end.setHours(23, 59, 59, 999);
+    const start = new Date(); start.setDate(start.getDate() - 6); start.setHours(0, 0, 0, 0);
+    return { startKey: start.toISOString().slice(0, 10), endKey: end.toISOString().slice(0, 10) };
+}
+
+function thisMonthRange(): { startKey: string; endKey: string } {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return { startKey: start.toISOString().slice(0, 10), endKey: end.toISOString().slice(0, 10) };
 }
 
 function displayName(lead: MetaLeadDoc) {
@@ -40,13 +51,12 @@ function norm(s: unknown) {
     return String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
 
-function formatDate(ts: number | null | undefined): string {
+function formatDateLabel(ts: number | null | undefined): string {
     if (!ts) return "";
     const d = new Date(ts);
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
     const date = new Date(d); date.setHours(0, 0, 0, 0);
-
     if (date.getTime() === today.getTime()) return "Hoy";
     if (date.getTime() === yesterday.getTime()) return "Ayer";
     return new Intl.DateTimeFormat("es", { day: "2-digit", month: "long", year: "numeric" }).format(d);
@@ -57,15 +67,29 @@ function formatTime(ts: number | null | undefined): string {
     return new Intl.DateTimeFormat("es", { hour: "2-digit", minute: "2-digit" }).format(new Date(ts));
 }
 
+function formatRangeLabel(startKey: string, endKey: string): string {
+    const fmt = (k: string) => {
+        const [y, m, d] = k.split("-");
+        return new Intl.DateTimeFormat("es", { day: "2-digit", month: "short" }).format(new Date(+y, +m - 1, +d));
+    };
+    return `${fmt(startKey)} – ${fmt(endKey)}`;
+}
+
 export default function UserHistoryPage() {
     const { firebaseUser } = useAuth();
     const userId = firebaseUser?.uid ?? "";
+    const today = todayKey();
 
     const [leads, setLeads] = useState<MetaLeadDoc[]>([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState<HistoryFilter>("all");
     const [search, setSearch] = useState("");
     const [searchOpen, setSearchOpen] = useState(false);
+
+    const [rangePreset, setRangePreset] = useState<RangePreset>("week");
+    const [customStart, setCustomStart] = useState(thisWeekRange().startKey);
+    const [customEnd, setCustomEnd] = useState(today);
+    const [showCustom, setShowCustom] = useState(false);
 
     const [actionLead, setActionLead] = useState<MetaLeadDoc | null>(null);
     const [actionType, setActionType] = useState<"visit" | "reject" | null>(null);
@@ -84,7 +108,14 @@ export default function UserHistoryPage() {
         return unsub;
     }, [userId]);
 
-    // History = only visited or rejected, sorted by statusAt desc
+    const { startKey, endKey } = useMemo(() => {
+        if (rangePreset === "week") return thisWeekRange();
+        if (rangePreset === "7d") return last7DaysRange();
+        if (rangePreset === "month") return thisMonthRange();
+        return { startKey: customStart, endKey: customEnd };
+    }, [rangePreset, customStart, customEnd]);
+
+    // All visited/rejected leads, sorted by statusAt desc
     const historyLeads = useMemo(() => {
         return leads
             .filter((l) => l.status === "visited" || l.status === "rejected")
@@ -94,36 +125,25 @@ export default function UserHistoryPage() {
             });
     }, [leads]);
 
-    const { startKey } = weekRange();
-    const today = todayKey();
-
-    // Week stats derived from history
-    const stats = useMemo(() => {
-        const weekItems = historyLeads.filter((l) => {
-            const statusAt = ((l as any).statusAt as number | null);
+    // Leads within the selected range
+    const rangeLeads = useMemo(() => {
+        return historyLeads.filter((l) => {
+            const statusAt = (l as any).statusAt as number | null;
             if (!statusAt) return false;
             const key = new Date(statusAt).toISOString().slice(0, 10);
-            return key >= startKey;
+            return key >= startKey && key <= endKey;
         });
-        return {
-            weekVisited: weekItems.filter((l) => l.status === "visited").length,
-            weekRejected: weekItems.filter((l) => l.status === "rejected").length,
-            todayVisited: weekItems.filter((l) => {
-                const statusAt = ((l as any).statusAt as number | null);
-                return l.status === "visited" && statusAt && new Date(statusAt).toISOString().slice(0, 10) === today;
-            }).length,
-            todayRejected: weekItems.filter((l) => {
-                const statusAt = ((l as any).statusAt as number | null);
-                return l.status === "rejected" && statusAt && new Date(statusAt).toISOString().slice(0, 10) === today;
-            }).length,
-        };
-    }, [historyLeads, startKey, today]);
+    }, [historyLeads, startKey, endKey]);
+
+    const stats = useMemo(() => ({
+        visited: rangeLeads.filter((l) => l.status === "visited").length,
+        rejected: rangeLeads.filter((l) => l.status === "rejected").length,
+    }), [rangeLeads]);
 
     const filtered = useMemo(() => {
-        let list = historyLeads;
+        let list = rangeLeads;
         if (filter === "visited") list = list.filter((l) => l.status === "visited");
         else if (filter === "rejected") list = list.filter((l) => l.status === "rejected");
-
         if (search.trim()) {
             const q = norm(search.trim());
             list = list.filter((l) =>
@@ -134,36 +154,35 @@ export default function UserHistoryPage() {
             );
         }
         return list;
-    }, [historyLeads, filter, search]);
+    }, [rangeLeads, filter, search]);
 
     const counts = useMemo(() => ({
-        all: historyLeads.length,
-        visited: historyLeads.filter((l) => l.status === "visited").length,
-        rejected: historyLeads.filter((l) => l.status === "rejected").length,
-    }), [historyLeads]);
+        all: rangeLeads.length,
+        visited: rangeLeads.filter((l) => l.status === "visited").length,
+        rejected: rangeLeads.filter((l) => l.status === "rejected").length,
+    }), [rangeLeads]);
 
-    // Group by date label
     const grouped = useMemo(() => {
         const groups: { label: string; items: MetaLeadDoc[] }[] = [];
         const seen = new Map<string, MetaLeadDoc[]>();
-
         for (const lead of filtered) {
-            const statusAt = ((lead as any).statusAt as number | null);
-            const label = formatDate(statusAt ?? lead.assignedAt);
-            if (!seen.has(label)) {
-                seen.set(label, []);
-                groups.push({ label, items: seen.get(label)! });
-            }
+            const statusAt = (lead as any).statusAt as number | null;
+            const label = formatDateLabel(statusAt ?? lead.assignedAt);
+            if (!seen.has(label)) { seen.set(label, []); groups.push({ label, items: seen.get(label)! }); }
             seen.get(label)!.push(lead);
         }
         return groups;
     }, [filtered]);
 
     function canUndo(lead: MetaLeadDoc) {
-        if (lead.status !== "visited" && lead.status !== "rejected") return false;
         const statusAt = (lead as any).statusAt as number | null;
         if (!statusAt) return true;
         return new Date(statusAt).toISOString().slice(0, 10) === today;
+    }
+
+    function selectPreset(p: RangePreset) {
+        setRangePreset(p);
+        setShowCustom(p === "custom");
     }
 
     function openVisit(lead: MetaLeadDoc) { setActionLead(lead); setActionType("visit"); }
@@ -209,6 +228,13 @@ export default function UserHistoryPage() {
         window.open(url, "_blank");
     }
 
+    const PRESETS: { key: RangePreset; label: string }[] = [
+        { key: "week", label: "Esta semana" },
+        { key: "7d", label: "7 días" },
+        { key: "month", label: "Este mes" },
+        { key: "custom", label: "Personalizado" },
+    ];
+
     return (
         <div className="flex min-h-screen flex-col bg-[radial-gradient(circle_at_top_right,rgba(124,58,237,0.08),transparent_36%),linear-gradient(180deg,#fbfaff_0%,#f6f3ff_52%,#f8fafc_100%)]">
 
@@ -219,7 +245,12 @@ export default function UserHistoryPage() {
                 <div className="mb-3 flex items-center justify-between gap-3">
                     <div>
                         <h1 className="text-[20px] font-black tracking-[-0.03em] text-[#101936]">Historial</h1>
-                        <p className="mt-0.5 text-[11px] font-semibold text-[#66739A]">Prospectos visitados y rechazados</p>
+                        <p className="mt-0.5 text-[11px] font-semibold text-[#66739A]">
+                            {rangePreset === "custom"
+                                ? formatRangeLabel(startKey, endKey)
+                                : PRESETS.find((p) => p.key === rangePreset)?.label}
+                            {" · "}{counts.all} prospectos
+                        </p>
                     </div>
                     <button
                         type="button"
@@ -232,12 +263,52 @@ export default function UserHistoryPage() {
                 </div>
 
                 {/* STATS */}
-                <div className="mb-3 grid grid-cols-4 gap-2">
-                    <StatPill label="Hoy visit." value={stats.todayVisited} tone="green" />
-                    <StatPill label="Hoy rech." value={stats.todayRejected} tone="red" />
-                    <StatPill label="Sem. visit." value={stats.weekVisited} tone="green" />
-                    <StatPill label="Sem. rech." value={stats.weekRejected} tone="red" />
+                <div className="mb-3 grid grid-cols-2 gap-2">
+                    <StatPill label="Visitados" value={stats.visited} tone="green" />
+                    <StatPill label="Rechazados" value={stats.rejected} tone="red" />
                 </div>
+
+                {/* RANGE PRESETS */}
+                <div className="mb-2 flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {PRESETS.map((p) => (
+                        <button
+                            key={p.key}
+                            type="button"
+                            onClick={() => selectPreset(p.key)}
+                            className={[
+                                "flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-[11px] font-black transition",
+                                rangePreset === p.key
+                                    ? "border-[#7C3AED] bg-[#7C3AED] text-white"
+                                    : "border-[#E8E7FB] bg-white text-[#66739A]",
+                            ].join(" ")}
+                        >
+                            {p.key === "custom" ? <CalendarIcon /> : null}
+                            {p.label}
+                        </button>
+                    ))}
+                </div>
+
+                {/* CUSTOM DATE INPUTS */}
+                {showCustom ? (
+                    <div className="mb-2 flex items-center gap-2 rounded-[14px] border border-[#E8E7FB] bg-white px-3 py-2 shadow-sm">
+                        <input
+                            type="date"
+                            value={customStart}
+                            max={customEnd}
+                            onChange={(e) => setCustomStart(e.target.value)}
+                            className="flex-1 bg-transparent text-[12px] font-bold text-[#101936] outline-none"
+                        />
+                        <span className="text-[10px] font-black text-[#98A2B3]">→</span>
+                        <input
+                            type="date"
+                            value={customEnd}
+                            min={customStart}
+                            max={today}
+                            onChange={(e) => setCustomEnd(e.target.value)}
+                            className="flex-1 bg-transparent text-[12px] font-bold text-[#101936] outline-none"
+                        />
+                    </div>
+                ) : null}
 
                 {/* FILTER TABS */}
                 <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -254,7 +325,7 @@ export default function UserHistoryPage() {
                                     "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-black transition",
                                     active
                                         ? "border-[#7C3AED] bg-[#7C3AED] text-white"
-                                        : "border-[#E8E7FB] bg-white text-[#66739A] hover:border-[#7C3AED]/40 hover:text-[#7C3AED]",
+                                        : "border-[#E8E7FB] bg-white text-[#66739A]",
                                 ].join(" ")}
                             >
                                 {labels[f]}
@@ -460,13 +531,7 @@ export default function UserHistoryPage() {
 // ── HISTORY CARD ─────────────────────────────────────────────────────────────
 
 function HistoryCard({
-    lead,
-    canUndo,
-    onVisit,
-    onReject,
-    onUndo,
-    onWhatsApp,
-    onMaps,
+    lead, canUndo, onVisit, onReject, onUndo, onWhatsApp, onMaps,
 }: {
     lead: MetaLeadDoc;
     canUndo: boolean;
@@ -485,7 +550,6 @@ function HistoryCard({
             isVisited ? "border-emerald-200 bg-emerald-50/20" : "border-red-200 bg-red-50/20",
         ].join(" ")}>
             <div className="p-3">
-                {/* Header */}
                 <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                         <p className="truncate text-[14px] font-black text-[#101936]">{displayName(lead)}</p>
@@ -501,18 +565,15 @@ function HistoryCard({
                     </div>
                 </div>
 
-                {/* Details */}
                 <div className="mt-2 space-y-1">
                     {lead.phone ? (
                         <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#66739A]">
-                            <PhoneIcon />
-                            <span className="truncate">{lead.phone}</span>
+                            <PhoneIcon /><span className="truncate">{lead.phone}</span>
                         </div>
                     ) : null}
                     {lead.location.address ? (
                         <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#66739A]">
-                            <PinIcon />
-                            <span className="truncate">{lead.location.address}</span>
+                            <PinIcon /><span className="truncate">{lead.location.address}</span>
                         </div>
                     ) : null}
                     {lead.status === "rejected" && (lead as any).rejectedReason ? (
@@ -524,58 +585,35 @@ function HistoryCard({
                     ) : null}
                 </div>
 
-                {/* Actions */}
                 <div className="mt-3 flex items-center gap-2 border-t border-[#F2F0FF] pt-2.5">
                     <div className="flex gap-1.5">
-                        <button
-                            type="button"
-                            onClick={onWhatsApp}
-                            title="WhatsApp"
-                            className="flex h-8 w-8 items-center justify-center rounded-[11px] border border-emerald-200 bg-emerald-50 text-emerald-700 transition active:opacity-70"
-                        >
+                        <button type="button" onClick={onWhatsApp} title="WhatsApp"
+                            className="flex h-8 w-8 items-center justify-center rounded-[11px] border border-emerald-200 bg-emerald-50 text-emerald-700 transition active:opacity-70">
                             <WAIcon />
                         </button>
-                        <button
-                            type="button"
-                            onClick={onMaps}
-                            title="Maps"
-                            className="flex h-8 w-8 items-center justify-center rounded-[11px] border border-blue-200 bg-blue-50 text-blue-700 transition active:opacity-70"
-                        >
+                        <button type="button" onClick={onMaps} title="Maps"
+                            className="flex h-8 w-8 items-center justify-center rounded-[11px] border border-blue-200 bg-blue-50 text-blue-700 transition active:opacity-70">
                             <MapsIcon />
                         </button>
                     </div>
-
                     <div className="flex-1" />
-
                     {canUndo ? (
-                        <button
-                            type="button"
-                            onClick={onUndo}
-                            className="flex h-8 items-center gap-1.5 rounded-[11px] border border-[#E8E7FB] bg-white px-2.5 text-[11px] font-black text-[#66739A] transition active:bg-[#f3f0ff]"
-                        >
+                        <button type="button" onClick={onUndo}
+                            className="flex h-8 items-center gap-1.5 rounded-[11px] border border-[#E8E7FB] bg-white px-2.5 text-[11px] font-black text-[#66739A] transition active:bg-[#f3f0ff]">
                             <UndoIcon /> Deshacer
                         </button>
                     ) : (
-                        // Allow re-marking from the other status
-                        <div className="flex gap-1.5">
-                            {isVisited ? (
-                                <button
-                                    type="button"
-                                    onClick={onReject}
-                                    className="flex h-8 items-center gap-1.5 rounded-[11px] border border-red-200 bg-red-50 px-2.5 text-[11px] font-black text-red-600 transition active:bg-red-100"
-                                >
-                                    <XIcon /> Rechazar
-                                </button>
-                            ) : (
-                                <button
-                                    type="button"
-                                    onClick={onVisit}
-                                    className="flex h-8 items-center gap-1.5 rounded-[11px] border border-emerald-200 bg-emerald-50 px-2.5 text-[11px] font-black text-emerald-700 transition active:bg-emerald-100"
-                                >
-                                    <CheckIcon /> Visité
-                                </button>
-                            )}
-                        </div>
+                        isVisited ? (
+                            <button type="button" onClick={onReject}
+                                className="flex h-8 items-center gap-1.5 rounded-[11px] border border-red-200 bg-red-50 px-2.5 text-[11px] font-black text-red-600 transition active:bg-red-100">
+                                <XIcon /> Rechazar
+                            </button>
+                        ) : (
+                            <button type="button" onClick={onVisit}
+                                className="flex h-8 items-center gap-1.5 rounded-[11px] border border-emerald-200 bg-emerald-50 px-2.5 text-[11px] font-black text-emerald-700 transition active:bg-emerald-100">
+                                <CheckIcon /> Visité
+                            </button>
+                        )
                     )}
                 </div>
             </div>
@@ -583,7 +621,7 @@ function HistoryCard({
     );
 }
 
-// ── SHARED SUB-COMPONENTS ────────────────────────────────────────────────────
+// ── SUB-COMPONENTS ────────────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status?: string }) {
     if (status === "visited") return (
@@ -597,11 +635,11 @@ function StatusBadge({ status }: { status?: string }) {
 function StatPill({ label, value, tone }: { label: string; value: number; tone: "green" | "red" }) {
     return (
         <div className={[
-            "rounded-[12px] border px-1.5 py-1.5 text-center",
+            "rounded-[12px] border px-3 py-2 text-center",
             tone === "green" ? "border-emerald-100 bg-emerald-50" : "border-red-100 bg-red-50",
         ].join(" ")}>
-            <div className={["text-[15px] font-black", tone === "green" ? "text-emerald-700" : "text-red-700"].join(" ")}>{value}</div>
-            <div className="mt-0.5 text-[9px] font-black leading-none text-[#98A2B3]">{label}</div>
+            <div className={["text-[22px] font-black leading-none", tone === "green" ? "text-emerald-700" : "text-red-700"].join(" ")}>{value}</div>
+            <div className="mt-1 text-[10px] font-black text-[#98A2B3]">{label}</div>
         </div>
     );
 }
@@ -636,16 +674,16 @@ function LoadingState() {
 
 function EmptyState({ filter, search }: { filter: HistoryFilter; search: string }) {
     const msg = search ? "Sin resultados para tu búsqueda" :
-        filter === "visited" ? "No tienes visitas registradas" :
-        filter === "rejected" ? "No tienes rechazos registrados" :
-        "Tu historial está vacío";
+        filter === "visited" ? "Sin visitas en este período" :
+        filter === "rejected" ? "Sin rechazos en este período" :
+        "Sin actividad en este período";
     return (
         <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f3f0ff]">
                 <HistoryIcon />
             </div>
             <p className="text-[14px] font-black text-[#101936]">{msg}</p>
-            <p className="mt-1 text-[12px] font-semibold text-[#98A2B3]">Aquí aparecerán los prospectos que hayas visitado o rechazado</p>
+            <p className="mt-1 text-[12px] font-semibold text-[#98A2B3]">Cambia el rango de fechas para ver más</p>
         </div>
     );
 }
@@ -654,30 +692,13 @@ function EmptyState({ filter, search }: { filter: HistoryFilter; search: string 
 
 const ic = { fill: "none", stroke: "currentColor", strokeLinecap: "round" as const, strokeLinejoin: "round" as const, strokeWidth: 1.8 };
 
-function SearchIcon() {
-    return <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#7C3AED]" {...ic}><path d="m21 21-4.3-4.3M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16Z" /></svg>;
-}
-function PhoneIcon() {
-    return <svg viewBox="0 0 24 24" className="h-3 w-3 shrink-0" {...ic}><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.1-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.8.4 1.6.7 2.4a2 2 0 0 1-.5 2.1L8.1 9.4a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.8.3 1.6.5 2.4.7a2 2 0 0 1 1.7 2Z" /></svg>;
-}
-function PinIcon() {
-    return <svg viewBox="0 0 24 24" className="h-3 w-3 shrink-0" {...ic}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1 1 18 0Z" /><circle cx="12" cy="10" r="3" {...ic} /></svg>;
-}
-function CheckIcon() {
-    return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M20 6 9 17l-5-5" /></svg>;
-}
-function XIcon() {
-    return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M18 6 6 18M6 6l12 12" /></svg>;
-}
-function UndoIcon() {
-    return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M3 7v6h6" /><path d="M3 13a9 9 0 1 0 2.6-6.36L3 10" /></svg>;
-}
-function HistoryIcon() {
-    return <svg viewBox="0 0 24 24" className="h-7 w-7 text-[#7C3AED]" {...ic}><path d="M12 7v5l3 2" /><path d="M3.05 11a9 9 0 1 1 .5 4M3 15v-4h4" /></svg>;
-}
-function WAIcon() {
-    return <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M17.47 14.38c-.28-.14-1.65-.82-1.9-.91-.26-.09-.44-.14-.63.14-.19.28-.73.91-.9 1.1-.16.18-.33.2-.61.07-.28-.14-1.18-.44-2.25-1.39-.83-.74-1.39-1.66-1.55-1.93-.16-.28-.02-.43.12-.57.12-.12.28-.32.42-.48.14-.16.18-.28.28-.46.09-.18.05-.34-.02-.48-.07-.14-.63-1.52-.86-2.08-.23-.55-.46-.47-.63-.48-.16-.01-.35-.01-.53-.01-.18 0-.48.07-.73.34-.25.27-.97.95-.97 2.31 0 1.36.99 2.67 1.13 2.86.14.18 1.96 2.99 4.75 4.2.66.28 1.18.45 1.58.58.66.21 1.27.18 1.74.11.53-.08 1.65-.68 1.88-1.33.24-.65.24-1.2.17-1.33-.07-.12-.25-.19-.53-.33Z"/><path d="M12.05 2.01C6.49 2.01 2 6.5 2 12.07c0 1.87.51 3.63 1.4 5.14L2 22l4.93-1.36A10.04 10.04 0 0 0 12.05 22C17.61 22 22 17.5 22 11.93 22 6.5 17.61 2.01 12.05 2.01Zm0 18.37a8.34 8.34 0 0 1-4.23-1.15l-.3-.18-3.13.86.86-3.17-.2-.32a8.35 8.35 0 0 1-1.27-4.41c0-4.61 3.72-8.36 8.3-8.36 4.57 0 8.29 3.75 8.29 8.36-.01 4.61-3.72 8.37-8.32 8.37Z"/></svg>;
-}
-function MapsIcon() {
-    return <svg viewBox="0 0 24 24" className="h-4 w-4" {...ic}><path d="M9 18 3 21V6l6-3 6 3 6-3v15l-6 3-6-3Z" /><path d="M9 3v15M15 6v15" /></svg>;
-}
+function SearchIcon() { return <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#7C3AED]" {...ic}><path d="m21 21-4.3-4.3M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16Z" /></svg>; }
+function PhoneIcon() { return <svg viewBox="0 0 24 24" className="h-3 w-3 shrink-0" {...ic}><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.1-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.8.4 1.6.7 2.4a2 2 0 0 1-.5 2.1L8.1 9.4a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.8.3 1.6.5 2.4.7a2 2 0 0 1 1.7 2Z" /></svg>; }
+function PinIcon() { return <svg viewBox="0 0 24 24" className="h-3 w-3 shrink-0" {...ic}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1 1 18 0Z" /><circle cx="12" cy="10" r="3" {...ic} /></svg>; }
+function CheckIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M20 6 9 17l-5-5" /></svg>; }
+function XIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M18 6 6 18M6 6l12 12" /></svg>; }
+function UndoIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M3 7v6h6" /><path d="M3 13a9 9 0 1 0 2.6-6.36L3 10" /></svg>; }
+function HistoryIcon() { return <svg viewBox="0 0 24 24" className="h-7 w-7 text-[#7C3AED]" {...ic}><path d="M12 7v5l3 2" /><path d="M3.05 11a9 9 0 1 1 .5 4M3 15v-4h4" /></svg>; }
+function CalendarIcon() { return <svg viewBox="0 0 24 24" className="h-3 w-3" {...ic}><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>; }
+function WAIcon() { return <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M17.47 14.38c-.28-.14-1.65-.82-1.9-.91-.26-.09-.44-.14-.63.14-.19.28-.73.91-.9 1.1-.16.18-.33.2-.61.07-.28-.14-1.18-.44-2.25-1.39-.83-.74-1.39-1.66-1.55-1.93-.16-.28-.02-.43.12-.57.12-.12.28-.32.42-.48.14-.16.18-.28.28-.46.09-.18.05-.34-.02-.48-.07-.14-.63-1.52-.86-2.08-.23-.55-.46-.47-.63-.48-.16-.01-.35-.01-.53-.01-.18 0-.48.07-.73.34-.25.27-.97.95-.97 2.31 0 1.36.99 2.67 1.13 2.86.14.18 1.96 2.99 4.75 4.2.66.28 1.18.45 1.58.58.66.21 1.27.18 1.74.11.53-.08 1.65-.68 1.88-1.33.24-.65.24-1.2.17-1.33-.07-.12-.25-.19-.53-.33Z"/><path d="M12.05 2.01C6.49 2.01 2 6.5 2 12.07c0 1.87.51 3.63 1.4 5.14L2 22l4.93-1.36A10.04 10.04 0 0 0 12.05 22C17.61 22 22 17.5 22 11.93 22 6.5 17.61 2.01 12.05 2.01Zm0 18.37a8.34 8.34 0 0 1-4.23-1.15l-.3-.18-3.13.86.86-3.17-.2-.32a8.35 8.35 0 0 1-1.27-4.41c0-4.61 3.72-8.36 8.3-8.36 4.57 0 8.29 3.75 8.29 8.36-.01 4.61-3.72 8.37-8.32 8.37Z"/></svg>; }
+function MapsIcon() { return <svg viewBox="0 0 24 24" className="h-4 w-4" {...ic}><path d="M9 18 3 21V6l6-3 6 3 6-3v15l-6 3-6-3Z" /><path d="M9 3v15M15 6v15" /></svg>; }
