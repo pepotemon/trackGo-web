@@ -7,7 +7,7 @@ import { useAuth } from "@/features/auth/AuthProvider";
 
 export default function LoginPage() {
     const router = useRouter();
-    const { login, firebaseUser, isAdmin, loading } = useAuth();
+    const { login, firebaseUser, isAdmin, isUser, loading } = useAuth();
 
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -15,10 +15,10 @@ export default function LoginPage() {
     const [error, setError] = useState("");
 
     useEffect(() => {
-        if (!loading && firebaseUser && isAdmin) {
-            router.replace("/admin");
-        }
-    }, [loading, firebaseUser, isAdmin, router]);
+        if (loading) return;
+        if (firebaseUser && isAdmin) router.replace("/admin/accounting");
+        else if (firebaseUser && isUser) router.replace("/user/leads");
+    }, [loading, firebaseUser, isAdmin, isUser, router]);
 
     async function onSubmit(event: FormEvent) {
         event.preventDefault();

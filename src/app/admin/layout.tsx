@@ -58,7 +58,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     }, [now]);
 
     const visibleMainNav = NAV_MAIN.filter((item) => {
-        if (item.href === "/admin/leads" || item.href === "/admin/activity") return permissions.leads;
+        if (item.href === "/admin/leads") return permissions.prospectos;
+        if (item.href === "/admin/activity") return permissions.actividad;
         if (item.href === "/admin/accounting") return permissions.accountingView;
         return true;
     });
@@ -67,8 +68,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         return true;
     });
     const visibleMobileNav = MOBILE_NAV.filter((item) => {
-        if (item.href === "/admin/leads") return permissions.leads;
-        if (item.href === "/admin/activity") return permissions.leads;
+        if (item.href === "/admin/leads") return permissions.prospectos;
+        if (item.href === "/admin/activity") return permissions.actividad;
         if (item.href === "/admin/accounting") return permissions.accountingView;
         if (item.href === "/admin/settings/users") return permissions.usersView;
         return true;

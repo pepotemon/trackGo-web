@@ -20,8 +20,10 @@ export type UserGeoCoverage = {
 
 /** Granular permissions for sub-admin users (role === "admin" && !isSuperAdmin). */
 export type AdminPermissions = {
-    /** Can view Prospectos, Actividad and Asignaciones screens. */
-    leads: boolean;
+    /** Can view Prospectos and Asignaciones screens. */
+    prospectos: boolean;
+    /** Can view Actividad screen. */
+    actividad: boolean;
     /** Can use "Asignar por cobertura" and reassign in modals. */
     leadsAssign: boolean;
     /** Can open WhatsApp links for clients. */
@@ -44,12 +46,15 @@ export type AdminPermissions = {
     usersCreate: boolean;
     /** Can edit or deactivate a user. */
     usersEdit: boolean;
+    /** Can access Chat. */
+    chatView: boolean;
 };
 
 /** Returns a safe default with all permissions disabled. */
 export function defaultAdminPermissions(): AdminPermissions {
     return {
-        leads: false,
+        prospectos: false,
+        actividad: false,
         leadsAssign: false,
         leadsWhatsapp: false,
         leadsEdit: false,
@@ -61,13 +66,15 @@ export function defaultAdminPermissions(): AdminPermissions {
         usersView: false,
         usersCreate: false,
         usersEdit: false,
+        chatView: false,
     };
 }
 
 /** Returns a permissions object with everything enabled (used for superadmin). */
 export function fullAdminPermissions(): AdminPermissions {
     return {
-        leads: true,
+        prospectos: true,
+        actividad: true,
         leadsAssign: true,
         leadsWhatsapp: true,
         leadsEdit: true,
@@ -79,6 +86,7 @@ export function fullAdminPermissions(): AdminPermissions {
         usersView: true,
         usersCreate: true,
         usersEdit: true,
+        chatView: true,
     };
 }
 

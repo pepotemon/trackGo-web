@@ -33,6 +33,7 @@ type AuthContextValue = {
     profile: AppUser | null;
     loading: boolean;
     isAdmin: boolean;
+    isUser: boolean;
     isSuperAdmin: boolean;
     /** Null when the user is superadmin (implicitly has all permissions). */
     adminPermissions: AdminPermissions | null;
@@ -91,6 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             profile,
             loading,
             isAdmin: profile?.role === "admin" && profile?.active === true,
+            isUser: profile?.role === "user" && profile?.active === true,
             isSuperAdmin: profile?.isSuperAdmin === true,
             adminPermissions: profile?.isSuperAdmin ? null : (profile?.permissions ?? null),
             login: async (email, password) => {

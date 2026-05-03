@@ -1516,11 +1516,43 @@ function EditUserModal({
                                 <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.06em] text-[#98A2B3]">Prospectos</p>
                                 <div className="space-y-1.5">
                                     {([
-                                        { key: "leads", label: "Ver Prospectos, Actividad y Asignaciones" },
+                                        { key: "prospectos", label: "Ver Prospectos y Asignaciones" },
                                         { key: "leadsAssign", label: "Asignar por cobertura y reasignar" },
                                         { key: "leadsWhatsapp", label: "Abrir WhatsApp de clientes" },
                                         { key: "leadsEdit", label: "Editar prospectos" },
                                         { key: "leadsDelete", label: "Eliminar prospectos" },
+                                    ] as { key: keyof AdminPermissions; label: string }[]).map(({ key, label }) => (
+                                        <PermissionToggle
+                                            key={key}
+                                            label={label}
+                                            value={permissions[key]}
+                                            onChange={(val) => setPermissions((prev) => ({ ...prev, [key]: val }))}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div>
+                                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.06em] text-[#98A2B3]">Actividad</p>
+                                <div className="space-y-1.5">
+                                    {([
+                                        { key: "actividad", label: "Ver pantalla de Actividad" },
+                                    ] as { key: keyof AdminPermissions; label: string }[]).map(({ key, label }) => (
+                                        <PermissionToggle
+                                            key={key}
+                                            label={label}
+                                            value={permissions[key]}
+                                            onChange={(val) => setPermissions((prev) => ({ ...prev, [key]: val }))}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div>
+                                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.06em] text-[#98A2B3]">Chat</p>
+                                <div className="space-y-1.5">
+                                    {([
+                                        { key: "chatView", label: "Acceder al Chat" },
                                     ] as { key: keyof AdminPermissions; label: string }[]).map(({ key, label }) => (
                                         <PermissionToggle
                                             key={key}
