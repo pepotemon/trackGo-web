@@ -32,6 +32,8 @@ export type AdminPermissions = {
     leadsDelete: boolean;
     /** Can view their own accounting (filtered to assigned users). */
     accountingView: boolean;
+    /** Can close and reopen the weekly accounting period. */
+    accountingClose: boolean;
     /** Can view Configuración de inversión in read-only mode. */
     accountingInvestmentView: boolean;
     /** Can modify Configuración de inversión (manual adjust, groups, etc.). */
@@ -53,6 +55,7 @@ export function defaultAdminPermissions(): AdminPermissions {
         leadsEdit: false,
         leadsDelete: false,
         accountingView: false,
+        accountingClose: false,
         accountingInvestmentView: false,
         accountingInvestmentEdit: false,
         usersView: false,
@@ -70,6 +73,7 @@ export function fullAdminPermissions(): AdminPermissions {
         leadsEdit: true,
         leadsDelete: true,
         accountingView: true,
+        accountingClose: true,
         accountingInvestmentView: true,
         accountingInvestmentEdit: true,
         usersView: true,

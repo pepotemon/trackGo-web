@@ -1537,6 +1537,7 @@ function EditUserModal({
                                 <div className="space-y-1.5">
                                     {([
                                         { key: "accountingView", label: "Ver su propia contabilidad" },
+                                        { key: "accountingClose", label: "Cerrar y reabrir semana" },
                                         { key: "accountingInvestmentView", label: "Ver configuración de inversión" },
                                         { key: "accountingInvestmentEdit", label: "Editar configuración de inversión" },
                                     ] as { key: keyof AdminPermissions; label: string }[]).map(({ key, label }) => (
