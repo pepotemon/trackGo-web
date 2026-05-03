@@ -537,10 +537,10 @@ function PinImage({ status, selected }: { status?: string; selected: boolean }) 
     return (
         <div className={[
             "transition-transform",
-            selected ? "scale-125" : "scale-100",
+            selected ? "scale-150" : "scale-100",
         ].join(" ")}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={src} alt={status ?? "pending"} className="h-10 w-10 drop-shadow-md" />
+            <img src={src} alt={status ?? "pending"} className="h-4 w-4 drop-shadow-md" />
         </div>
     );
 }

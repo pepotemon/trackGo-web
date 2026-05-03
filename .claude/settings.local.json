@@ -14,7 +14,8 @@
       "Bash(git commit *)",
       "Bash(firebase deploy *)",
       "Bash(xargs grep *)",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(firebase projects:list)"
     ]
   }
 }

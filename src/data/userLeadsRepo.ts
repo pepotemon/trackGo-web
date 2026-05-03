@@ -39,11 +39,12 @@ function toLoc(data: Record<string, unknown>) {
         cityLabel: text(loc.cityLabel),
         adminStateLabel: text(loc.adminStateLabel),
         adminCountryLabel: text(loc.adminCountryLabel),
-        address: text(loc.address),
-        lat: toNum(loc.lat),
-        lng: toNum(loc.lng),
-        mapsUrl: text(loc.mapsUrl),
-        outOfCoverage: loc.outOfCoverage === true,
+        address: text(data.address) || text(loc.address),
+        // Coordinates stored at root level (data.lat/lng) — fallback to nested location
+        lat: toNum(data.lat) ?? toNum(loc.lat),
+        lng: toNum(data.lng) ?? toNum(loc.lng),
+        mapsUrl: text(data.mapsUrl) || text(loc.mapsUrl),
+        outOfCoverage: data.geoOutOfCoverage === true || loc.outOfCoverage === true,
     };
 }
 
