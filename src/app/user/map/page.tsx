@@ -95,6 +95,9 @@ function MapPageInner() {
         );
     }
 
+    // Auto-locate on mount
+    useEffect(() => { locate(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
     const today = todayKey();
 
     function canUndo(lead: MetaLeadDoc) {
@@ -158,7 +161,7 @@ function MapPageInner() {
         : { lat: -23.55, lng: -46.63 }; // São Paulo fallback
 
     return (
-        <div className="relative flex h-screen flex-col overflow-hidden">
+        <div className="relative flex h-[calc(100dvh-72px)] flex-col overflow-hidden xl:h-screen">
 
             {/* ── MAP ─────────────────────────────────────────────────── */}
             <div className="flex-1">
@@ -470,6 +473,15 @@ function MapControls({
     userLocation: { lat: number; lng: number } | null;
 }) {
     const map = useMap();
+    const centeredRef = useRef(false);
+
+    // Auto-center on user location the first time it arrives
+    useEffect(() => {
+        if (!map || !userLocation || centeredRef.current) return;
+        centeredRef.current = true;
+        map.panTo(userLocation);
+        map.setZoom(15);
+    }, [map, userLocation]);
 
     const fitBounds = useCallback(() => {
         if (!map || leads.length === 0) return;
@@ -491,19 +503,46 @@ function MapControls({
         }
     }, [map, onLocate, userLocation]);
 
+    const zoomIn = useCallback(() => {
+        if (!map) return;
+        map.setZoom((map.getZoom() ?? 12) + 1);
+    }, [map]);
+
+    const zoomOut = useCallback(() => {
+        if (!map) return;
+        map.setZoom((map.getZoom() ?? 12) - 1);
+    }, [map]);
+
     return (
-        <div className="absolute bottom-[200px] left-3 z-10 flex flex-col gap-2">
-            <MapCtrlBtn onClick={fitBounds} title="Ver todos">
-                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3" />
-                </svg>
-            </MapCtrlBtn>
-            <MapCtrlBtn onClick={goToUser} title="Mi ubicación" loading={locating}>
-                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 2a7 7 0 0 1 7 7c0 5-7 13-7 13S5 14 5 9a7 7 0 0 1 7-7Z" /><circle cx="12" cy="9" r="2.5" />
-                </svg>
-            </MapCtrlBtn>
-        </div>
+        <>
+            {/* Fit + locate — both platforms */}
+            <div className="absolute bottom-[200px] left-3 z-10 flex flex-col gap-2">
+                <MapCtrlBtn onClick={fitBounds} title="Ver todos">
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3" />
+                    </svg>
+                </MapCtrlBtn>
+                <MapCtrlBtn onClick={goToUser} title="Mi ubicación" loading={locating}>
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 2a7 7 0 0 1 7 7c0 5-7 13-7 13S5 14 5 9a7 7 0 0 1 7-7Z" /><circle cx="12" cy="9" r="2.5" />
+                    </svg>
+                </MapCtrlBtn>
+            </div>
+
+            {/* Zoom controls — desktop only */}
+            <div className="absolute bottom-[200px] right-3 z-10 hidden flex-col gap-1 xl:flex">
+                <MapCtrlBtn onClick={zoomIn} title="Acercar">
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round">
+                        <path d="M12 5v14M5 12h14" />
+                    </svg>
+                </MapCtrlBtn>
+                <MapCtrlBtn onClick={zoomOut} title="Alejar">
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round">
+                        <path d="M5 12h14" />
+                    </svg>
+                </MapCtrlBtn>
+            </div>
+        </>
     );
 }
 
@@ -528,19 +567,24 @@ function MapCtrlBtn({ onClick, title, loading, children }: { onClick: () => void
 // ── PIN IMAGE ────────────────────────────────────────────────────────────────
 
 function PinImage({ status, selected }: { status?: string; selected: boolean }) {
-    const src = status === "visited"
-        ? "/pins/visited-pin.png"
+    const base = status === "visited"
+        ? "/pins/visited-pin"
         : status === "rejected"
-        ? "/pins/rejected-pin.png"
-        : "/pins/pending-pin.png";
+        ? "/pins/rejected-pin"
+        : "/pins/pending-pin";
 
     return (
-        <div className={[
-            "transition-transform",
-            selected ? "scale-150" : "scale-100",
-        ].join(" ")}>
+        <div className={["transition-transform", selected ? "scale-150" : "scale-100"].join(" ")}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={src} alt={status ?? "pending"} className="h-4 w-4 drop-shadow-md" />
+            <img
+                src={`${base}.png`}
+                srcSet={`${base}.png 1x, ${base}@2x.png 2x, ${base}@3x.png 3x`}
+                width={16}
+                height={16}
+                alt={status ?? "pending"}
+                className="drop-shadow-md"
+                style={{ imageRendering: "crisp-edges" }}
+            />
         </div>
     );
 }
