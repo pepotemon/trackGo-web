@@ -1,23 +1,31 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCan } from "@/features/auth/usePermissions";
+import { useAuth } from "@/features/auth/AuthProvider";
 import {
     createManagedUserProfile,
     listAdminUsers,
     updateUserAutoAssign,
     updateUserBilling,
     updateUserGeoCoverage,
+    updateUserPermissions,
     updateUserProfile,
     updateUserRole,
+    updateUserSharedWith,
 } from "@/data/usersRepo";
 import { batchUpdateWeekEventRates, countWeekVisitedEvents } from "@/data/accountingRepo";
 import { weekRangeKeysMonToSun } from "@/lib/date";
-import type {
-    UserBillingMode,
-    UserDoc,
-    UserGeoCoverage,
-    UserGeoCoverageType,
-    UserRole,
+import {
+    defaultAdminPermissions,
+    fullAdminPermissions,
+    type AdminPermissions,
+    type UserBillingMode,
+    type UserDoc,
+    type UserGeoCoverage,
+    type UserGeoCoverageType,
+    type UserRole,
+    type UserSharedAdmin,
 } from "@/types/users";
 import {
     AppIcon,
@@ -32,7 +40,7 @@ import {
     PageHeader,
 } from "@/components/ui";
 
-type EditorTab = "profile" | "coverage" | "role" | "autoAssign" | "billing";
+type EditorTab = "profile" | "coverage" | "role" | "autoAssign" | "billing" | "permissions" | "shared";
 type RoleFilter = "all" | "admin" | "user";
 type AutoFilter = "all" | "on" | "off";
 type BillingFilter = "all" | "per_visit" | "weekly_subscription";
@@ -47,7 +55,9 @@ type IconName =
     | "user"
     | "shield"
     | "bot"
-    | "wallet";
+    | "wallet"
+    | "link"
+    | "percent";
 
 function money(n?: number | null) {
     return `R$ ${(Number.isFinite(Number(n)) ? Number(n) : 0).toFixed(2)}`;
@@ -226,11 +236,27 @@ function Icon({ name }: { name: IconName }) {
                     <path {...common} d="M17 13h.01" />
                 </>
             ) : null}
+            {name === "link" ? (
+                <>
+                    <path {...common} d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                    <path {...common} d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                </>
+            ) : null}
+            {name === "percent" ? (
+                <>
+                    <line {...common} x1="19" y1="5" x2="5" y2="19" />
+                    <circle {...common} cx="6.5" cy="6.5" r="2.5" />
+                    <circle {...common} cx="17.5" cy="17.5" r="2.5" />
+                </>
+            ) : null}
         </svg>
     );
 }
 
 export default function UsersPage() {
+    const canCreate = useCan("usersCreate");
+    const canEdit = useCan("usersEdit");
+    const { profile, isSuperAdmin } = useAuth();
     const [users, setUsers] = useState<UserDoc[]>([]);
     const [loading, setLoading] = useState(true);
     const [savingId, setSavingId] = useState<string | null>(null);
@@ -249,10 +275,17 @@ export default function UsersPage() {
         [users, selectedUserId]
     );
 
+    const baseUsers = useMemo(() => {
+        if (isSuperAdmin || !profile) return users;
+        return users.filter(
+            (u) => u.role === "admin" || u.sharedWith?.some((s) => s.adminId === profile.id)
+        );
+    }, [users, isSuperAdmin, profile]);
+
     const filteredUsers = useMemo(() => {
         const q = norm(search);
 
-        return users.filter((u) => {
+        return baseUsers.filter((u) => {
             if (roleFilter !== "all" && u.role !== roleFilter) return false;
 
             const autoEnabled = u.autoAssignEnabled === true;
@@ -281,7 +314,7 @@ export default function UsersPage() {
 
             return haystack.includes(q);
         });
-    }, [users, search, roleFilter, autoFilter, billingFilter]);
+    }, [baseUsers, search, roleFilter, autoFilter, billingFilter]);
 
     async function loadUsers() {
         setLoading(true);
@@ -305,12 +338,12 @@ export default function UsersPage() {
 
     const stats = useMemo(() => {
         return {
-            total: users.length,
-            active: users.filter((u) => u.active).length,
-            admins: users.filter((u) => u.role === "admin").length,
-            weekly: users.filter((u) => u.billingMode === "weekly_subscription").length,
+            total: baseUsers.length,
+            active: baseUsers.filter((u) => u.active).length,
+            admins: baseUsers.filter((u) => u.role === "admin").length,
+            weekly: baseUsers.filter((u) => u.billingMode === "weekly_subscription").length,
         };
-    }, [users]);
+    }, [baseUsers]);
 
     const activeFiltersCount = useMemo(() => {
         let total = 0;
@@ -352,8 +385,9 @@ export default function UsersPage() {
                     billingFilter={billingFilter}
                     filtersOpen={mobileFiltersOpen}
                     activeFiltersCount={activeFiltersCount}
+                    canCreate={canCreate}
                     onSearch={setSearch}
-                    onSelectUser={setSelectedUserId}
+                    onSelectUser={canEdit ? setSelectedUserId : undefined}
                     onRefresh={loadUsers}
                     onCreate={() => setCreateOpen(true)}
                     onToggleFilters={() => setMobileFiltersOpen((value) => !value)}
@@ -384,12 +418,14 @@ export default function UsersPage() {
                                 variant="primary"
                                 onClick={loadUsers}
                             />
-                            <IconButton
-                                icon="plus"
-                                label="Crear usuario"
-                                variant="primary"
-                                onClick={() => setCreateOpen(true)}
-                            />
+                            {canCreate ? (
+                                <IconButton
+                                    icon="plus"
+                                    label="Crear usuario"
+                                    variant="primary"
+                                    onClick={() => setCreateOpen(true)}
+                                />
+                            ) : null}
                         </div>
                     }
                 />
@@ -472,20 +508,23 @@ export default function UsersPage() {
                         users={filteredUsers}
                         loading={loading}
                         selectedUserId={selectedUserId}
-                        onSelectUser={setSelectedUserId}
+                        onSelectUser={canEdit ? setSelectedUserId : undefined}
                     />
                 </Card>
             </div>
 
-            <EditUserModal
-                user={selectedUser}
-                open={!!selectedUser}
-                savingId={savingId}
-                onClose={() => setSelectedUserId(null)}
-                onSaving={setSavingId}
-                onPatch={patchUserLocal}
-                onError={setErr}
-            />
+            {canEdit ? (
+                <EditUserModal
+                    user={selectedUser}
+                    open={!!selectedUser}
+                    savingId={savingId}
+                    adminUsers={users.filter((u) => u.role === "admin" && !u.isSuperAdmin)}
+                    onClose={() => setSelectedUserId(null)}
+                    onSaving={setSavingId}
+                    onPatch={patchUserLocal}
+                    onError={setErr}
+                />
+            ) : null}
 
             <CreateUserModal
                 open={createOpen}
@@ -508,6 +547,7 @@ function MobileUsersView({
     billingFilter,
     filtersOpen,
     activeFiltersCount,
+    canCreate,
     onSearch,
     onSelectUser,
     onRefresh,
@@ -528,8 +568,9 @@ function MobileUsersView({
     billingFilter: BillingFilter;
     filtersOpen: boolean;
     activeFiltersCount: number;
+    canCreate: boolean;
     onSearch: (value: string) => void;
-    onSelectUser: (id: string) => void;
+    onSelectUser?: (id: string) => void;
     onRefresh: () => void;
     onCreate: () => void;
     onToggleFilters: () => void;
@@ -553,15 +594,17 @@ function MobileUsersView({
                             <span className="font-black text-[#101936]">{stats.total}</span> total
                         </p>
                     </div>
-                    <button
-                        type="button"
-                        onClick={onCreate}
-                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-white shadow-sm transition active:bg-[#f3f0ff]"
-                        aria-label="Crear usuario"
-                        title="Crear usuario"
-                    >
-                        <AppIcon name="plus" tone="purple" size="sm" className="h-[18px] w-[18px] bg-transparent text-[#7C3AED] ring-0" />
-                    </button>
+                    {canCreate ? (
+                        <button
+                            type="button"
+                            onClick={onCreate}
+                            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-white shadow-sm transition active:bg-[#f3f0ff]"
+                            aria-label="Crear usuario"
+                            title="Crear usuario"
+                        >
+                            <AppIcon name="plus" tone="purple" size="sm" className="h-[18px] w-[18px] bg-transparent text-[#7C3AED] ring-0" />
+                        </button>
+                    ) : null}
                     <button
                         type="button"
                         onClick={onRefresh}
@@ -628,7 +671,7 @@ function MobileUsersView({
                                 key={user.id}
                                 user={user}
                                 selected={selectedUserId === user.id}
-                                onSelect={() => onSelectUser(user.id)}
+                                onSelect={onSelectUser ? () => onSelectUser(user.id) : undefined}
                             />
                         ))
                     )}
@@ -739,7 +782,7 @@ function UsersTable({
     users: UserDoc[];
     loading: boolean;
     selectedUserId: string | null;
-    onSelectUser: (id: string) => void;
+    onSelectUser?: (id: string) => void;
 }) {
     return (
         <div className="border-t border-[#eef1f5]">
@@ -785,11 +828,11 @@ function UsersTable({
                                 return (
                                     <tr
                                         key={u.id}
-                                        onClick={() => onSelectUser(u.id)}
+                                        onClick={onSelectUser ? () => onSelectUser(u.id) : undefined}
                                         className={
                                             selected
-                                                ? "cursor-pointer border-b border-[#eef1f5] bg-[#eff6ff] last:border-0"
-                                                : "cursor-pointer border-b border-[#eef1f5] last:border-0 hover:bg-[#f9fafb]"
+                                                ? "border-b border-[#eef1f5] bg-[#eff6ff] last:border-0" + (onSelectUser ? " cursor-pointer" : "")
+                                                : "border-b border-[#eef1f5] last:border-0" + (onSelectUser ? " cursor-pointer hover:bg-[#f9fafb]" : "")
                                         }
                                     >
                                         <td className="px-3 py-2.5">
@@ -914,7 +957,7 @@ function UserMobileCard({
 }: {
     user: UserDoc;
     selected: boolean;
-    onSelect: () => void;
+    onSelect?: () => void;
 }) {
     const autoEnabled = user.autoAssignEnabled === true;
 
@@ -922,11 +965,12 @@ function UserMobileCard({
         <button
             type="button"
             onClick={onSelect}
+            disabled={!onSelect}
             className={[
                 "block w-full max-w-full overflow-hidden rounded-[16px] border text-left transition",
                 selected
                     ? "border-violet-200 bg-violet-50"
-                    : "border-[#E8E7FB] bg-white shadow-[0_2px_12px_rgba(91,33,255,0.05)] active:bg-[#f3f0ff]",
+                    : "border-[#E8E7FB] bg-white shadow-[0_2px_12px_rgba(91,33,255,0.05)]" + (onSelect ? " active:bg-[#f3f0ff]" : ""),
             ].join(" ")}
         >
             <div className="p-3">
@@ -1097,6 +1141,7 @@ function EditUserModal({
     user,
     open,
     savingId,
+    adminUsers,
     onClose,
     onSaving,
     onPatch,
@@ -1105,6 +1150,7 @@ function EditUserModal({
     user: UserDoc | null;
     open: boolean;
     savingId: string | null;
+    adminUsers: UserDoc[];
     onClose: () => void;
     onSaving: (id: string | null) => void;
     onPatch: (userId: string, patch: Partial<UserDoc>) => Promise<void>;
@@ -1130,6 +1176,10 @@ function EditUserModal({
     const [coverageCity, setCoverageCity] = useState("");
     const [applyToCurrentWeek, setApplyToCurrentWeek] = useState(false);
     const [weekVisitCount, setWeekVisitCount] = useState<number | null>(null);
+    const [permissions, setPermissions] = useState<AdminPermissions>(() => defaultAdminPermissions());
+    const [sharedWith, setSharedWith] = useState<UserSharedAdmin[]>([]);
+    const [sharedAdminId, setSharedAdminId] = useState("");
+    const [sharedPercent, setSharedPercent] = useState("50");
 
     useEffect(() => {
         if (!user) return;
@@ -1157,6 +1207,10 @@ function EditUserModal({
             setCoverageCity("");
             setApplyToCurrentWeek(false);
             setWeekVisitCount(null);
+            setPermissions(user.permissions ?? defaultAdminPermissions());
+            setSharedWith(Array.isArray(user.sharedWith) ? user.sharedWith : []);
+            setSharedAdminId("");
+            setSharedPercent("50");
         });
     }, [user]);
 
@@ -1232,6 +1286,16 @@ function EditUserModal({
                 await batchUpdateWeekEventRates(user.id, startKey, endKey, safeNumber(ratePerVisit, 0));
             }
 
+            if (role === "admin" && !user.isSuperAdmin) {
+                await updateUserPermissions(user.id, permissions);
+                patch.permissions = permissions;
+            }
+
+            if (role === "user") {
+                await updateUserSharedWith(user.id, sharedWith);
+                patch.sharedWith = sharedWith;
+            }
+
             await onPatch(user.id, patch);
             onClose();
         } catch (e: unknown) {
@@ -1255,6 +1319,12 @@ function EditUserModal({
                     <MiniTab icon="shield" active={activeTab === "role"} onClick={() => setActiveTab("role")}>Rol</MiniTab>
                     <MiniTab icon="bot" active={activeTab === "autoAssign"} onClick={() => setActiveTab("autoAssign")}>Auto</MiniTab>
                     <MiniTab icon="wallet" active={activeTab === "billing"} onClick={() => setActiveTab("billing")}>Contabilidad</MiniTab>
+                    {role === "admin" && !user.isSuperAdmin ? (
+                        <MiniTab icon="shield" active={activeTab === "permissions"} onClick={() => setActiveTab("permissions")}>Permisos</MiniTab>
+                    ) : null}
+                    {role === "user" ? (
+                        <MiniTab icon="link" active={activeTab === "shared"} onClick={() => setActiveTab("shared")}>Socios</MiniTab>
+                    ) : null}
                 </div>
 
                 {activeTab === "profile" ? (
@@ -1435,6 +1505,166 @@ function EditUserModal({
                     </EditorBlock>
                 ) : null}
 
+                {activeTab === "permissions" && role === "admin" && !user.isSuperAdmin ? (
+                    <EditorBlock title="Permisos del administrador">
+                        <p className="text-[11px] font-semibold text-[#667085]">
+                            Define qué secciones y acciones puede realizar este administrador.
+                        </p>
+
+                        <div className="space-y-4">
+                            <div>
+                                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.06em] text-[#98A2B3]">Prospectos</p>
+                                <div className="space-y-1.5">
+                                    {([
+                                        { key: "leads", label: "Ver Prospectos, Actividad y Asignaciones" },
+                                        { key: "leadsAssign", label: "Asignar por cobertura y reasignar" },
+                                        { key: "leadsWhatsapp", label: "Abrir WhatsApp de clientes" },
+                                        { key: "leadsEdit", label: "Editar prospectos" },
+                                        { key: "leadsDelete", label: "Eliminar prospectos" },
+                                    ] as { key: keyof AdminPermissions; label: string }[]).map(({ key, label }) => (
+                                        <PermissionToggle
+                                            key={key}
+                                            label={label}
+                                            value={permissions[key]}
+                                            onChange={(val) => setPermissions((prev) => ({ ...prev, [key]: val }))}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div>
+                                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.06em] text-[#98A2B3]">Contabilidad</p>
+                                <div className="space-y-1.5">
+                                    {([
+                                        { key: "accountingView", label: "Ver su propia contabilidad" },
+                                        { key: "accountingInvestmentView", label: "Ver configuración de inversión" },
+                                        { key: "accountingInvestmentEdit", label: "Editar configuración de inversión" },
+                                    ] as { key: keyof AdminPermissions; label: string }[]).map(({ key, label }) => (
+                                        <PermissionToggle
+                                            key={key}
+                                            label={label}
+                                            value={permissions[key]}
+                                            onChange={(val) => setPermissions((prev) => ({ ...prev, [key]: val }))}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div>
+                                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.06em] text-[#98A2B3]">Usuarios</p>
+                                <div className="space-y-1.5">
+                                    {([
+                                        { key: "usersView", label: "Ver usuarios asignados" },
+                                        { key: "usersCreate", label: "Crear nuevos usuarios" },
+                                        { key: "usersEdit", label: "Editar y desactivar usuarios" },
+                                    ] as { key: keyof AdminPermissions; label: string }[]).map(({ key, label }) => (
+                                        <PermissionToggle
+                                            key={key}
+                                            label={label}
+                                            value={permissions[key]}
+                                            onChange={(val) => setPermissions((prev) => ({ ...prev, [key]: val }))}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setPermissions(fullAdminPermissions())}
+                                className="flex-1 rounded-lg border border-emerald-200 bg-emerald-50 py-2 text-[12px] font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                            >
+                                Activar todo
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setPermissions(defaultAdminPermissions())}
+                                className="flex-1 rounded-lg border border-red-200 bg-red-50 py-2 text-[12px] font-semibold text-red-600 transition hover:bg-red-100"
+                            >
+                                Revocar todo
+                            </button>
+                        </div>
+                    </EditorBlock>
+                ) : null}
+
+                {activeTab === "shared" && role === "user" ? (
+                    <EditorBlock title="Socios administradores">
+                        <p className="text-[11px] font-semibold text-[#667085]">
+                            Los admins socios reciben el porcentaje indicado de la ganancia de este vendedor.
+                        </p>
+
+                        <div className="space-y-1.5">
+                            {sharedWith.length === 0 ? (
+                                <div className="rounded-lg border border-dashed border-[#d4d4d8] bg-white px-3 py-4 text-center text-[12px] font-semibold text-[#71717a]">
+                                    Sin socios configurados.
+                                </div>
+                            ) : (
+                                sharedWith.map((entry) => (
+                                    <div key={entry.adminId} className="flex items-center justify-between gap-3 rounded-lg border border-[#e5e7eb] bg-white px-3 py-2">
+                                        <div className="min-w-0">
+                                            <div className="truncate text-[12px] font-semibold text-[#171717]">{entry.adminName}</div>
+                                            <div className="text-[11px] font-medium text-[#9ca3af]">{entry.percentage}% de ganancia</div>
+                                        </div>
+                                        <IconButton
+                                            icon="trash"
+                                            label="Quitar socio"
+                                            variant="danger"
+                                            onClick={() => setSharedWith((prev) => prev.filter((e) => e.adminId !== entry.adminId))}
+                                        />
+                                    </div>
+                                ))
+                            )}
+                        </div>
+
+                        <div className="rounded-xl border border-[#e4e7ec] bg-[#f9fafb] p-3">
+                            <p className="mb-2 text-[11px] font-bold text-[#667085]">Agregar socio</p>
+                            <div className="flex gap-2">
+                                <select
+                                    value={sharedAdminId}
+                                    onChange={(e) => setSharedAdminId(e.target.value)}
+                                    className="h-9 min-w-0 flex-1 rounded-lg border border-[#e5e7eb] bg-white px-3 text-[12px] font-semibold text-[#52525b] outline-none"
+                                >
+                                    <option value="">Seleccionar admin...</option>
+                                    {adminUsers
+                                        .filter((a) => !sharedWith.some((s) => s.adminId === a.id))
+                                        .map((a) => (
+                                            <option key={a.id} value={a.id}>{a.name || a.email || a.id}</option>
+                                        ))}
+                                </select>
+                                <input
+                                    value={sharedPercent}
+                                    onChange={(e) => setSharedPercent(onlyNumberLike(e.target.value))}
+                                    placeholder="%"
+                                    className="h-9 w-16 rounded-lg border border-[#e5e7eb] bg-white px-3 text-[12px] font-semibold text-[#52525b] outline-none"
+                                />
+                                <IconButton
+                                    icon="plus"
+                                    label="Agregar socio"
+                                    onClick={() => {
+                                        const admin = adminUsers.find((a) => a.id === sharedAdminId);
+                                        if (!admin) { onError("Selecciona un admin."); return; }
+                                        const pct = Math.min(100, Math.max(0, safeNumber(sharedPercent, 0)));
+                                        setSharedWith((prev) => [
+                                            ...prev.filter((e) => e.adminId !== admin.id),
+                                            { adminId: admin.id, adminName: admin.name || admin.email || admin.id, percentage: pct },
+                                        ]);
+                                        setSharedAdminId("");
+                                        setSharedPercent("50");
+                                        onError(null);
+                                    }}
+                                />
+                            </div>
+                        </div>
+
+                        {sharedWith.length > 0 ? (
+                            <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-[12px] font-semibold text-blue-600">
+                                Total asignado: {sharedWith.reduce((sum, e) => sum + e.percentage, 0)}%
+                            </div>
+                        ) : null}
+                    </EditorBlock>
+                ) : null}
+
                 <div className="flex flex-col-reverse gap-2 border-t border-[#f0f1f2] pt-4 sm:flex-row sm:justify-end">
                     <Button
                         variant={active ? "danger" : "ghost"}
@@ -1612,6 +1842,28 @@ function Choice({
         >
             {label}
         </button>
+    );
+}
+
+function PermissionToggle({
+    label,
+    value,
+    onChange,
+}: {
+    label: string;
+    value: boolean;
+    onChange: (v: boolean) => void;
+}) {
+    return (
+        <label className="flex cursor-pointer items-center justify-between rounded-lg border border-[#e5e7eb] bg-white px-3 py-2">
+            <span className="text-[12px] font-semibold text-[#52525b]">{label}</span>
+            <input
+                type="checkbox"
+                checked={value}
+                onChange={(e) => onChange(e.target.checked)}
+                className="h-4 w-4 accent-violet-600"
+            />
+        </label>
     );
 }
 

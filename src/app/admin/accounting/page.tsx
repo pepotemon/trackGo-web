@@ -18,6 +18,7 @@ import {
 } from "@/data/accountingRepo";
 import { buildAccountingSummary } from "@/features/accounting/calcAccounting";
 import { useAuth } from "@/features/auth/AuthProvider";
+import { useCan } from "@/features/auth/usePermissions";
 import type {
     AccountingSummary,
     AccountingAssignmentDoc,
@@ -264,7 +265,9 @@ function exportAccountingSheet(summary: AccountingSummary) {
 }
 
 export default function AccountingPage() {
-    const { firebaseUser } = useAuth();
+    const { firebaseUser, profile, isSuperAdmin } = useAuth();
+    const canInvestmentView = useCan("accountingInvestmentView");
+    const canInvestmentEdit = useCan("accountingInvestmentEdit");
     const [activeTab, setActiveTab] = useState<AccountingTab>("overview");
     const [weekOffset, setWeekOffset] = useState(0);
     const [refreshNonce, setRefreshNonce] = useState(0);
@@ -345,16 +348,31 @@ export default function AccountingPage() {
         };
     }, [week.startKey, week.endKey, week.startDate, week.endDate, weekOffset, refreshNonce]);
 
+    const myUsers = useMemo(() => {
+        if (isSuperAdmin || !profile) return users;
+        return users.filter((u) => u.sharedWith?.some((s) => s.adminId === profile.id));
+    }, [users, isSuperAdmin, profile]);
+
     const summary: AccountingSummary | null = useMemo(() => {
         return buildAccountingSummary({
             startKey: week.startKey,
             endKey: week.endKey,
-            users,
+            users: myUsers,
             events,
             assignments,
             investment,
         });
-    }, [week.startKey, week.endKey, users, events, assignments, investment]);
+    }, [week.startKey, week.endKey, myUsers, events, assignments, investment]);
+
+    const miGanancia = useMemo(() => {
+        if (isSuperAdmin || !profile || !summary) return null;
+        return summary.rows.reduce((acc, row) => {
+            const user = myUsers.find((u) => u.id === row.userId);
+            const share = user?.sharedWith?.find((s) => s.adminId === profile.id);
+            if (!share) return acc;
+            return acc + (row.real * share.percentage / 100);
+        }, 0);
+    }, [summary, myUsers, isSuperAdmin, profile]);
 
     const weekStatus = investment?.status ?? "draft";
     const isClosed = weekStatus === "closed";
@@ -468,7 +486,7 @@ export default function AccountingPage() {
                     week={week}
                     weekOffset={weekOffset}
                     setWeekOffset={setWeekOffset}
-                    usersCount={users.length}
+                    usersCount={myUsers.length}
                     eventsCount={events.length}
                     loading={loading}
                     summary={summary}
@@ -476,7 +494,7 @@ export default function AccountingPage() {
                     assignments={assignments}
                     startDate={week.startDate}
                     endDate={week.endDate}
-                    users={users}
+                    users={myUsers}
                     investment={investment}
                     investmentGroups={investmentGroups}
                     weekStatus={weekStatus}
@@ -491,6 +509,7 @@ export default function AccountingPage() {
                     onInvestmentSaved={setInvestment}
                     onGroupsSaved={setInvestmentGroups}
                     onError={setErr}
+                    miGanancia={miGanancia}
                 />
             </div>
 
@@ -518,12 +537,14 @@ export default function AccountingPage() {
                                         onClick={() => exportAccountingSheet(summary)}
                                     />
                                 ) : null}
-                                <IconButton
-                                    icon="wallet"
-                                    label="Configurar inversion"
-                                    variant="primary"
-                                    onClick={() => setActiveTab("investment")}
-                                />
+                                {canInvestmentView ? (
+                                    <IconButton
+                                        icon="wallet"
+                                        label="Configurar inversion"
+                                        variant="primary"
+                                        onClick={() => setActiveTab("investment")}
+                                    />
+                                ) : null}
                                 {isClosed ? (
                                     <IconButton
                                         icon="unlock"
@@ -579,7 +600,7 @@ export default function AccountingPage() {
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-                        <CounterPill icon="users" label={`${users.length} usuarios`} />
+                        <CounterPill icon="users" label={`${myUsers.length} usuarios`} />
                         <CounterPill icon="activity" label={`${events.length} eventos`} />
                     </div>
                 </section>
@@ -603,7 +624,7 @@ export default function AccountingPage() {
                             />
                         ) : null}
 
-                        {activeTab === "overview" ? (
+                        {activeTab === "overview" || !canInvestmentView ? (
                             <DashboardContent
                                 summary={summary}
                                 events={events}
@@ -613,16 +634,17 @@ export default function AccountingPage() {
                                 isClosed={isClosed}
                                 onToggleSubscriptionPayment={toggleSubscriptionPayment}
                                 onPatchEvents={handlePatchEvents}
+                                miGanancia={miGanancia}
                             />
                         ) : (
                             <InvestmentContent
                                 weekStartKey={week.startKey}
                                 weekEndKey={week.endKey}
-                                users={users}
+                                users={myUsers}
                                 investment={investment}
                                 investmentGroups={investmentGroups}
                                 useCatalogDefaults={weekOffset === 0}
-                                isClosed={isClosed}
+                                isClosed={isClosed || !canInvestmentEdit}
                                 onSaved={(next) => {
                                     setInvestment(next);
                                 }}
@@ -728,6 +750,7 @@ function MobileAccountingPage({
     onInvestmentSaved,
     onGroupsSaved,
     onError,
+    miGanancia,
 }: {
     week: ReturnType<typeof weekRangeKeysMonToSun>;
     weekOffset: number;
@@ -755,11 +778,26 @@ function MobileAccountingPage({
     onInvestmentSaved: (investment: WeeklyInvestmentDoc) => void;
     onGroupsSaved: (groups: InvestmentGroupDoc[]) => void;
     onError: (msg: string | null) => void;
+    miGanancia?: number | null;
 }) {
+    const canInvestmentView = useCan("accountingInvestmentView");
+    const canInvestmentEdit = useCan("accountingInvestmentEdit");
     const [chartMetric, setChartMetric] = useState<AccountingMetric>("real");
     const [chartMode, setChartMode] = useState<ChartMode>("trend");
     const [rankingMetric, setRankingMetric] = useState<AccountingMetric>("real");
     const [usersOpen, setUsersOpen] = useState(false);
+    const [eventsTooltipOpen, setEventsTooltipOpen] = useState(false);
+    const [confirmExportOpen, setConfirmExportOpen] = useState(false);
+
+    useEffect(() => {
+        if (activeTab !== "investment") return;
+        window.history.pushState({ investmentTab: true }, "");
+        const handler = (e: PopStateEvent) => {
+            if (!e.state?.investmentTab) setActiveTab("overview");
+        };
+        window.addEventListener("popstate", handler);
+        return () => window.removeEventListener("popstate", handler);
+    }, [activeTab, setActiveTab]);
 
     const real = summary?.real ?? 0;
     const gross = summary?.gross ?? 0;
@@ -814,15 +852,17 @@ function MobileAccountingPage({
                     </div>
 
                     {onExport ? (
-                        <MobileAccountingIconButton icon="download" label="Exportar" onClick={onExport} />
+                        <MobileAccountingIconButton icon="download" label="Exportar" onClick={() => setConfirmExportOpen(true)} />
                     ) : null}
 
-                    <MobileAccountingIconButton
-                        icon="wallet"
-                        label="Inversión"
-                        active={activeTab === "investment"}
-                        onClick={() => setActiveTab(activeTab === "investment" ? "overview" : "investment")}
-                    />
+                    {canInvestmentView ? (
+                        <MobileAccountingIconButton
+                            icon="wallet"
+                            label="Inversión"
+                            active={activeTab === "investment"}
+                            onClick={() => setActiveTab(activeTab === "investment" ? "overview" : "investment")}
+                        />
+                    ) : null}
 
                     <MobileAccountingIconButton
                         icon={isClosed ? "unlock" : "lock"}
@@ -881,7 +921,31 @@ function MobileAccountingPage({
                 {/* QUICK PILLS */}
                 <div className="mt-2 flex gap-2">
                     <MobileAccountingPill icon="users" label={`${usersCount} usuarios`} />
-                    <MobileAccountingPill icon="activity" label={`${eventsCount} eventos`} />
+                    <div className="relative">
+                        <button
+                            type="button"
+                            onClick={() => setEventsTooltipOpen((v) => !v)}
+                            className="focus:outline-none"
+                        >
+                            <MobileAccountingPill icon="activity" label={`${eventsCount} eventos`} />
+                        </button>
+                        {eventsTooltipOpen ? (
+                            <>
+                                <button
+                                    type="button"
+                                    className="fixed inset-0 z-30"
+                                    aria-label="Cerrar"
+                                    onClick={() => setEventsTooltipOpen(false)}
+                                />
+                                <div className="absolute left-0 top-full z-40 mt-2 w-64 rounded-[14px] border border-[#E8E7FB] bg-white p-3 shadow-[0_8px_30px_rgba(91,33,255,0.12)]">
+                                    <p className="text-[12px] font-bold text-[#101936]">¿Qué son los eventos?</p>
+                                    <p className="mt-1 text-[11px] font-medium leading-relaxed text-[#66739A]">
+                                        Conteo de acciones registradas por los usuarios: <span className="font-bold text-emerald-600">Visitado</span>, <span className="font-bold text-red-500">Rechazado</span> y <span className="font-bold text-amber-600">Pendiente</span>. Cada vez que un usuario marca un prospecto con uno de estos estados, se genera un evento.
+                                    </p>
+                                </div>
+                            </>
+                        ) : null}
+                    </div>
                 </div>
             </div>
 
@@ -896,19 +960,18 @@ function MobileAccountingPage({
                         </div>
                         <p className="text-[13px] font-semibold text-[#66739A]">Cargando contabilidad</p>
                     </div>
-                ) : activeTab === "investment" ? (
+                ) : activeTab === "investment" && canInvestmentView ? (
                     <div className="rounded-[16px] border border-[#E8E7FB] bg-white shadow-[0_4px_18px_rgba(91,33,255,0.07)]">
                         <div className="flex items-center justify-between border-b border-[#E8E7FB] px-3 py-3">
                             <div>
                                 <div className="text-[13px] font-black text-[#101936]">Configuración de inversión</div>
-                                <div className="mt-0.5 text-[11px] font-semibold text-[#66739A]">{week.startKey} · {week.endKey}</div>
                             </div>
                             <button
                                 type="button"
                                 onClick={() => setActiveTab("overview")}
                                 className="rounded-[10px] border border-[#E8E7FB] bg-white px-3 py-1.5 text-[11px] font-bold text-[#66739A] transition active:bg-[#f3f0ff]"
                             >
-                                ← Resumen
+                                ← Volver
                             </button>
                         </div>
                         <div className="p-3">
@@ -919,7 +982,7 @@ function MobileAccountingPage({
                                 investment={investment}
                                 investmentGroups={investmentGroups}
                                 useCatalogDefaults={weekOffset === 0}
-                                isClosed={isClosed}
+                                isClosed={isClosed || !canInvestmentEdit}
                                 onSaved={onInvestmentSaved}
                                 onGroupsSaved={onGroupsSaved}
                                 onError={onError}
@@ -948,24 +1011,16 @@ function MobileAccountingPage({
 
                         {/* WEEKLY RESULT BREAKDOWN */}
                         <div className="mb-3 rounded-[16px] border border-[#E8E7FB] bg-white p-3 shadow-[0_4px_18px_rgba(91,33,255,0.07)]">
-                            <div className="mb-3 flex items-center justify-between gap-2">
-                                <div>
-                                    <div className="text-[13px] font-black text-[#101936]">Resultado semanal</div>
-                                    <div className="mt-0.5 text-[11px] font-semibold text-[#66739A]">Bruta menos inversión</div>
-                                </div>
-                                <div className={[
-                                    "rounded-full border px-3 py-1.5 text-[11px] font-black",
-                                    real >= 0
-                                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                        : "border-red-200 bg-red-50 text-red-600",
-                                ].join(" ")}>
-                                    {money(real)}
-                                </div>
+                            <div className="mb-3">
+                                <div className="text-[13px] font-black text-[#101936]">Resultado semanal</div>
+                                <div className="mt-0.5 text-[11px] font-semibold text-[#66739A]">Bruta menos inversión</div>
                             </div>
-                            <div className="mb-3 grid grid-cols-3 gap-2">
-                                <MobileTinyMetric label="Bruta" value={money(gross)} tone="green" />
+                            <div className={`mb-3 grid gap-2 ${miGanancia != null ? "grid-cols-3" : "grid-cols-2"}`}>
                                 <MobileTinyMetric label="Inversión" value={money(investmentValue)} tone="amber" />
-                                <MobileTinyMetric label="Real" value={money(real)} tone={real >= 0 ? "green" : "red"} />
+                                <MobileTinyMetric label="Real total" value={money(real)} tone={real >= 0 ? "green" : "red"} />
+                                {miGanancia != null ? (
+                                    <MobileTinyMetric label="Mi ganancia" value={money(miGanancia)} tone={miGanancia >= 0 ? "green" : "red"} />
+                                ) : null}
                             </div>
 
                             {/* CHART CONTROLS */}
@@ -1093,6 +1148,35 @@ function MobileAccountingPage({
                     </>
                 )}
             </div>
+
+            {confirmExportOpen ? (
+                <div className="fixed inset-0 z-50 flex items-end justify-center bg-[#101936]/30 backdrop-blur-sm">
+                    <div className="w-full max-w-lg rounded-t-3xl bg-white px-5 pb-8 pt-5 shadow-[0_-8px_40px_rgba(0,0,0,0.18)]">
+                        <div className="mx-auto mb-4 h-1 w-12 rounded-full bg-[#E8E7FB]" />
+                        <h3 className="text-[16px] font-black text-[#101936]">Descargar Excel</h3>
+                        <p className="mt-1 text-[13px] font-medium text-[#66739A]">
+                            Se descargará el resumen de contabilidad de esta semana como archivo Excel.
+                        </p>
+                        <div className="mt-4 grid gap-2">
+                            <button
+                                type="button"
+                                onClick={() => { setConfirmExportOpen(false); onExport?.(); }}
+                                className="flex min-h-[52px] items-center justify-center gap-2 rounded-[14px] bg-[#7C3AED] text-[14px] font-bold text-white transition active:bg-violet-700"
+                            >
+                                <MobileAccountingIcon name="download" />
+                                Descargar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setConfirmExportOpen(false)}
+                                className="min-h-[48px] rounded-[14px] border border-[#E8E7FB] bg-[#f8f7ff] text-[14px] font-bold text-[#66739A] transition active:bg-[#f3f0ff]"
+                            >
+                                Cancelar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
         </div>
     );
 }
@@ -1276,10 +1360,10 @@ function MobileAccountingUserRow({
                     {money(row.real)}
                 </div>
             </div>
-            <div className="mt-2 grid grid-cols-3 gap-1.5">
-                <MobileTinyMetric label="Asig." value={String(row.assigned)} tone="amber" />
-                <MobileTinyMetric label="Vis." value={String(row.visited)} tone="green" />
-                <MobileTinyMetric label="Rech." value={String(row.rejected)} tone="red" />
+            <div className="mt-1.5 flex gap-3">
+                <span className="text-[11px] font-semibold text-[#98A2B3]">Asig. <span className="font-black text-amber-600">{row.assigned}</span></span>
+                <span className="text-[11px] font-semibold text-[#98A2B3]">Vis. <span className="font-black text-emerald-600">{row.visited}</span></span>
+                <span className="text-[11px] font-semibold text-[#98A2B3]">Rech. <span className="font-black text-red-500">{row.rejected}</span></span>
             </div>
         </div>
     );
@@ -1645,7 +1729,7 @@ function InvestmentContent({
                 </div>
             </Card>
 
-            <Card className="overflow-hidden">
+            <Card>
                 <CardHeader
                     title="Grupos de inversion"
                     subtitle="Cada grupo se configura y se activa de forma individual."
@@ -1753,20 +1837,14 @@ function InvestmentContent({
                         />
                     </Field>
 
-                    <div className="flex flex-col-reverse gap-2 border-t border-[#eef1f5] pt-4 sm:flex-row sm:justify-end">
-                        <IconButton
-                            icon="close"
-                            label="Cancelar"
-                            onClick={() => setBudgetOpen(false)}
-                            disabled={saving}
-                        />
-                        <IconButton
-                            icon="check"
-                            label={saving ? "Guardando" : "Guardar ajuste"}
+                    <div className="flex justify-end gap-2 border-t border-[#eef1f5] pt-4">
+                        <Button
                             variant="primary"
                             onClick={saveBudget}
                             disabled={saving || isClosed}
-                        />
+                        >
+                            {saving ? "Guardando..." : "Guardar ajuste"}
+                        </Button>
                     </div>
                 </div>
             </Modal>
@@ -1788,27 +1866,24 @@ function InvestmentContent({
                             users={users}
                             onChange={updateGroupDraft}
                             onToggleUser={toggleDraftUser}
-                            onRemove={() => updateGroupDraft({ active: false })}
                         />
                     ) : null}
 
-                    <div className="flex flex-col-reverse gap-2 border-t border-[#eef1f5] pt-4 sm:flex-row sm:justify-end">
-                        <IconButton
-                            icon="close"
-                            label="Cancelar"
-                            onClick={() => {
-                                setGroupOpen(false);
-                                setGroupDraft(null);
-                            }}
+                    <div className="flex justify-end gap-2 border-t border-[#eef1f5] pt-4">
+                        <Button
+                            variant="secondary"
+                            onClick={() => updateGroupDraft({ active: !groupDraft?.active })}
                             disabled={saving}
-                        />
-                        <IconButton
-                            icon="check"
-                            label={saving ? "Guardando" : "Guardar grupo"}
+                        >
+                            {groupDraft?.active ? "Desactivar" : "Activar"}
+                        </Button>
+                        <Button
                             variant="primary"
                             onClick={saveGroup}
                             disabled={saving || !groupDraft || isClosed}
-                        />
+                        >
+                            {saving ? "Guardando..." : "Guardar grupo"}
+                        </Button>
                     </div>
                 </div>
             </Modal>
@@ -1837,20 +1912,14 @@ function InvestmentContent({
                         </div>
                     ) : null}
 
-                    <div className="flex flex-col-reverse gap-2 border-t border-[#eef1f5] pt-4 sm:flex-row sm:justify-end">
-                        <IconButton
-                            icon="close"
-                            label="Cancelar"
-                            onClick={() => setDeleteDraft(null)}
-                            disabled={saving}
-                        />
-                        <IconButton
-                            icon="trash"
-                            label={saving ? "Eliminando" : "Eliminar grupo"}
+                    <div className="flex justify-end gap-2 border-t border-[#eef1f5] pt-4">
+                        <Button
                             variant="danger"
                             onClick={confirmDeleteGroup}
                             disabled={saving || isClosed}
-                        />
+                        >
+                            {saving ? "Eliminando..." : "Eliminar grupo"}
+                        </Button>
                     </div>
                 </div>
             </Modal>
@@ -2140,35 +2209,25 @@ function InvestmentGroupCard({
     users,
     onChange,
     onToggleUser,
-    onRemove,
 }: {
     index: number;
     group: GroupDraft;
     users: UserDoc[];
     onChange: (patch: Partial<GroupDraft>) => void;
     onToggleUser: (userId: string) => void;
-    onRemove: () => void;
 }) {
     const selectedUsers = users.filter((user) => group.userIds.includes(user.id));
     const availableUsers = users.filter((user) => !group.userIds.includes(user.id));
 
     return (
         <div className="rounded-lg border border-[#e4e7ec] bg-white">
-            <div className="flex items-center justify-between gap-3 border-b border-[#eef1f5] px-3 py-3">
-                <div>
-                    <div className="text-[12px] font-semibold text-[#172033]">
-                        Grupo {index + 1}
-                    </div>
-                    <div className="mt-0.5 text-[11px] font-medium text-[#98a2b3]">
-                        {group.userIds.length} usuarios seleccionados
-                    </div>
+            <div className="border-b border-[#eef1f5] px-3 py-3">
+                <div className="text-[12px] font-semibold text-[#172033]">
+                    Grupo {index + 1}
                 </div>
-                <IconButton
-                    icon="pause"
-                    label="Pausar grupo"
-                    variant="danger"
-                    onClick={onRemove}
-                />
+                <div className="mt-0.5 text-[11px] font-medium text-[#98a2b3]">
+                    {group.userIds.length} usuarios seleccionados
+                </div>
             </div>
 
             <div className="space-y-3 p-3">
@@ -2403,6 +2462,7 @@ function DashboardContent({
     isClosed,
     onToggleSubscriptionPayment,
     onPatchEvents,
+    miGanancia,
 }: {
     summary: AccountingSummary;
     events: DailyEventDoc[];
@@ -2412,6 +2472,7 @@ function DashboardContent({
     isClosed: boolean;
     onToggleSubscriptionPayment: (row: AccountingSummary["rows"][number]) => void;
     onPatchEvents: (patches: { id: string; rateApplied: number; amount: number }[]) => void;
+    miGanancia?: number | null;
 }) {
     const [rankingMetric, setRankingMetric] = useState<AccountingMetric>("real");
     const [chartMetric, setChartMetric] = useState<AccountingMetric>("real");
@@ -2483,7 +2544,7 @@ function DashboardContent({
                     />
 
                     <div className="border-t border-[#eef1f5] p-3 sm:p-5">
-                        <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                        <div className={`grid gap-2 sm:gap-4 ${miGanancia != null ? "grid-cols-4" : "grid-cols-3"}`}>
                             <Metric label="Ganancia bruta" value={money(summary.gross)} delta="+ semana" tone="green" />
                             <Metric
                                 label="Inversion"
@@ -2497,6 +2558,14 @@ function DashboardContent({
                                 delta={`ROI ${formatPercent(summary.roi)}`}
                                 tone={summary.real >= 0 ? "green" : "red"}
                             />
+                            {miGanancia != null ? (
+                                <Metric
+                                    label="Mi ganancia"
+                                    value={money(miGanancia)}
+                                    delta="Tu parte del resultado"
+                                    tone={miGanancia >= 0 ? "green" : "red"}
+                                />
+                            ) : null}
                         </div>
 
                         <AccountingChart

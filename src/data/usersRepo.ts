@@ -10,7 +10,7 @@ import {
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "@/lib/firebase";
-import type { UserBillingMode, UserDoc, UserGeoCoverage, UserGeoCoverageType, UserRole } from "@/types/users";
+import type { AdminPermissions, UserBillingMode, UserDoc, UserGeoCoverage, UserGeoCoverageType, UserRole, UserSharedAdmin } from "@/types/users";
 
 function safeNumber(value: unknown, fallback = 0) {
     const n = Number(value);
@@ -236,6 +236,20 @@ export async function updateUserAutoAssign(
     await updateDoc(doc(db, "users", userId), {
         autoAssignEnabled: enabled,
         autoAssignDailyLimit: dailyLimit,
+        updatedAt: Date.now(),
+    });
+}
+
+export async function updateUserPermissions(userId: string, permissions: AdminPermissions) {
+    await updateDoc(doc(db, "users", userId), {
+        permissions,
+        updatedAt: Date.now(),
+    });
+}
+
+export async function updateUserSharedWith(userId: string, sharedWith: UserSharedAdmin[]) {
+    await updateDoc(doc(db, "users", userId), {
+        sharedWith,
         updatedAt: Date.now(),
     });
 }

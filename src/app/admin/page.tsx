@@ -160,7 +160,7 @@ export default function AdminDashboardPage() {
                 icon={<AppIcon name="activity" tone="purple" size="sm" className="bg-transparent text-white ring-0" />}
                 actions={
                     <div className="grid w-full grid-cols-[1fr_1fr_1fr_44px] gap-2 sm:w-auto sm:flex sm:flex-wrap sm:justify-end">
-                        <QuickLink href="/admin/leads" icon="lead">Leads</QuickLink>
+                        <QuickLink href="/admin/leads" icon="lead">Prospectos</QuickLink>
                         <QuickLink href="/admin/leads/assignments" icon="assign">Asign.</QuickLink>
                         <QuickLink href="/admin/settings/users" icon="users">Usuarios</QuickLink>
                         <Button
@@ -184,7 +184,7 @@ export default function AdminDashboardPage() {
             ) : null}
 
             <section className="mb-3 grid grid-cols-2 gap-2 md:gap-4 xl:mb-4 xl:grid-cols-4">
-                <KpiCard label="Cola activa" value={snapshot.stats.queueTotal} caption="Leads Meta sin asignar" icon="users" tone="blue" />
+                <KpiCard label="Cola activa" value={snapshot.stats.queueTotal} caption="Sin asignar" icon="users" tone="blue" />
                 <KpiCard label="Por revisar" value={snapshot.stats.pendingReview} caption="Listos para validar" icon="lead" tone="purple" />
                 <KpiCard label="Asignaciones hoy" value={snapshot.stats.autoAssignmentsToday} caption="Auto-asignacion" icon="assign" tone="green" />
                 <KpiCard label="Usuarios activos" value={snapshot.stats.activeUsers} caption={`${snapshot.stats.autoAssignUsers} con auto ON`} icon="check" tone="orange" />
@@ -194,7 +194,7 @@ export default function AdminDashboardPage() {
                 <Card className="overflow-hidden">
                     <PanelHeader
                         title="Actividad reciente"
-                        caption={`${snapshot.recentLeads.length} leads recientes cargados`}
+                        caption={`${snapshot.recentLeads.length} prospectos recientes`}
                         href="/admin/leads"
                     />
                     <div className="divide-y divide-white/[0.08] xl:divide-[#f0f1f2]">
@@ -213,7 +213,7 @@ export default function AdminDashboardPage() {
                 <Card className="overflow-hidden">
                     <PanelHeader
                         title="Por revisar"
-                        caption={`${pendingReviewLeads.length} leads listos para validar`}
+                        caption={`${pendingReviewLeads.length} prospectos listos para validar`}
                         href="/admin/leads"
                     />
                     <div className="divide-y divide-white/[0.08] xl:divide-[#f0f1f2]">

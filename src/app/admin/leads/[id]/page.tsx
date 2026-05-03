@@ -233,7 +233,7 @@ export default function LeadChatPage() {
         <div className="mx-auto w-full max-w-[1220px]">
 
             {/* ====================== MOBILE LAYOUT (xl:hidden) ====================== */}
-            <div className="xl:hidden -mx-3 -mt-4 flex h-[calc(100dvh-6rem)] flex-col bg-white">
+            <div className="xl:hidden -mx-3 -mt-4 flex h-dvh flex-col bg-white">
 
                 {/* STICKY HEADER — pressable for quick actions */}
                 <div className="shrink-0 border-b border-[#E8E7FB] bg-white">
@@ -241,7 +241,7 @@ export default function LeadChatPage() {
                         <Link
                             href="/admin/leads"
                             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] transition active:bg-[#f3f0ff]"
-                            aria-label="Volver a leads"
+                            aria-label="Volver"
                         >
                             <AppIcon name="arrowLeft" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#101936] ring-0" />
                         </Link>
@@ -394,7 +394,7 @@ export default function LeadChatPage() {
                                     onClick={() => setQuickActionsOpen(false)}
                                 >
                                     <AppIcon name="users" tone="purple" size="sm" className="h-6 w-6 bg-transparent text-[#7C3AED] ring-0" />
-                                    <span className="text-[10px] font-black text-[#66739A]">Perfil</span>
+                                    <span className="text-[10px] font-black text-[#66739A]">Ver cliente</span>
                                 </Link>
 
                                 {lead?.location?.mapsUrl ? (
@@ -445,7 +445,7 @@ export default function LeadChatPage() {
                     icon={<AppIcon name="chat" tone="purple" size="sm" className="bg-transparent text-white ring-0" />}
                     actions={
                         <>
-                            <QuickLink href="/admin/leads" icon="lead" label="Leads" />
+                            <QuickLink href="/admin/leads" icon="lead" label="Prospectos" />
                             <QuickLink href={`/admin/clients/${clientId}`} icon="users" label="Cliente" />
                             {lead?.location?.mapsUrl ? (
                                 <QuickLink href={lead.location.mapsUrl} icon="map" label="Maps" external />

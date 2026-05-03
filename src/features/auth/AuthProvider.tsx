@@ -16,6 +16,7 @@ import {
     type ReactNode,
 } from "react";
 import { auth, db } from "@/lib/firebase";
+import type { AdminPermissions } from "@/types/users";
 
 export type AppUser = {
     id: string;
@@ -23,6 +24,8 @@ export type AppUser = {
     email?: string;
     role: "admin" | "user";
     active: boolean;
+    isSuperAdmin?: boolean;
+    permissions?: AdminPermissions;
 };
 
 type AuthContextValue = {
@@ -30,6 +33,9 @@ type AuthContextValue = {
     profile: AppUser | null;
     loading: boolean;
     isAdmin: boolean;
+    isSuperAdmin: boolean;
+    /** Null when the user is superadmin (implicitly has all permissions). */
+    adminPermissions: AdminPermissions | null;
     login: (email: string, password: string) => Promise<void>;
     logout: () => Promise<void>;
 };
@@ -68,6 +74,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     email: data.email ?? user.email ?? "",
                     role: data.role ?? "user",
                     active: data.active === true,
+                    isSuperAdmin: data.isSuperAdmin === true,
+                    permissions: data.permissions ?? undefined,
                 });
             } finally {
                 setLoading(false);
@@ -83,6 +91,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             profile,
             loading,
             isAdmin: profile?.role === "admin" && profile?.active === true,
+            isSuperAdmin: profile?.isSuperAdmin === true,
+            adminPermissions: profile?.isSuperAdmin ? null : (profile?.permissions ?? null),
             login: async (email, password) => {
                 await signInWithEmailAndPassword(auth, email.trim(), password);
             },

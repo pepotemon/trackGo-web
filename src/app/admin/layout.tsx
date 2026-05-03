@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAuth } from "@/features/auth/AuthProvider";
+import { usePermissions } from "@/features/auth/usePermissions";
 import { TrackGoLogo } from "@/components/brand/TrackGoLogo";
 
 type NavIconName =
@@ -18,7 +19,7 @@ type NavIconName =
 
 const NAV_MAIN: { href: string; label: string; icon: NavIconName }[] = [
     { href: "/admin", label: "Dashboard", icon: "dashboard" },
-    { href: "/admin/leads", label: "Leads", icon: "inbox" },
+    { href: "/admin/leads", label: "Prospectos", icon: "inbox" },
     { href: "/admin/activity", label: "Actividad", icon: "activity" },
     { href: "/admin/accounting", label: "Contabilidad", icon: "wallet" },
 ];
@@ -28,7 +29,7 @@ const NAV_SETTINGS: { href: string; label: string; icon: NavIconName }[] = [
 ];
 
 const MOBILE_NAV: { href: string; label: string; icon: NavIconName }[] = [
-    { href: "/admin/leads", label: "Leads", icon: "inbox" },
+    { href: "/admin/leads", label: "Prospectos", icon: "inbox" },
     { href: "/admin/activity", label: "Actividad", icon: "activity" },
     { href: "/admin/accounting", label: "Conta", icon: "wallet" },
     { href: "/admin/settings/users", label: "Usuarios", icon: "users" },
@@ -38,6 +39,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     const router = useRouter();
     const pathname = usePathname();
     const { firebaseUser, isAdmin, loading, logout } = useAuth();
+    const permissions = usePermissions();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [now, setNow] = useState(() => new Date());
 
@@ -54,6 +56,23 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             minute: "2-digit",
         }).format(now);
     }, [now]);
+
+    const visibleMainNav = NAV_MAIN.filter((item) => {
+        if (item.href === "/admin/leads" || item.href === "/admin/activity") return permissions.leads;
+        if (item.href === "/admin/accounting") return permissions.accountingView;
+        return true;
+    });
+    const visibleSettingsNav = NAV_SETTINGS.filter((item) => {
+        if (item.href === "/admin/settings/users") return permissions.usersView;
+        return true;
+    });
+    const visibleMobileNav = MOBILE_NAV.filter((item) => {
+        if (item.href === "/admin/leads") return permissions.leads;
+        if (item.href === "/admin/activity") return permissions.leads;
+        if (item.href === "/admin/accounting") return permissions.accountingView;
+        if (item.href === "/admin/settings/users") return permissions.usersView;
+        return true;
+    });
 
     async function handleLogout() {
         await logout();
@@ -98,8 +117,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                 </div>
 
                 <nav className="space-y-5">
-                    <NavSection title="Navegación" items={NAV_MAIN} />
-                    <NavSection title="Configurar" items={NAV_SETTINGS} />
+                    <NavSection title="Navegación" items={visibleMainNav} />
+                    {visibleSettingsNav.length > 0 ? <NavSection title="Configurar" items={visibleSettingsNav} /> : null}
                 </nav>
 
                 <div className="absolute bottom-4 left-3 right-3 space-y-1">
@@ -129,13 +148,15 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                     adminLabel={adminLabel}
                     liveDate={liveDate}
                     pathname={pathname}
+                    navMain={visibleMainNav}
+                    navSettings={visibleSettingsNav}
                 />
 
                 <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.12),transparent_34%),linear-gradient(180deg,#fbfaff_0%,#f6f3ff_52%,#f8fafc_100%)] px-3 pb-24 pt-4 text-[#172033] sm:px-5 lg:px-7 xl:bg-none xl:pb-6 xl:pt-5">
                     {children}
                 </main>
 
-                <MobileBottomNav pathname={pathname} />
+                <MobileBottomNav pathname={pathname} onLogout={handleLogout} navItems={visibleMobileNav} />
             </div>
         </div>
     );
@@ -242,6 +263,8 @@ function MobileDrawer({
     adminLabel,
     liveDate,
     pathname,
+    navMain,
+    navSettings,
 }: {
     open: boolean;
     onClose: () => void;
@@ -249,6 +272,8 @@ function MobileDrawer({
     adminLabel: string;
     liveDate: string;
     pathname: string;
+    navMain: { href: string; label: string; icon: NavIconName }[];
+    navSettings: { href: string; label: string; icon: NavIconName }[];
 }) {
     if (!open) return null;
 
@@ -275,8 +300,8 @@ function MobileDrawer({
                 </div>
 
                 <nav className="space-y-5">
-                    <MobileNavSection title="Navegación" items={NAV_MAIN} pathname={pathname} onClose={onClose} />
-                    <MobileNavSection title="Configurar" items={NAV_SETTINGS} pathname={pathname} onClose={onClose} />
+                    <MobileNavSection title="Navegación" items={navMain} pathname={pathname} onClose={onClose} />
+                    {navSettings.length > 0 ? <MobileNavSection title="Configurar" items={navSettings} pathname={pathname} onClose={onClose} /> : null}
                 </nav>
 
                 <div className="mt-auto space-y-3">
@@ -350,37 +375,85 @@ function MobileNavSection({
     );
 }
 
-function MobileBottomNav({ pathname }: { pathname: string }) {
-    return (
-        <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#e8e7fb] bg-white/95 px-2 pb-[max(env(safe-area-inset-bottom),0.65rem)] pt-1 shadow-[0_-20px_56px_rgba(82,63,169,0.15)] backdrop-blur-xl xl:hidden">
-            <div className="mx-auto grid max-w-md grid-cols-4">
-                {MOBILE_NAV.map((item) => {
-                    const active = pathname === item.href || pathname.startsWith(item.href);
+function isDetailPage(pathname: string) {
+    if (pathname.startsWith("/admin/leads/") && pathname !== "/admin/leads/assignments") return true;
+    if (pathname.startsWith("/admin/clients/")) return true;
+    return false;
+}
 
-                    return (
-                        <Link
-                            key={item.href}
-                            href={item.href}
-                            className={[
-                                "relative flex flex-col items-center justify-center gap-0.5 px-1 pb-1 pt-2.5 text-[10px] font-black transition-colors active:opacity-70",
-                                active ? "text-[#4f46e5]" : "text-[#98a2b3]",
-                            ].join(" ")}
-                        >
-                            {active && (
-                                <span className="absolute inset-x-4 top-0 h-[3px] rounded-full bg-gradient-to-r from-[#7c3aed] to-[#4f46e5]" />
-                            )}
-                            <span
+function MobileBottomNav({ pathname, onLogout, navItems }: { pathname: string; onLogout: () => void; navItems: { href: string; label: string; icon: NavIconName }[] }) {
+    const [logoutVisible, setLogoutVisible] = useState(false);
+    const touchStartX = useRef(0);
+
+    if (isDetailPage(pathname)) return null;
+    if (navItems.length === 0) return null;
+
+    const colsClass = (["grid-cols-1", "grid-cols-2", "grid-cols-3", "grid-cols-4"] as const)[Math.min(navItems.length, 4) - 1] ?? "grid-cols-4";
+
+    function handleTouchStart(e: React.TouchEvent) {
+        touchStartX.current = e.touches[0]?.clientX ?? 0;
+    }
+
+    function handleTouchEnd(e: React.TouchEvent) {
+        const dx = (e.changedTouches[0]?.clientX ?? 0) - touchStartX.current;
+        if (dx < -55) setLogoutVisible(true);
+        if (dx > 55) setLogoutVisible(false);
+    }
+
+    return (
+        <nav
+            className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#e8e7fb] bg-white/95 px-2 pb-[max(env(safe-area-inset-bottom),0.65rem)] pt-1 shadow-[0_-20px_56px_rgba(82,63,169,0.15)] backdrop-blur-xl xl:hidden"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+        >
+            <div className="relative mx-auto max-w-md overflow-hidden">
+                <div
+                    className={[
+                        `grid ${colsClass} transition-transform duration-300`,
+                        logoutVisible ? "-translate-x-[72px]" : "translate-x-0",
+                    ].join(" ")}
+                >
+                    {navItems.map((item) => {
+                        const active = pathname === item.href || pathname.startsWith(item.href);
+
+                        return (
+                            <Link
+                                key={item.href}
+                                href={item.href}
                                 className={[
-                                    "flex h-9 w-9 items-center justify-center rounded-[14px] transition-colors",
-                                    active ? "bg-[#f3f0ff]" : "",
+                                    "relative flex flex-col items-center justify-center gap-0.5 px-1 pb-1 pt-2.5 text-[10px] font-black transition-colors active:opacity-70",
+                                    active ? "text-[#4f46e5]" : "text-[#98a2b3]",
                                 ].join(" ")}
                             >
-                                <NavIcon name={item.icon} size="md" />
-                            </span>
-                            <span className="max-w-full truncate leading-none">{item.label}</span>
-                        </Link>
-                    );
-                })}
+                                {active && (
+                                    <span className="absolute inset-x-4 top-0 h-[3px] rounded-full bg-gradient-to-r from-[#7c3aed] to-[#4f46e5]" />
+                                )}
+                                <span
+                                    className={[
+                                        "flex h-9 w-9 items-center justify-center rounded-[14px] transition-colors",
+                                        active ? "bg-[#f3f0ff]" : "",
+                                    ].join(" ")}
+                                >
+                                    <NavIcon name={item.icon} size="md" />
+                                </span>
+                                <span className="max-w-full truncate leading-none">{item.label}</span>
+                            </Link>
+                        );
+                    })}
+                </div>
+
+                {logoutVisible ? (
+                    <button
+                        type="button"
+                        onClick={() => { setLogoutVisible(false); onLogout(); }}
+                        className="absolute bottom-0 right-0 top-0 flex w-[68px] flex-col items-center justify-center gap-0.5 bg-red-50 pb-1 pt-2.5 text-[10px] font-black text-red-600 transition active:bg-red-100"
+                    >
+                        <span className="flex h-9 w-9 items-center justify-center rounded-[14px] bg-red-100">
+                            <NavIcon name="logOut" size="md" />
+                        </span>
+                        <span className="leading-none">Salir</span>
+                    </button>
+                ) : null}
             </div>
         </nav>
     );

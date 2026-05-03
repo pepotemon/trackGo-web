@@ -12,6 +12,8 @@ import { LeadEditModal } from "@/features/leads/LeadEditModal";
 import { AssignUserModal } from "@/features/leads/AssignUserModal";
 import { useAdminLeadQueue } from "@/features/leads/useAdminLeadQueue";
 import { deleteLead } from "@/data/leadsRepo";
+import { useCan } from "@/features/auth/usePermissions";
+import { useAuth } from "@/features/auth/AuthProvider";
 import type { LeadFilters, LeadReviewStatus, MetaLeadDoc } from "@/types/leads";
 import type { UserDoc } from "@/types/users";
 import {
@@ -123,6 +125,12 @@ function whatsappUrl(phone?: string | null) {
 }
 
 export default function AdminLeadsPage() {
+    const canAssign = useCan("leadsAssign");
+    const canEdit = useCan("leadsEdit");
+    const canDelete = useCan("leadsDelete");
+    const canWhatsapp = useCan("leadsWhatsapp");
+    const { profile, isSuperAdmin } = useAuth();
+
     const [coverageOpen, setCoverageOpen] = useState(false);
     const [editingLead, setEditingLead] = useState<MetaLeadDoc | null>(null);
     const [quickLead, setQuickLead] = useState<MetaLeadDoc | null>(null);
@@ -147,6 +155,25 @@ export default function AdminLeadsPage() {
         loadMore,
         assignLead,
     } = useAdminLeadQueue();
+
+    const myUserIds = useMemo(() => {
+        if (isSuperAdmin || !profile) return null;
+        return new Set(
+            users
+                .filter((u) => u.sharedWith?.some((s) => s.adminId === profile.id))
+                .map((u) => u.id)
+        );
+    }, [users, isSuperAdmin, profile]);
+
+    const myFilteredLeads = useMemo(() => {
+        if (!myUserIds) return filteredLeads;
+        return filteredLeads.filter((lead) => !lead.assignedTo || myUserIds.has(lead.assignedTo));
+    }, [filteredLeads, myUserIds]);
+
+    const myUsers = useMemo(() => {
+        if (!myUserIds) return users;
+        return users.filter((u) => myUserIds.has(u.id));
+    }, [users, myUserIds]);
 
     async function handleAssignLead(lead: MetaLeadDoc, userId: string) {
         await assignLead(lead, userId);
@@ -201,21 +228,21 @@ export default function AdminLeadsPage() {
     }, [setFilters]);
 
     useEffect(() => {
-        if (!loading && filteredLeads.length > 0) {
+        if (!loading && myFilteredLeads.length > 0) {
             try {
                 sessionStorage.setItem(
                     "leads_mobile_queue",
-                    JSON.stringify(filteredLeads.map((l) => l.id))
+                    JSON.stringify(myFilteredLeads.map((l) => l.id))
                 );
             } catch { }
         }
-    }, [filteredLeads, loading]);
+    }, [myFilteredLeads, loading]);
 
     return (
         <div className="mx-auto w-full max-w-[1220px]">
             <div className="xl:hidden">
                 <MobileLeadQueue
-                    leads={filteredLeads}
+                    leads={myFilteredLeads}
                     stats={stats}
                     filters={filters}
                     cityOptions={cityOptions}
@@ -239,8 +266,8 @@ export default function AdminLeadsPage() {
 
             <div className="hidden xl:block">
                 <PageHeader
-                    title="Leads"
-                    subtitle="Gestiona, valida y asigna leads de forma eficiente."
+                    title="Prospectos"
+                    subtitle="Gestiona, valida y asigna prospectos de forma eficiente."
                     icon={
                         <AppIcon
                             name="lead"
@@ -251,19 +278,21 @@ export default function AdminLeadsPage() {
                     }
                     actions={
                         <div className="grid w-full grid-cols-[1fr_44px] gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
-                            <Button
-                                onClick={() => setCoverageOpen(true)}
-                                disabled={loading || !filteredLeads.length}
-                                className="w-full sm:w-auto"
-                            >
-                                <AppIcon
-                                    name="link"
-                                    tone="purple"
-                                    size="sm"
-                                    className="h-5 w-5 rounded-md bg-transparent text-current ring-0"
-                                />
-                                <span className="sm:inline">Asignar por cobertura</span>
-                            </Button>
+                            {canAssign ? (
+                                <Button
+                                    onClick={() => setCoverageOpen(true)}
+                                    disabled={loading || !myFilteredLeads.length}
+                                    className="w-full sm:w-auto"
+                                >
+                                    <AppIcon
+                                        name="link"
+                                        tone="purple"
+                                        size="sm"
+                                        className="h-5 w-5 rounded-md bg-transparent text-current ring-0"
+                                    />
+                                    <span className="sm:inline">Asignar por cobertura</span>
+                                </Button>
+                            ) : null}
 
                             <Button
                                 variant="primary"
@@ -293,7 +322,7 @@ export default function AdminLeadsPage() {
                 <LeadQuickAccessCards />
 
                 <section className="mb-4 grid grid-cols-4 gap-4">
-                    <KpiCard label="Cola activa" value={stats.total} caption="Leads Meta sin asignar" icon="users" tone="blue" />
+                    <KpiCard label="Cola activa" value={stats.total} caption="Sin asignar" icon="users" tone="blue" />
                     <KpiCard label="Por revisar" value={stats.pendingReview} caption="Listos para validar" icon="lead" tone="purple" />
                     <KpiCard label="Incompletos" value={stats.incomplete} caption="Falta negocio o maps" icon="alert" tone="orange" />
                     <KpiCard label="No aptos" value={stats.notSuitable} caption="Descartados operativos" icon="close" tone="red" />
@@ -307,7 +336,7 @@ export default function AdminLeadsPage() {
                                     Cola de revisión
                                 </h2>
                                 <p className="mt-0.5 text-[12px] font-medium text-[#9ca3af]">
-                                    {filteredLeads.length} visibles de {stats.total}
+                                    {myFilteredLeads.length} visibles de {stats.total}
                                 </p>
                             </div>
 
@@ -383,7 +412,7 @@ export default function AdminLeadsPage() {
                     </div>
 
                     <LeadsTable
-                        leads={filteredLeads}
+                        leads={myFilteredLeads}
                         loading={loading}
                         savingId={savingId}
                         onQuickActions={setQuickLead}
@@ -391,7 +420,7 @@ export default function AdminLeadsPage() {
 
                     <div className="flex items-center justify-between gap-3 border-t border-[#f0f1f2] px-4 py-3">
                         <p className="text-[12px] font-medium text-[#9ca3af]">
-                            {filteredLeads.length} leads cargados en esta vista
+                            {myFilteredLeads.length} prospectos cargados
                         </p>
                         {hasMore ? (
                             <Button onClick={loadMore} disabled={loadingMore}>
@@ -405,8 +434,8 @@ export default function AdminLeadsPage() {
             <CoverageAssignModal
                 open={coverageOpen}
                 onClose={() => setCoverageOpen(false)}
-                leads={filteredLeads}
-                users={users}
+                leads={myFilteredLeads}
+                users={myUsers}
                 savingId={savingId}
                 onAssign={assignLead}
             />
@@ -416,7 +445,7 @@ export default function AdminLeadsPage() {
                 lead={editingLead}
                 onClose={() => setEditingLead(null)}
                 onSaved={reloadLeads}
-                users={users}
+                users={myUsers}
                 onAssign={assignLead}
             />
 
@@ -433,7 +462,7 @@ export default function AdminLeadsPage() {
             <AssignUserModal
                 open={!!assigningLead}
                 onClose={() => setAssigningLead(null)}
-                users={users}
+                users={myUsers}
                 onAssign={(userId) => assigningLead && handleAssignLead(assigningLead, userId)}
                 saving={!!savingId}
             />
@@ -503,7 +532,7 @@ function MobileLeadQueue({
                 <div className="mb-3 flex items-center gap-2">
                     <div className="min-w-0 flex-1">
                         <h1 className="truncate text-[20px] font-black tracking-[-0.03em] text-[#101936]">
-                            Leads Meta
+                            Prospectos
                         </h1>
                         <p className="mt-0.5 truncate text-[11px] font-semibold text-[#66739A]">
                             <span className="font-black text-[#7C3AED]">{leads.length}</span> visibles
@@ -833,6 +862,11 @@ function LeadActionSheet({
     onDelete: (lead: MetaLeadDoc) => void;
     onOpenAssign: (lead: MetaLeadDoc) => void;
 }) {
+    const canAssign = useCan("leadsAssign");
+    const canEdit = useCan("leadsEdit");
+    const canDelete = useCan("leadsDelete");
+    const canWhatsapp = useCan("leadsWhatsapp");
+
     useEffect(() => {
         if (!open) return;
         const handler = () => onClose();
@@ -875,23 +909,27 @@ function LeadActionSheet({
                         Chat
                     </Link>
 
-                    <button
-                        type="button"
-                        onClick={() => { onClose(); onOpenEdit(lead); }}
-                        className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#fff7ed] px-4 text-[14px] font-bold text-[#101936] transition active:bg-orange-100"
-                    >
-                        <AppIcon name="edit" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-orange-600 ring-0" />
-                        Editar
-                    </button>
+                    {canEdit ? (
+                        <button
+                            type="button"
+                            onClick={() => { onClose(); onOpenEdit(lead); }}
+                            className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#fff7ed] px-4 text-[14px] font-bold text-[#101936] transition active:bg-orange-100"
+                        >
+                            <AppIcon name="edit" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-orange-600 ring-0" />
+                            Editar
+                        </button>
+                    ) : null}
 
-                    <button
-                        type="button"
-                        onClick={() => { onClose(); onOpenAssign(lead); }}
-                        className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#f3f0ff] px-4 text-[14px] font-bold text-[#101936] transition active:bg-violet-200"
-                    >
-                        <AppIcon name="assign" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#7C3AED] ring-0" />
-                        Asignar a usuario
-                    </button>
+                    {canAssign ? (
+                        <button
+                            type="button"
+                            onClick={() => { onClose(); onOpenAssign(lead); }}
+                            className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#f3f0ff] px-4 text-[14px] font-bold text-[#101936] transition active:bg-violet-200"
+                        >
+                            <AppIcon name="assign" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#7C3AED] ring-0" />
+                            Asignar a usuario
+                        </button>
+                    ) : null}
 
                     {hasMaps ? (
                         <a
@@ -906,7 +944,7 @@ function LeadActionSheet({
                         </a>
                     ) : null}
 
-                    {waUrl ? (
+                    {waUrl && canWhatsapp ? (
                         <a
                             href={waUrl}
                             target="_blank"
@@ -921,14 +959,16 @@ function LeadActionSheet({
                         </a>
                     ) : null}
 
-                    <button
-                        type="button"
-                        onClick={() => { onClose(); onDelete(lead); }}
-                        className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-red-50 px-4 text-[14px] font-bold text-[#101936] transition active:bg-red-100"
-                    >
-                        <AppIcon name="trash" tone="red" size="sm" className="h-5 w-5 bg-transparent ring-0" />
-                        Eliminar lead
-                    </button>
+                    {canDelete ? (
+                        <button
+                            type="button"
+                            onClick={() => { onClose(); onDelete(lead); }}
+                            className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-red-50 px-4 text-[14px] font-bold text-[#101936] transition active:bg-red-100"
+                        >
+                            <AppIcon name="trash" tone="red" size="sm" className="h-5 w-5 bg-transparent ring-0" />
+                            Eliminar lead
+                        </button>
+                    ) : null}
                 </div>
 
                 <button
@@ -1339,6 +1379,10 @@ function LeadQuickActionsModal({
     onEdit: (lead: MetaLeadDoc) => void;
     onDelete: (lead: MetaLeadDoc) => void;
 }) {
+    const canEdit = useCan("leadsEdit");
+    const canDelete = useCan("leadsDelete");
+    const canWhatsapp = useCan("leadsWhatsapp");
+
     if (!lead) return null;
 
     return (
@@ -1365,7 +1409,7 @@ function LeadQuickActionsModal({
                         external
                     />
                 ) : null}
-                {whatsappUrl(lead.phone) ? (
+                {whatsappUrl(lead.phone) && canWhatsapp ? (
                     <ActionTile
                         href={whatsappUrl(lead.phone)}
                         icon="chat"
@@ -1374,18 +1418,22 @@ function LeadQuickActionsModal({
                         external
                     />
                 ) : null}
-                <ActionTileButton
-                    onClick={() => onEdit(lead)}
-                    icon="edit"
-                    label="Editar"
-                    tone="orange"
-                />
-                <ActionTileButton
-                    onClick={() => onDelete(lead)}
-                    icon="trash"
-                    label="Eliminar lead"
-                    tone="red"
-                />
+                {canEdit ? (
+                    <ActionTileButton
+                        onClick={() => onEdit(lead)}
+                        icon="edit"
+                        label="Editar"
+                        tone="orange"
+                    />
+                ) : null}
+                {canDelete ? (
+                    <ActionTileButton
+                        onClick={() => onDelete(lead)}
+                        icon="trash"
+                        label="Eliminar lead"
+                        tone="red"
+                    />
+                ) : null}
             </div>
         </Modal>
     );
