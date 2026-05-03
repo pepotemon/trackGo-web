@@ -63,7 +63,7 @@ export function subscribeIncompleteClients(
 
     const q = query(
         collection(db, "clients"),
-        where("verificationStatus", "==", "pending_review"),
+        where("verificationStatus", "in", ["pending_review", "incomplete"]),
         limit(300)
     );
 

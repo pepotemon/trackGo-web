@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { TrackGoLogo } from "@/components/brand/TrackGoLogo";
 
@@ -19,6 +19,8 @@ export default function UserLayout({ children }: { children: ReactNode }) {
     const router = useRouter();
     const pathname = usePathname();
     const { firebaseUser, profile, isUser, loading, logout, userPermissions } = useAuth();
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
     const MOBILE_NAV = BASE_NAV.filter((item) =>
         !item.permKey || userPermissions[item.permKey]
     );
@@ -48,6 +50,7 @@ export default function UserLayout({ children }: { children: ReactNode }) {
     if (!firebaseUser || !isUser) return null;
 
     const userName = profile?.name?.split(" ")[0] ?? "Vendedor";
+    const userInitial = userName.slice(0, 1).toUpperCase();
 
     return (
         <div className="min-h-screen bg-[#fbfaff] text-[#172033]">
@@ -98,12 +101,96 @@ export default function UserLayout({ children }: { children: ReactNode }) {
                     </button>
                     <div className="flex items-center gap-2 rounded-xl border border-[#d9d2ff] bg-white/80 px-2 py-2 shadow-sm">
                         <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-[#7c3aed] to-[#4f46e5] text-[11px] font-bold text-white">
-                            {userName.slice(0, 1).toUpperCase()}
+                            {userInitial}
                         </div>
                         <span className="truncate text-[12px] font-semibold text-[#101936]">{userName}</span>
                     </div>
                 </div>
             </aside>
+
+            {/* ── MOBILE SLIDE DRAWER ─────────────────────────────────── */}
+            <div
+                className={[
+                    "fixed inset-0 z-50 xl:hidden transition-opacity duration-300",
+                    mobileMenuOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
+                ].join(" ")}
+            >
+                {/* backdrop */}
+                <button
+                    type="button"
+                    aria-label="Cerrar menú"
+                    className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
+                    onClick={() => setMobileMenuOpen(false)}
+                />
+                {/* panel */}
+                <div className={[
+                    "absolute bottom-0 left-0 top-0 flex w-[260px] flex-col border-r border-[#d9d2ff] bg-[linear-gradient(180deg,#f4f0ff_0%,#e9e4ff_48%,#fbfaff_100%)] px-3 py-4 shadow-[18px_0_55px_rgba(82,63,169,0.2)] transition-transform duration-300 ease-out",
+                    mobileMenuOpen ? "translate-x-0" : "-translate-x-full",
+                ].join(" ")}>
+                    {/* header */}
+                    <div className="mb-5 flex items-center justify-between border-b border-[#d9d2ff] px-1 pb-4">
+                        <TrackGoLogo size="lg" />
+                        <button
+                            type="button"
+                            aria-label="Cerrar"
+                            onClick={() => setMobileMenuOpen(false)}
+                            className="flex h-8 w-8 items-center justify-center rounded-xl text-[#5b4ea6] transition active:bg-[#e9e4ff]"
+                        >
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M18 6 6 18M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <nav className="flex-1 space-y-0.5">
+                        {MOBILE_NAV.map((item) => {
+                            const active = pathname === item.href || pathname.startsWith(item.href);
+                            return (
+                                <Link
+                                    key={item.href}
+                                    href={item.href}
+                                    onClick={() => setMobileMenuOpen(false)}
+                                    className={[
+                                        "flex h-9 items-center gap-2 rounded-xl px-2 text-[12px] font-semibold transition",
+                                        active
+                                            ? "bg-white text-[#4f46e5] shadow-sm"
+                                            : "text-[#364260] active:bg-white/85 active:text-[#4f46e5]",
+                                    ].join(" ")}
+                                >
+                                    <span className={[
+                                        "flex h-6 w-6 items-center justify-center rounded-lg ring-1 transition",
+                                        active
+                                            ? "bg-[#f3f0ff] text-[#5b21ff] ring-[#c8c0ff]"
+                                            : "bg-white/65 text-[#5b4ea6] ring-[#d9d2ff]",
+                                    ].join(" ")}>
+                                        <NavIcon name={item.icon} />
+                                    </span>
+                                    {item.label}
+                                </Link>
+                            );
+                        })}
+                    </nav>
+
+                    <div className="space-y-1">
+                        <button
+                            type="button"
+                            onClick={handleLogout}
+                            className="flex h-8 w-full items-center gap-2 rounded-lg px-2 text-[12px] font-medium text-[#dc2626] transition active:bg-[#fef2f2]"
+                        >
+                            <span className="flex h-5 w-5 items-center justify-center">
+                                <NavIcon name="logOut" />
+                            </span>
+                            Cerrar sesión
+                        </button>
+                        <div className="flex items-center gap-2 rounded-xl border border-[#d9d2ff] bg-white/80 px-2 py-2 shadow-sm">
+                            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-[#7c3aed] to-[#4f46e5] text-[11px] font-bold text-white">
+                                {userInitial}
+                            </div>
+                            <span className="truncate text-[12px] font-semibold text-[#101936]">{userName}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             {/* ── MAIN CONTENT ────────────────────────────────────────── */}
             <div className="xl:pl-[220px]">
@@ -113,7 +200,7 @@ export default function UserLayout({ children }: { children: ReactNode }) {
 
                 {/* ── MOBILE BOTTOM NAV ───────────────────────────────── */}
                 <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#e8e7fb] bg-white/95 px-2 pb-[max(env(safe-area-inset-bottom),0.65rem)] pt-1 shadow-[0_-20px_56px_rgba(82,63,169,0.15)] backdrop-blur-xl xl:hidden">
-                    <div className={`mx-auto grid max-w-md ${MOBILE_NAV.length === 4 ? "grid-cols-4" : "grid-cols-3"}`}>
+                    <div className="mx-auto flex max-w-md">
                         {MOBILE_NAV.map((item) => {
                             const active = pathname === item.href || pathname.startsWith(item.href);
                             return (
@@ -121,7 +208,7 @@ export default function UserLayout({ children }: { children: ReactNode }) {
                                     key={item.href}
                                     href={item.href}
                                     className={[
-                                        "relative flex flex-col items-center justify-center gap-0.5 px-1 pb-1 pt-2.5 text-[10px] font-black transition-colors active:opacity-70",
+                                        "relative flex flex-1 flex-col items-center justify-center gap-0.5 px-1 pb-1 pt-2.5 text-[10px] font-black transition-colors active:opacity-70",
                                         active ? "text-[#4f46e5]" : "text-[#98a2b3]",
                                     ].join(" ")}
                                 >
@@ -138,6 +225,20 @@ export default function UserLayout({ children }: { children: ReactNode }) {
                                 </Link>
                             );
                         })}
+
+                        {/* Profile / menu button */}
+                        <button
+                            type="button"
+                            onClick={() => setMobileMenuOpen(true)}
+                            className="relative flex flex-1 flex-col items-center justify-center gap-0.5 px-1 pb-1 pt-2.5 text-[10px] font-black text-[#98a2b3] transition-colors active:opacity-70"
+                        >
+                            <span className="flex h-9 w-9 items-center justify-center rounded-[14px]">
+                                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-[#7c3aed] to-[#4f46e5] text-[11px] font-bold text-white shadow-md">
+                                    {userInitial}
+                                </div>
+                            </span>
+                            <span className="leading-none">Menú</span>
+                        </button>
                     </div>
                 </nav>
             </div>

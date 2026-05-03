@@ -341,8 +341,8 @@ service cloud.firestore {
 
       allow read: if signedIn() && resource.data.assignedTo == request.auth.uid;
 
-      // Vendor reads unassigned pending_review clients (Incompletos tab)
-      allow read: if isUser() && resource.data.verificationStatus == "pending_review";
+      // Vendor reads pending_review and incomplete clients (Incompletos tab)
+      allow read: if isUser() && resource.data.verificationStatus in ["pending_review", "incomplete"];
 
       // Vendor reads not_suitable clients in their coverage (No Aptos tab)
       allow read: if isUser() && resource.data.verificationStatus == "not_suitable";
