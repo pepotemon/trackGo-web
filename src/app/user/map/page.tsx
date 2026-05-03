@@ -17,6 +17,7 @@ import {
 
 type MapFilter = "all" | "pending" | "visited" | "rejected";
 const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY ?? "";
+const MAP_ID = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || undefined;
 
 function todayKey() { return new Date().toISOString().slice(0, 10); }
 
@@ -164,7 +165,7 @@ function MapPageInner() {
                 <Map
                     defaultCenter={defaultCenter}
                     defaultZoom={12}
-                    mapId="trackgo-vendor-map"
+                    mapId={MAP_ID}
                     disableDefaultUI
                     gestureHandling="greedy"
                     style={{ width: "100%", height: "100%" }}

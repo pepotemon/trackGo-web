@@ -10,20 +10,25 @@ import {
     updateUserBilling,
     updateUserGeoCoverage,
     updateUserPermissions,
+    updateUserPhoneCodes,
     updateUserProfile,
     updateUserRole,
     updateUserSharedWith,
+    updateUserVendorPermissions,
 } from "@/data/usersRepo";
 import { batchUpdateWeekEventRates, countWeekVisitedEvents } from "@/data/accountingRepo";
 import { weekRangeKeysMonToSun } from "@/lib/date";
 import {
     defaultAdminPermissions,
+    defaultUserPermissions,
     fullAdminPermissions,
+    fullUserPermissions,
     type AdminPermissions,
     type UserBillingMode,
     type UserDoc,
     type UserGeoCoverage,
     type UserGeoCoverageType,
+    type UserPermissions,
     type UserRole,
     type UserSharedAdmin,
 } from "@/types/users";
@@ -1177,6 +1182,9 @@ function EditUserModal({
     const [applyToCurrentWeek, setApplyToCurrentWeek] = useState(false);
     const [weekVisitCount, setWeekVisitCount] = useState<number | null>(null);
     const [permissions, setPermissions] = useState<AdminPermissions>(() => defaultAdminPermissions());
+    const [userPermissions, setUserPermissions] = useState<UserPermissions>(() => defaultUserPermissions());
+    const [phoneCodes, setPhoneCodes] = useState<string[]>([]);
+    const [phoneCodeInput, setPhoneCodeInput] = useState("");
     const [sharedWith, setSharedWith] = useState<UserSharedAdmin[]>([]);
     const [sharedAdminId, setSharedAdminId] = useState("");
     const [sharedPercent, setSharedPercent] = useState("50");
@@ -1208,6 +1216,9 @@ function EditUserModal({
             setApplyToCurrentWeek(false);
             setWeekVisitCount(null);
             setPermissions(user.permissions ?? defaultAdminPermissions());
+            setUserPermissions(user.userPermissions ?? defaultUserPermissions());
+            setPhoneCodes(Array.isArray(user.phoneCodes) ? user.phoneCodes : []);
+            setPhoneCodeInput("");
             setSharedWith(Array.isArray(user.sharedWith) ? user.sharedWith : []);
             setSharedAdminId("");
             setSharedPercent("50");
@@ -1293,7 +1304,11 @@ function EditUserModal({
 
             if (role === "user") {
                 await updateUserSharedWith(user.id, sharedWith);
+                await updateUserVendorPermissions(user.id, userPermissions);
+                await updateUserPhoneCodes(user.id, phoneCodes);
                 patch.sharedWith = sharedWith;
+                patch.userPermissions = userPermissions;
+                patch.phoneCodes = phoneCodes;
             }
 
             await onPatch(user.id, patch);
@@ -1319,7 +1334,7 @@ function EditUserModal({
                     <MiniTab icon="shield" active={activeTab === "role"} onClick={() => setActiveTab("role")}>Rol</MiniTab>
                     <MiniTab icon="bot" active={activeTab === "autoAssign"} onClick={() => setActiveTab("autoAssign")}>Auto</MiniTab>
                     <MiniTab icon="wallet" active={activeTab === "billing"} onClick={() => setActiveTab("billing")}>Contabilidad</MiniTab>
-                    {role === "admin" && !user.isSuperAdmin ? (
+                    {(role === "admin" && !user.isSuperAdmin) || role === "user" ? (
                         <MiniTab icon="shield" active={activeTab === "permissions"} onClick={() => setActiveTab("permissions")}>Permisos</MiniTab>
                     ) : null}
                     {role === "user" ? (
@@ -1357,6 +1372,7 @@ function EditUserModal({
                 ) : null}
 
                 {activeTab === "coverage" ? (
+                    <>
                     <CoverageEditor
                         items={coverageList}
                         type={coverageType}
@@ -1398,6 +1414,53 @@ function EditUserModal({
                             setCoverageList((prev) => prev.filter((item) => item.id !== id));
                         }}
                     />
+                    {role === "user" ? (
+                        <EditorBlock title="Indicativos telefónicos (DDD)">
+                            <p className="text-[11px] font-semibold text-[#667085]">
+                                DDDs de Brasil que cubre este vendedor. Los clientes con ese indicativo aparecerán en su pantalla de Chat.
+                            </p>
+                            <div className="flex flex-wrap gap-1.5">
+                                {phoneCodes.length === 0 ? (
+                                    <span className="text-[12px] font-semibold text-[#98A2B3]">Sin indicativos</span>
+                                ) : phoneCodes.map((code) => (
+                                    <span key={code} className="flex items-center gap-1 rounded-full border border-[#d9d2ff] bg-[#f3f0ff] pl-2.5 pr-1.5 py-1 text-[11px] font-black text-[#7C3AED]">
+                                        {code}
+                                        <button
+                                            type="button"
+                                            onClick={() => setPhoneCodes((prev) => prev.filter((c) => c !== code))}
+                                            className="flex h-4 w-4 items-center justify-center rounded-full bg-[#7C3AED]/15 text-[#7C3AED] transition hover:bg-[#7C3AED] hover:text-white"
+                                        >
+                                            ×
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
+                            <div className="flex gap-2">
+                                <input
+                                    value={phoneCodeInput}
+                                    onChange={(e) => setPhoneCodeInput(e.target.value.replace(/\D/g, "").slice(0, 2))}
+                                    placeholder="DDD (ej: 91)"
+                                    maxLength={2}
+                                    className="h-9 w-24 rounded-lg border border-[#e4e7ec] bg-white px-3 text-[13px] font-bold text-[#344054] outline-none focus:border-[#7C3AED]"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const code = phoneCodeInput.trim();
+                                        if (code.length === 2 && !phoneCodes.includes(code)) {
+                                            setPhoneCodes((prev) => [...prev, code].sort());
+                                        }
+                                        setPhoneCodeInput("");
+                                    }}
+                                    disabled={phoneCodeInput.length !== 2}
+                                    className="h-9 rounded-lg border border-[#7C3AED] bg-[#7C3AED] px-4 text-[12px] font-bold text-white disabled:opacity-40"
+                                >
+                                    Agregar
+                                </button>
+                            </div>
+                        </EditorBlock>
+                    ) : null}
+                    </>
                 ) : null}
 
                 {activeTab === "autoAssign" ? (
@@ -1502,6 +1565,49 @@ function EditUserModal({
                                 </div>
                             </div>
                         )}
+                    </EditorBlock>
+                ) : null}
+
+                {activeTab === "permissions" && role === "user" ? (
+                    <EditorBlock title="Permisos del vendedor">
+                        <p className="text-[11px] font-semibold text-[#667085]">
+                            Define qué pantallas puede ver este vendedor. Por defecto tiene acceso a todo.
+                        </p>
+                        <div className="space-y-4">
+                            <div>
+                                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.06em] text-[#98A2B3]">Pantallas</p>
+                                <div className="space-y-1.5">
+                                    {([
+                                        { key: "canSeeMap" as keyof UserPermissions, label: "Ver Mapa de prospectos" },
+                                        { key: "canSeeHistory" as keyof UserPermissions, label: "Ver Historial de visitas" },
+                                        { key: "canSeeChat" as keyof UserPermissions, label: "Ver Chat de clientes incompletos" },
+                                    ]).map(({ key, label }) => (
+                                        <PermissionToggle
+                                            key={key}
+                                            label={label}
+                                            value={userPermissions[key]}
+                                            onChange={(val) => setUserPermissions((prev) => ({ ...prev, [key]: val }))}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setUserPermissions(fullUserPermissions())}
+                                className="flex-1 rounded-lg border border-emerald-200 bg-emerald-50 py-2 text-[12px] font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                            >
+                                Activar todo
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setUserPermissions({ canSeeMap: false, canSeeHistory: false, canSeeChat: false })}
+                                className="flex-1 rounded-lg border border-red-200 bg-red-50 py-2 text-[12px] font-semibold text-red-600 transition hover:bg-red-100"
+                            >
+                                Revocar todo
+                            </button>
+                        </div>
                     </EditorBlock>
                 ) : null}
 

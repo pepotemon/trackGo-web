@@ -16,7 +16,7 @@ import {
     type ReactNode,
 } from "react";
 import { auth, db } from "@/lib/firebase";
-import type { AdminPermissions } from "@/types/users";
+import type { AdminPermissions, UserPermissions } from "@/types/users";
 
 export type AppUser = {
     id: string;
@@ -26,6 +26,8 @@ export type AppUser = {
     active: boolean;
     isSuperAdmin?: boolean;
     permissions?: AdminPermissions;
+    userPermissions?: UserPermissions;
+    phoneCodes?: string[];
 };
 
 type AuthContextValue = {
@@ -37,6 +39,10 @@ type AuthContextValue = {
     isSuperAdmin: boolean;
     /** Null when the user is superadmin (implicitly has all permissions). */
     adminPermissions: AdminPermissions | null;
+    /** Resolved vendor permissions — undefined fields default to true (full access). */
+    userPermissions: UserPermissions;
+    /** Brazilian DDDs this vendor covers. Empty = no restriction configured. */
+    phoneCodes: string[];
     login: (email: string, password: string) => Promise<void>;
     logout: () => Promise<void>;
 };
@@ -77,6 +83,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     active: data.active === true,
                     isSuperAdmin: data.isSuperAdmin === true,
                     permissions: data.permissions ?? undefined,
+                    userPermissions: data.userPermissions ?? undefined,
+                    phoneCodes: Array.isArray(data.phoneCodes) ? (data.phoneCodes as string[]) : [],
                 });
             } finally {
                 setLoading(false);
@@ -95,6 +103,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             isUser: profile?.role === "user" && profile?.active === true,
             isSuperAdmin: profile?.isSuperAdmin === true,
             adminPermissions: profile?.isSuperAdmin ? null : (profile?.permissions ?? null),
+            userPermissions: {
+                canSeeMap: profile?.userPermissions?.canSeeMap ?? true,
+                canSeeHistory: profile?.userPermissions?.canSeeHistory ?? true,
+                canSeeChat: profile?.userPermissions?.canSeeChat ?? true,
+            },
+            phoneCodes: profile?.phoneCodes ?? [],
             login: async (email, password) => {
                 await signInWithEmailAndPassword(auth, email.trim(), password);
             },

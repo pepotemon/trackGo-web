@@ -70,6 +70,24 @@ export function defaultAdminPermissions(): AdminPermissions {
     };
 }
 
+/** Granular permissions for vendor users (role === "user"). */
+export type UserPermissions = {
+    /** Can view the full map screen. */
+    canSeeMap: boolean;
+    /** Can view the history screen. */
+    canSeeHistory: boolean;
+    /** Can view the chat / incomplete-clients screen. */
+    canSeeChat: boolean;
+};
+
+export function defaultUserPermissions(): UserPermissions {
+    return { canSeeMap: true, canSeeHistory: true, canSeeChat: true };
+}
+
+export function fullUserPermissions(): UserPermissions {
+    return { canSeeMap: true, canSeeHistory: true, canSeeChat: true };
+}
+
 /** Returns a permissions object with everything enabled (used for superadmin). */
 export function fullAdminPermissions(): AdminPermissions {
     return {
@@ -141,6 +159,11 @@ export type UserDoc = {
 
     autoAssignEnabled?: boolean;
     autoAssignDailyLimit?: number | null;
+
+    /** Granular permissions for vendor (role === "user") users. Undefined = all allowed. */
+    userPermissions?: UserPermissions;
+    /** Brazilian phone area codes (DDDs) this vendor covers, e.g. ["91","85"]. */
+    phoneCodes?: string[];
 
     createdAt?: number;
     updatedAt?: number;

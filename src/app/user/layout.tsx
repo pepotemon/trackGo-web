@@ -6,18 +6,22 @@ import { useEffect, type ReactNode } from "react";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { TrackGoLogo } from "@/components/brand/TrackGoLogo";
 
-type NavIconName = "leads" | "map" | "history" | "logOut";
+type NavIconName = "leads" | "map" | "history" | "chat" | "logOut";
 
-const MOBILE_NAV: { href: string; label: string; icon: NavIconName }[] = [
+const BASE_NAV: { href: string; label: string; icon: NavIconName; permKey?: "canSeeMap" | "canSeeHistory" | "canSeeChat" }[] = [
     { href: "/user/leads", label: "Prospectos", icon: "leads" },
-    { href: "/user/map", label: "Mapa", icon: "map" },
-    { href: "/user/history", label: "Historial", icon: "history" },
+    { href: "/user/map", label: "Mapa", icon: "map", permKey: "canSeeMap" },
+    { href: "/user/history", label: "Historial", icon: "history", permKey: "canSeeHistory" },
+    { href: "/user/chat", label: "Chat", icon: "chat", permKey: "canSeeChat" },
 ];
 
 export default function UserLayout({ children }: { children: ReactNode }) {
     const router = useRouter();
     const pathname = usePathname();
-    const { firebaseUser, profile, isUser, loading, logout } = useAuth();
+    const { firebaseUser, profile, isUser, loading, logout, userPermissions } = useAuth();
+    const MOBILE_NAV = BASE_NAV.filter((item) =>
+        !item.permKey || userPermissions[item.permKey]
+    );
 
     useEffect(() => {
         if (loading) return;
@@ -109,7 +113,7 @@ export default function UserLayout({ children }: { children: ReactNode }) {
 
                 {/* ── MOBILE BOTTOM NAV ───────────────────────────────── */}
                 <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#e8e7fb] bg-white/95 px-2 pb-[max(env(safe-area-inset-bottom),0.65rem)] pt-1 shadow-[0_-20px_56px_rgba(82,63,169,0.15)] backdrop-blur-xl xl:hidden">
-                    <div className="mx-auto grid max-w-md grid-cols-3">
+                    <div className={`mx-auto grid max-w-md ${MOBILE_NAV.length === 4 ? "grid-cols-4" : "grid-cols-3"}`}>
                         {MOBILE_NAV.map((item) => {
                             const active = pathname === item.href || pathname.startsWith(item.href);
                             return (
@@ -163,6 +167,11 @@ function NavIcon({ name, size = "sm" }: { name: NavIconName; size?: "sm" | "md" 
                 <>
                     <path {...common} d="M12 7v5l3 2" />
                     <path {...common} d="M3.05 11a9 9 0 1 1 .5 4M3 15v-4h4" />
+                </>
+            ) : null}
+            {name === "chat" ? (
+                <>
+                    <path {...common} d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                 </>
             ) : null}
             {name === "logOut" ? (
