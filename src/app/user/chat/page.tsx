@@ -1,23 +1,49 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { dddCity, extractDDD, subscribeIncompleteClients } from "@/data/incompleteClientsRepo";
+import { markLeadRejected, resetLeadPending } from "@/data/userLeadsRepo";
+import { assignLeadToUser } from "@/data/leadsRepo";
 import type { MetaLeadDoc } from "@/types/leads";
+import { REJECTED_REASON_LABELS, type RejectedReason } from "@/types/userLeads";
+
+const REJECTION_REASONS = Object.entries(REJECTED_REASON_LABELS) as [RejectedReason, string][];
+
+// ── localStorage helpers ──────────────────────────────────────────────────────
+
+function getArchived(userId: string): Set<string> {
+    try {
+        const raw = localStorage.getItem(`inc_archived_${userId}`);
+        return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+    } catch { return new Set(); }
+}
+function archive(userId: string, leadId: string) {
+    const s = getArchived(userId);
+    s.add(leadId);
+    localStorage.setItem(`inc_archived_${userId}`, JSON.stringify([...s]));
+}
+function getNote(leadId: string): string {
+    return localStorage.getItem(`lead_note_${leadId}`) ?? "";
+}
+function saveNote(leadId: string, note: string) {
+    note.trim()
+        ? localStorage.setItem(`lead_note_${leadId}`, note.trim())
+        : localStorage.removeItem(`lead_note_${leadId}`);
+}
+
+// ── utils ─────────────────────────────────────────────────────────────────────
 
 function norm(s: unknown) {
     return String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
-
 function displayName(lead: MetaLeadDoc) {
-    return lead.name || lead.business || lead.phone || "Sin nombre";
+    return lead.business || lead.name || lead.phone || "Sin nombre";
 }
-
 function formatRelative(ts: number | null | undefined): string {
     if (!ts) return "";
     const diff = Date.now() - ts;
-    const mins = Math.floor(diff / 60000);
+    const mins = Math.floor(diff / 60_000);
     if (mins < 1) return "Ahora";
     if (mins < 60) return `${mins}m`;
     const hrs = Math.floor(mins / 60);
@@ -26,21 +52,52 @@ function formatRelative(ts: number | null | undefined): string {
     if (days < 7) return `${days}d`;
     return new Intl.DateTimeFormat("es", { day: "2-digit", month: "short" }).format(new Date(ts));
 }
+function missingInfo(lead: MetaLeadDoc): string[] {
+    const bits: string[] = [];
+    if (!lead.location?.lat) bits.push("ubicación");
+    if (!lead.name) bits.push("nombre");
+    return bits;
+}
 
+// ── page ──────────────────────────────────────────────────────────────────────
 
-export default function UserChatPage() {
-    const { phoneCodes } = useAuth();
+export default function UserPotencialPage() {
+    const { firebaseUser, phoneCodes } = useAuth();
+    const userId = firebaseUser?.uid ?? "";
 
     const [leads, setLeads] = useState<MetaLeadDoc[]>([]);
     const [loading, setLoading] = useState(true);
+    const [archived, setArchived] = useState<Set<string>>(new Set());
+    const [notes, setNotes] = useState<Record<string, string>>({});
     const [search, setSearch] = useState("");
     const [searchOpen, setSearchOpen] = useState(false);
-    const [dddFilter, setDddFilter] = useState<string>("all");
+    const [dddFilter, setDddFilter] = useState("all");
+
+    const [actionLead, setActionLead] = useState<MetaLeadDoc | null>(null);
+    const [actionType, setActionType] = useState<"note" | "reject" | "accept" | null>(null);
+    const [rejectStep, setRejectStep] = useState<1 | 2>(1);
+    const [rejectReason, setRejectReason] = useState<RejectedReason | null>(null);
+    const [rejectText, setRejectText] = useState("");
+    const [noteText, setNoteText] = useState("");
+    const [saving, setSaving] = useState(false);
+
+    // load archived + notes from localStorage after mount
+    useEffect(() => {
+        if (!userId) return;
+        setArchived(getArchived(userId));
+    }, [userId]);
 
     useEffect(() => {
+        if (!phoneCodes.length) { setLoading(false); return; }
         setLoading(true);
         const unsub = subscribeIncompleteClients(phoneCodes, (data) => {
             setLeads(data);
+            const noteMap: Record<string, string> = {};
+            data.forEach((l) => {
+                const n = getNote(l.id);
+                if (n) noteMap[l.id] = n;
+            });
+            setNotes(noteMap);
             setLoading(false);
         });
         return unsub;
@@ -48,39 +105,92 @@ export default function UserChatPage() {
 
     const activeDdds = useMemo(() => {
         const seen = new Set<string>();
-        leads.forEach((l) => {
-            const ddd = extractDDD(l.phone);
-            if (ddd) seen.add(ddd);
-        });
-        return Array.from(seen).sort();
+        leads.forEach((l) => { const d = extractDDD(l.phone); if (d) seen.add(d); });
+        return [...seen].sort();
     }, [leads]);
 
-    const filtered = useMemo(() => {
-        let list = leads;
-        if (dddFilter !== "all") {
-            list = list.filter((l) => extractDDD(l.phone) === dddFilter);
-        }
+    const visible = useMemo(() => {
+        let list = leads.filter((l) => !archived.has(l.id));
+        if (dddFilter !== "all") list = list.filter((l) => extractDDD(l.phone) === dddFilter);
         if (search.trim()) {
             const q = norm(search.trim());
             list = list.filter((l) =>
-                norm(l.name).includes(q) ||
-                norm(l.business).includes(q) ||
-                norm(l.phone).includes(q) ||
-                norm(l.location?.address).includes(q)
+                norm(l.business).includes(q) || norm(l.name).includes(q) ||
+                norm(l.phone).includes(q) || norm(l.location?.address).includes(q)
             );
         }
         return list;
-    }, [leads, dddFilter, search]);
+    }, [leads, archived, dddFilter, search]);
+
+    // ── action helpers ────────────────────────────────────────────────────────
+
+    function doArchive(lead: MetaLeadDoc) {
+        archive(userId, lead.id);
+        setArchived((prev) => new Set([...prev, lead.id]));
+    }
+
+    function openNote(lead: MetaLeadDoc) {
+        setActionLead(lead);
+        setNoteText(notes[lead.id] ?? "");
+        setActionType("note");
+    }
+    function saveLeadNote() {
+        if (!actionLead) return;
+        saveNote(actionLead.id, noteText);
+        setNotes((prev) => ({ ...prev, [actionLead.id]: noteText.trim() }));
+        closeAction();
+    }
+
+    function openReject(lead: MetaLeadDoc) {
+        setActionLead(lead); setActionType("reject");
+        setRejectStep(1); setRejectReason(null); setRejectText("");
+    }
+    function openAccept(lead: MetaLeadDoc) { setActionLead(lead); setActionType("accept"); }
+    function closeAction() { setActionLead(null); setActionType(null); setSaving(false); }
+
+    function selectReason(r: RejectedReason) {
+        setRejectReason(r);
+        if (r !== "otro") setRejectStep(2);
+    }
+
+    async function confirmReject() {
+        if (!actionLead || !rejectReason || !userId) return;
+        setSaving(true);
+        try {
+            await markLeadRejected(actionLead, userId, rejectReason, rejectText);
+            doArchive(actionLead);
+            closeAction();
+        } catch { setSaving(false); }
+    }
+
+    async function confirmAccept() {
+        if (!actionLead || !userId) return;
+        setSaving(true);
+        try {
+            await assignLeadToUser(actionLead.id, userId);
+            doArchive(actionLead);
+            closeAction();
+        } catch { setSaving(false); }
+    }
+
+    function openWhatsApp(lead: MetaLeadDoc) {
+        const phone = lead.phone.replace(/\D/g, "");
+        const br = phone.startsWith("55") ? phone : `55${phone}`;
+        const msg = encodeURIComponent(`Olá, ${lead.name || lead.business || "tudo bem"}! Estou entrando em contato sobre seu interesse.`);
+        window.open(`https://wa.me/${br}?text=${msg}`, "_blank");
+    }
+
+    const pendingCount = leads.filter((l) => !archived.has(l.id)).length;
 
     if (!phoneCodes.length && !loading) {
         return (
             <div className="flex min-h-screen flex-col items-center justify-center bg-[#fbfaff] px-6 text-center">
                 <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f3f0ff]">
-                    <ChatIcon className="h-7 w-7 text-[#7C3AED]" />
+                    <PotencialIcon className="h-7 w-7 text-[#7C3AED]" />
                 </div>
                 <p className="text-[15px] font-black text-[#101936]">Sin indicativos configurados</p>
-                <p className="mt-1 text-[12px] font-semibold text-[#66739A]">
-                    El administrador debe configurar los DDDs de tu cobertura para ver clientes potenciales.
+                <p className="mt-2 max-w-xs text-[12px] font-semibold text-[#66739A]">
+                    El administrador debe configurar los DDDs de tu cobertura en tu perfil de usuario.
                 </p>
             </div>
         );
@@ -93,9 +203,14 @@ export default function UserChatPage() {
             <div className="sticky top-0 z-20 bg-[#fbfaff]/96 px-3 pb-3 pt-4 backdrop-blur-md xl:px-6">
                 <div className="mb-3 flex items-center justify-between gap-3">
                     <div>
-                        <h1 className="text-[20px] font-black tracking-[-0.03em] text-[#101936]">Chat</h1>
+                        <h1 className="text-[20px] font-black tracking-[-0.03em] text-[#101936]">
+                            Clientes Potenciales
+                            {pendingCount > 0 ? (
+                                <span className="ml-2 inline-flex items-center rounded-full bg-[#7C3AED] px-2 py-0.5 text-[11px] text-white">{pendingCount}</span>
+                            ) : null}
+                        </h1>
                         <p className="mt-0.5 text-[11px] font-semibold text-[#66739A]">
-                            Clientes potenciales incompletos · {phoneCodes.map(dddCity).join(", ")}
+                            {phoneCodes.map(dddCity).join(", ")} · Pendientes de verificar
                         </p>
                     </div>
                     <button
@@ -104,22 +219,21 @@ export default function UserChatPage() {
                         className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-white shadow-sm transition active:bg-[#f3f0ff]"
                         aria-label="Buscar"
                     >
-                        <SearchIconSm />
+                        <SearchIcon />
                     </button>
                 </div>
 
-                {/* DDD filter chips */}
                 {activeDdds.length > 1 ? (
                     <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                        <DddChip active={dddFilter === "all"} onClick={() => setDddFilter("all")}>
-                            Todos <CountBadge active={dddFilter === "all"}>{leads.length}</CountBadge>
-                        </DddChip>
+                        <FilterChip active={dddFilter === "all"} onClick={() => setDddFilter("all")}>
+                            Todos <CountPill active={dddFilter === "all"}>{leads.filter((l) => !archived.has(l.id)).length}</CountPill>
+                        </FilterChip>
                         {activeDdds.map((ddd) => {
-                            const count = leads.filter((l) => extractDDD(l.phone) === ddd).length;
+                            const cnt = leads.filter((l) => !archived.has(l.id) && extractDDD(l.phone) === ddd).length;
                             return (
-                                <DddChip key={ddd} active={dddFilter === ddd} onClick={() => setDddFilter(ddd)}>
-                                    {dddCity(ddd)} <CountBadge active={dddFilter === ddd}>{count}</CountBadge>
-                                </DddChip>
+                                <FilterChip key={ddd} active={dddFilter === ddd} onClick={() => setDddFilter(ddd)}>
+                                    {dddCity(ddd)} <CountPill active={dddFilter === ddd}>{cnt}</CountPill>
+                                </FilterChip>
                             );
                         })}
                     </div>
@@ -130,220 +244,338 @@ export default function UserChatPage() {
             <div className="flex-1 px-3 pb-4 pt-2 xl:px-6">
                 {loading ? (
                     <LoadingState />
-                ) : filtered.length === 0 ? (
-                    <EmptyState hasPhoneCodes={phoneCodes.length > 0} />
+                ) : visible.length === 0 ? (
+                    <EmptyState hasPhoneCodes={phoneCodes.length > 0} hasSearch={!!search} />
                 ) : (
-                    <div className="grid gap-2">
-                        {filtered.map((lead) => (
-                            <ChatLeadCard key={lead.id} lead={lead} />
+                    <div className="grid gap-2.5">
+                        {visible.map((lead) => (
+                            <PotencialCard
+                                key={lead.id}
+                                lead={lead}
+                                note={notes[lead.id]}
+                                onWhatsApp={() => openWhatsApp(lead)}
+                                onNote={() => openNote(lead)}
+                                onArchive={() => doArchive(lead)}
+                                onReject={() => openReject(lead)}
+                                onAccept={() => openAccept(lead)}
+                            />
                         ))}
                     </div>
                 )}
             </div>
 
-            {/* ── SEARCH MODAL ────────────────────────────────────────── */}
+            {/* ── SEARCH OVERLAY ──────────────────────────────────────── */}
             {searchOpen ? (
                 <div className="fixed inset-0 z-50 flex flex-col bg-[#fbfaff]">
                     <div className="flex items-center gap-3 border-b border-[#E8E7FB] px-4 py-3">
                         <div className="flex flex-1 items-center gap-2 rounded-[14px] border border-[#E8E7FB] bg-white px-3 py-2.5 shadow-sm">
-                            <SearchIconSm />
+                            <SearchIcon />
                             <input
                                 autoFocus
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
-                                placeholder="Nombre, negocio, teléfono..."
+                                placeholder="Negocio, teléfono, dirección..."
                                 className="min-w-0 flex-1 bg-transparent text-[14px] font-semibold text-[#101936] outline-none placeholder:text-[#98A2B3]"
                             />
-                            {search ? (
-                                <button type="button" onClick={() => setSearch("")} className="text-[18px] text-[#98A2B3]">×</button>
-                            ) : null}
+                            {search ? <button type="button" onClick={() => setSearch("")} className="text-[18px] text-[#98A2B3]">×</button> : null}
                         </div>
-                        <button type="button" onClick={() => setSearchOpen(false)} className="text-[13px] font-black text-[#7C3AED]">
-                            Listo
-                        </button>
+                        <button type="button" onClick={() => setSearchOpen(false)} className="text-[13px] font-black text-[#7C3AED]">Listo</button>
                     </div>
                     <div className="flex-1 overflow-y-auto px-4 pt-3">
-                        {filtered.length === 0 ? (
+                        {visible.length === 0 ? (
                             <p className="pt-10 text-center text-[13px] font-semibold text-[#98A2B3]">Sin resultados</p>
                         ) : (
-                            <div className="grid gap-2">
-                                {filtered.map((lead) => <ChatLeadCard key={lead.id} lead={lead} />)}
+                            <div className="grid gap-2.5">
+                                {visible.map((lead) => (
+                                    <PotencialCard
+                                        key={lead.id}
+                                        lead={lead}
+                                        note={notes[lead.id]}
+                                        onWhatsApp={() => openWhatsApp(lead)}
+                                        onNote={() => { openNote(lead); setSearchOpen(false); }}
+                                        onArchive={() => doArchive(lead)}
+                                        onReject={() => { openReject(lead); setSearchOpen(false); }}
+                                        onAccept={() => { openAccept(lead); setSearchOpen(false); }}
+                                    />
+                                ))}
                             </div>
                         )}
                     </div>
                 </div>
             ) : null}
+
+            {/* ── NOTE MODAL ──────────────────────────────────────────── */}
+            {actionType === "note" && actionLead ? (
+                <BottomSheet onClose={closeAction}>
+                    <p className="mb-3 text-[15px] font-black text-[#101936]">Nota · {displayName(actionLead)}</p>
+                    <textarea
+                        autoFocus
+                        className="w-full rounded-[14px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 py-2.5 text-[13px] font-semibold text-[#101936] outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-violet-100"
+                        rows={5}
+                        placeholder="Escribe una nota para este cliente..."
+                        value={noteText}
+                        onChange={(e) => setNoteText(e.target.value)}
+                    />
+                    <div className="mt-3 flex gap-2">
+                        <button type="button" onClick={closeAction} className="flex-1 rounded-[14px] border border-[#E8E7FB] py-3 text-[13px] font-black text-[#66739A]">Cancelar</button>
+                        <button type="button" onClick={saveLeadNote} className="flex-1 rounded-[14px] bg-[#7C3AED] py-3 text-[13px] font-black text-white">Guardar</button>
+                    </div>
+                </BottomSheet>
+            ) : null}
+
+            {/* ── ACCEPT MODAL ────────────────────────────────────────── */}
+            {actionType === "accept" && actionLead ? (
+                <BottomSheet onClose={closeAction}>
+                    <div className="mb-4">
+                        <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-700">ASIGNAR A MÍ</span>
+                        <p className="mt-2 text-[17px] font-black text-[#101936]">{displayName(actionLead)}</p>
+                        <p className="mt-0.5 text-[12px] font-semibold text-[#66739A]">{actionLead.phone}</p>
+                    </div>
+                    <p className="mb-4 rounded-[14px] border border-emerald-100 bg-emerald-50 px-3 py-2.5 text-[12px] font-semibold text-emerald-700">
+                        Este cliente pasará a tu lista de Prospectos y desaparecerá de aquí.
+                    </p>
+                    <div className="flex gap-2">
+                        <button type="button" onClick={closeAction} className="flex-1 rounded-[14px] border border-[#E8E7FB] py-3 text-[13px] font-black text-[#66739A]">Cancelar</button>
+                        <button type="button" onClick={confirmAccept} disabled={saving} className="flex-1 rounded-[14px] bg-emerald-600 py-3 text-[13px] font-black text-white disabled:opacity-60">
+                            {saving ? "Asignando..." : "Sí, tomar cliente"}
+                        </button>
+                    </div>
+                </BottomSheet>
+            ) : null}
+
+            {/* ── REJECT MODAL ────────────────────────────────────────── */}
+            {actionType === "reject" && actionLead ? (
+                <BottomSheet onClose={closeAction} tall>
+                    <div className="mb-4">
+                        <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-1 text-[10px] font-black text-red-700">RECHAZAR</span>
+                        <p className="mt-2 text-[17px] font-black text-[#101936]">{displayName(actionLead)}</p>
+                    </div>
+
+                    {rejectStep === 1 ? (
+                        <>
+                            <p className="mb-3 text-[12px] font-bold text-[#66739A]">¿Por qué rechazas este cliente potencial?</p>
+                            <div className="grid gap-2">
+                                {REJECTION_REASONS.map(([key, label]) => (
+                                    <button
+                                        key={key}
+                                        type="button"
+                                        onClick={() => selectReason(key)}
+                                        className={[
+                                            "flex items-center gap-2.5 rounded-[14px] border px-3 py-2.5 text-left text-[13px] font-bold transition",
+                                            rejectReason === key ? "border-red-300 bg-red-50 text-red-700" : "border-[#E8E7FB] bg-white text-[#344054]",
+                                        ].join(" ")}
+                                    >
+                                        <span className={["flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2", rejectReason === key ? "border-red-500 bg-red-500" : "border-[#D0D5DD]"].join(" ")} />
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
+                            {rejectReason === "otro" ? (
+                                <textarea
+                                    className="mt-3 w-full rounded-[14px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 py-2.5 text-[13px] font-semibold text-[#101936] outline-none focus:border-[#7C3AED]"
+                                    rows={3}
+                                    placeholder="Explica el motivo..."
+                                    value={rejectText}
+                                    onChange={(e) => setRejectText(e.target.value)}
+                                />
+                            ) : null}
+                            <div className="mt-4 flex gap-2">
+                                <button type="button" onClick={closeAction} className="flex-1 rounded-[14px] border border-[#E8E7FB] py-3 text-[13px] font-black text-[#66739A]">Cancelar</button>
+                                <button type="button" onClick={() => rejectReason && setRejectStep(2)} disabled={!rejectReason || (rejectReason === "otro" && !rejectText.trim())} className="flex-1 rounded-[14px] bg-[#7C3AED] py-3 text-[13px] font-black text-white disabled:opacity-40">
+                                    Siguiente
+                                </button>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <div className="mb-4 rounded-[14px] border border-red-100 bg-red-50 px-3 py-3">
+                                <p className="text-[11px] font-bold uppercase tracking-wide text-red-400">Razón del rechazo</p>
+                                <p className="mt-1 text-[14px] font-black text-red-700">{rejectReason ? REJECTED_REASON_LABELS[rejectReason] : ""}</p>
+                                {rejectText ? <p className="mt-0.5 text-[12px] font-semibold text-red-600">{rejectText}</p> : null}
+                            </div>
+                            <div className="flex gap-2">
+                                <button type="button" onClick={() => setRejectStep(1)} className="flex-1 rounded-[14px] border border-[#E8E7FB] py-3 text-[13px] font-black text-[#66739A]">Atrás</button>
+                                <button type="button" onClick={confirmReject} disabled={saving} className="flex-1 rounded-[14px] bg-red-600 py-3 text-[13px] font-black text-white disabled:opacity-60">
+                                    {saving ? "Guardando..." : "Confirmar rechazo"}
+                                </button>
+                            </div>
+                        </>
+                    )}
+                </BottomSheet>
+            ) : null}
         </div>
     );
 }
 
-// ── CHAT LEAD CARD ───────────────────────────────────────────────────────────
+// ── POTENCIAL CARD ────────────────────────────────────────────────────────────
 
-function ChatLeadCard({ lead }: { lead: MetaLeadDoc }) {
+function PotencialCard({
+    lead, note,
+    onWhatsApp, onNote, onArchive, onReject, onAccept,
+}: {
+    lead: MetaLeadDoc;
+    note?: string;
+    onWhatsApp: () => void;
+    onNote: () => void;
+    onArchive: () => void;
+    onReject: () => void;
+    onAccept: () => void;
+}) {
     const ddd = extractDDD(lead.phone);
-    const hasLocation = lead.location?.lat !== null && lead.location?.lat !== undefined;
-    const hasBusiness = Boolean(lead.business);
-
-    const missingBits: string[] = [];
-    if (!hasLocation) missingBits.push("ubicación");
-    if (!hasBusiness) missingBits.push("tipo de negocio");
+    const missing = missingInfo(lead);
 
     return (
-        <Link
-            href={`/user/chat/${lead.id}`}
-            className="block overflow-hidden rounded-[18px] border border-[#E8E7FB] bg-white shadow-[0_2px_12px_rgba(91,33,255,0.05)] transition active:bg-[#f9f8ff]"
-        >
+        <div className="overflow-hidden rounded-[18px] border border-[#E8E7FB] bg-white shadow-[0_2px_12px_rgba(91,33,255,0.05)]">
             <div className="p-3">
+                {/* Header */}
                 <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                            <p className="truncate text-[14px] font-black text-[#101936]">{displayName(lead)}</p>
-                            {ddd ? (
-                                <span className="shrink-0 rounded-full bg-[#f3f0ff] px-1.5 py-0.5 text-[9px] font-black text-[#7C3AED]">
-                                    {ddd} · {dddCity(ddd)}
-                                </span>
-                            ) : null}
-                        </div>
+                    <div className="min-w-0">
+                        <p className="truncate text-[14px] font-black text-[#101936]">{displayName(lead)}</p>
                         {lead.business && lead.name ? (
-                            <p className="truncate text-[11px] font-semibold text-[#66739A]">{lead.business}</p>
+                            <p className="truncate text-[11px] font-semibold text-[#66739A]">{lead.name}</p>
                         ) : null}
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-1">
-                        <span className="text-[10px] font-semibold text-[#98A2B3]">
-                            {formatRelative(lead.lastInboundMessageAt)}
-                        </span>
-                        <ParseStatusDot status={lead.parseStatus} />
+                        {ddd ? (
+                            <span className="rounded-full bg-[#f3f0ff] px-2 py-0.5 text-[9px] font-black text-[#7C3AED]">
+                                {ddd} · {dddCity(ddd)}
+                            </span>
+                        ) : null}
+                        <span className="text-[10px] font-semibold text-[#98A2B3]">{formatRelative(lead.lastInboundMessageAt)}</span>
                     </div>
                 </div>
 
-                {/* Last message preview */}
-                {lead.lastInboundText ? (
-                    <p className="mt-1.5 line-clamp-1 text-[12px] font-semibold text-[#66739A]">
-                        {lead.lastInboundText}
-                    </p>
-                ) : null}
+                {/* Phone + missing */}
+                <div className="mt-1.5 space-y-1">
+                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#66739A]">
+                        <PhoneIcon /> <span className="truncate">{lead.phone}</span>
+                    </div>
+                    {lead.location?.address ? (
+                        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#66739A]">
+                            <PinIcon /> <span className="truncate">{lead.location.address}</span>
+                        </div>
+                    ) : null}
+                </div>
 
-                {/* Missing info badges */}
-                {missingBits.length > 0 ? (
+                {/* Missing badges */}
+                {missing.length > 0 ? (
                     <div className="mt-2 flex flex-wrap gap-1.5">
-                        {missingBits.map((bit) => (
+                        {missing.map((bit) => (
                             <span key={bit} className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">
-                                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                                Falta: {bit}
+                                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />Falta: {bit}
                             </span>
                         ))}
                     </div>
                 ) : null}
 
-                {/* Phone */}
-                <div className="mt-2 flex items-center justify-between">
-                    <span className="text-[11px] font-semibold text-[#66739A]">{lead.phone}</span>
-                    <span className="flex items-center gap-1 text-[11px] font-bold text-[#7C3AED]">
-                        Abrir chat
-                        <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                            <path d="m9 18 6-6-6-6" />
-                        </svg>
-                    </span>
+                {/* Last message */}
+                {lead.lastInboundText ? (
+                    <p className="mt-2 line-clamp-2 rounded-[10px] border border-[#F2F0FF] bg-[#f8f7ff] px-2.5 py-1.5 text-[11px] font-semibold text-[#66739A]">
+                        {lead.lastInboundText}
+                    </p>
+                ) : null}
+
+                {/* Note */}
+                {note ? (
+                    <div className="mt-2 flex items-start gap-1.5 rounded-[10px] border border-violet-100 bg-violet-50 px-2.5 py-1.5">
+                        <NoteIcon />
+                        <p className="text-[11px] font-semibold text-[#5B21FF]">{note}</p>
+                    </div>
+                ) : null}
+
+                {/* Actions */}
+                <div className="mt-3 flex items-center gap-1.5 border-t border-[#F2F0FF] pt-2.5">
+                    <ActionBtn onClick={onWhatsApp} tone="green" title="WhatsApp"><WAIcon /></ActionBtn>
+                    <ActionBtn onClick={onNote} tone="violet" title="Nota"><NoteIcon /></ActionBtn>
+                    <ActionBtn onClick={onArchive} tone="gray" title="Archivar"><ArchiveIcon /></ActionBtn>
+                    <div className="flex-1" />
+                    <button
+                        type="button"
+                        onClick={onReject}
+                        className="flex h-8 items-center gap-1.5 rounded-[11px] border border-red-200 bg-red-50 px-2.5 text-[11px] font-black text-red-600 transition active:bg-red-100"
+                    >
+                        <XIcon /> Rechazar
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onAccept}
+                        className="flex h-8 items-center gap-1.5 rounded-[11px] border border-emerald-200 bg-emerald-50 px-2.5 text-[11px] font-black text-emerald-700 transition active:bg-emerald-100"
+                    >
+                        <CheckIcon /> Tomar
+                    </button>
                 </div>
             </div>
-        </Link>
+        </div>
     );
 }
 
-// ── HELPERS ──────────────────────────────────────────────────────────────────
+// ── SUB-COMPONENTS ────────────────────────────────────────────────────────────
 
-function ParseStatusDot({ status }: { status: string }) {
-    const colors: Record<string, string> = {
-        empty: "bg-red-400",
-        partial: "bg-amber-400",
-        ready: "bg-emerald-400",
-    };
-    const labels: Record<string, string> = {
-        empty: "Vacío",
-        partial: "Incompleto",
-        ready: "Listo",
-    };
+function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
     return (
-        <span className="flex items-center gap-1">
-            <span className={`h-2 w-2 rounded-full ${colors[status] ?? "bg-gray-300"}`} />
-            <span className="text-[9px] font-bold text-[#98A2B3]">{labels[status] ?? status}</span>
-        </span>
-    );
-}
-
-function DddChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            className={[
-                "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-black transition",
-                active
-                    ? "border-[#7C3AED] bg-[#7C3AED] text-white"
-                    : "border-[#E8E7FB] bg-white text-[#66739A] hover:border-[#7C3AED]/40 hover:text-[#7C3AED]",
-            ].join(" ")}
-        >
+        <button type="button" onClick={onClick} className={["flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-black transition", active ? "border-[#7C3AED] bg-[#7C3AED] text-white" : "border-[#E8E7FB] bg-white text-[#66739A]"].join(" ")}>
             {children}
         </button>
     );
 }
-
-function CountBadge({ active, children }: { active: boolean; children: React.ReactNode }) {
+function CountPill({ active, children }: { active: boolean; children: React.ReactNode }) {
+    return <span className={["flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[9px] font-black", active ? "bg-white/25 text-white" : "bg-[#f3f0ff] text-[#7C3AED]"].join(" ")}>{children}</span>;
+}
+function ActionBtn({ onClick, tone, title, children }: { onClick: () => void; tone: "green" | "blue" | "violet" | "gray"; title: string; children: React.ReactNode }) {
+    const cls: Record<string, string> = {
+        green: "border-emerald-200 bg-emerald-50 text-emerald-700",
+        blue: "border-blue-200 bg-blue-50 text-blue-700",
+        violet: "border-violet-200 bg-violet-50 text-violet-700",
+        gray: "border-[#E8E7FB] bg-white text-[#66739A]",
+    };
+    return <button type="button" onClick={onClick} title={title} className={`flex h-8 w-8 items-center justify-center rounded-[11px] border transition active:opacity-70 ${cls[tone]}`}>{children}</button>;
+}
+function BottomSheet({ children, onClose, tall }: { children: React.ReactNode; onClose: () => void; tall?: boolean }) {
     return (
-        <span className={[
-            "flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[9px] font-black",
-            active ? "bg-white/25 text-white" : "bg-[#f3f0ff] text-[#7C3AED]",
-        ].join(" ")}>
-            {children}
-        </span>
+        <div className="fixed inset-0 z-50 flex items-end xl:items-center xl:justify-center">
+            <button type="button" className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" onClick={onClose} />
+            <div className={["relative w-full overflow-y-auto rounded-t-[24px] bg-white px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-4 shadow-2xl xl:max-w-md xl:rounded-[24px] xl:pb-6", tall ? "max-h-[85vh]" : "max-h-[70vh]"].join(" ")}>
+                <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-[#E8E7FB] xl:hidden" />
+                {children}
+            </div>
+        </div>
     );
 }
-
 function LoadingState() {
     return (
         <div className="flex flex-col items-center justify-center py-20">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f3f0ff]">
-                <svg className="tg-spin h-7 w-7 text-[#7C3AED]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                    <path d="M21 12a9 9 0 1 1-3.1-6.8" />
-                </svg>
+                <svg className="tg-spin h-7 w-7 text-[#7C3AED]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 12a9 9 0 1 1-3.1-6.8" /></svg>
             </div>
-            <p className="mt-3 text-[13px] font-bold text-[#66739A]">Cargando clientes...</p>
+            <p className="mt-3 text-[13px] font-bold text-[#66739A]">Cargando clientes potenciales...</p>
         </div>
     );
 }
-
-function EmptyState({ hasPhoneCodes }: { hasPhoneCodes: boolean }) {
+function EmptyState({ hasPhoneCodes, hasSearch }: { hasPhoneCodes: boolean; hasSearch: boolean }) {
     return (
         <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f3f0ff]">
-                <ChatIcon className="h-7 w-7 text-[#7C3AED]" />
+                <PotencialIcon className="h-7 w-7 text-[#7C3AED]" />
             </div>
             <p className="text-[14px] font-black text-[#101936]">
-                {hasPhoneCodes ? "Sin clientes incompletos" : "Sin indicativos configurados"}
+                {hasSearch ? "Sin resultados" : hasPhoneCodes ? "Sin clientes potenciales" : "Sin indicativos configurados"}
             </p>
             <p className="mt-1 text-[12px] font-semibold text-[#98A2B3]">
-                {hasPhoneCodes
-                    ? "No hay clientes pendientes de verificar en tu cobertura"
-                    : "Contacta al administrador para configurar tus DDDs"}
+                {hasSearch ? "Intenta con otro término" : hasPhoneCodes ? "No hay clientes pendientes en tu zona" : "Contacta al administrador"}
             </p>
         </div>
     );
 }
 
-// ── ICONS ────────────────────────────────────────────────────────────────────
+// ── ICONS ─────────────────────────────────────────────────────────────────────
 
-function SearchIconSm() {
-    return (
-        <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#7C3AED]" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-            <path d="m21 21-4.3-4.3M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16Z" />
-        </svg>
-    );
-}
-
-function ChatIcon({ className }: { className?: string }) {
-    return (
-        <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-        </svg>
-    );
-}
+const ic = { fill: "none", stroke: "currentColor", strokeLinecap: "round" as const, strokeLinejoin: "round" as const, strokeWidth: 1.8 };
+function SearchIcon() { return <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#7C3AED]" {...ic}><path d="m21 21-4.3-4.3M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16Z" /></svg>; }
+function PhoneIcon() { return <svg viewBox="0 0 24 24" className="h-3 w-3 shrink-0" {...ic}><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.1-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.8.4 1.6.7 2.4a2 2 0 0 1-.5 2.1L8.1 9.4a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.8.3 1.6.5 2.4.7a2 2 0 0 1 1.7 2Z" /></svg>; }
+function PinIcon() { return <svg viewBox="0 0 24 24" className="h-3 w-3 shrink-0" {...ic}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1 1 18 0Z" /><circle cx="12" cy="10" r="3" {...ic} /></svg>; }
+function CheckIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M20 6 9 17l-5-5" /></svg>; }
+function XIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M18 6 6 18M6 6l12 12" /></svg>; }
+function NoteIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" /><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" /></svg>; }
+function ArchiveIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" /><path d="m3.3 7 8.7 5 8.7-5M12 22V12" /></svg>; }
+function WAIcon() { return <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M17.47 14.38c-.28-.14-1.65-.82-1.9-.91-.26-.09-.44-.14-.63.14-.19.28-.73.91-.9 1.1-.16.18-.33.2-.61.07-.28-.14-1.18-.44-2.25-1.39-.83-.74-1.39-1.66-1.55-1.93-.16-.28-.02-.43.12-.57.12-.12.28-.32.42-.48.14-.16.18-.28.28-.46.09-.18.05-.34-.02-.48-.07-.14-.63-1.52-.86-2.08-.23-.55-.46-.47-.63-.48-.16-.01-.35-.01-.53-.01-.18 0-.48.07-.73.34-.25.27-.97.95-.97 2.31 0 1.36.99 2.67 1.13 2.86.14.18 1.96 2.99 4.75 4.2.66.28 1.18.45 1.58.58.66.21 1.27.18 1.74.11.53-.08 1.65-.68 1.88-1.33.24-.65.24-1.2.17-1.33-.07-.12-.25-.19-.53-.33Z"/><path d="M12.05 2.01C6.49 2.01 2 6.5 2 12.07c0 1.87.51 3.63 1.4 5.14L2 22l4.93-1.36A10.04 10.04 0 0 0 12.05 22C17.61 22 22 17.5 22 11.93 22 6.5 17.61 2.01 12.05 2.01Zm0 18.37a8.34 8.34 0 0 1-4.23-1.15l-.3-.18-3.13.86.86-3.17-.2-.32a8.35 8.35 0 0 1-1.27-4.41c0-4.61 3.72-8.36 8.3-8.36 4.57 0 8.29 3.75 8.29 8.36-.01 4.61-3.72 8.37-8.32 8.37Z"/></svg>; }
+function PotencialIcon({ className }: { className?: string }) { return <svg viewBox="0 0 24 24" className={className} {...ic}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" {...ic} /><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>; }

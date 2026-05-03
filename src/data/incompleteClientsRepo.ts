@@ -2,7 +2,6 @@ import {
     collection,
     limit,
     onSnapshot,
-    orderBy,
     query,
     where,
     type Unsubscribe,
@@ -62,17 +61,24 @@ export function subscribeIncompleteClients(
     const q = query(
         collection(db, "clients"),
         where("verificationStatus", "==", "pending_review"),
-        orderBy("lastInboundMessageAt", "desc"),
-        limit(200)
+        limit(300)
     );
 
-    return onSnapshot(q, (snap) => {
-        const filtered = snap.docs
-            .map((d) => normalizeLeadDoc(d.id, d.data() as Record<string, unknown>))
-            .filter((lead) => {
-                const ddd = extractDDD(lead.phone);
-                return ddd !== null && phoneCodes.includes(ddd);
-            });
-        callback(filtered);
-    });
+    return onSnapshot(
+        q,
+        (snap) => {
+            const filtered = snap.docs
+                .map((d) => normalizeLeadDoc(d.id, d.data() as Record<string, unknown>))
+                .filter((lead) => {
+                    const ddd = extractDDD(lead.phone);
+                    return ddd !== null && phoneCodes.includes(ddd);
+                })
+                .sort((a, b) => (b.lastInboundMessageAt ?? 0) - (a.lastInboundMessageAt ?? 0));
+            callback(filtered);
+        },
+        (err) => {
+            console.error("[subscribeIncompleteClients]", err.message);
+            callback([]);
+        }
+    );
 }

@@ -88,16 +88,25 @@ export function subscribeUserLeads(
     userId: string,
     callback: (leads: MetaLeadDoc[]) => void
 ): Unsubscribe {
+    // No orderBy here — composite index not guaranteed; sort client-side.
     const q = query(
         collection(db, "clients"),
-        where("assignedTo", "==", userId),
-        orderBy("assignedAt", "desc")
+        where("assignedTo", "==", userId)
     );
 
-    return onSnapshot(q, (snap) => {
-        const leads = snap.docs.map((d) => normalizeLead(d.id, record(d.data())));
-        callback(leads);
-    });
+    return onSnapshot(
+        q,
+        (snap) => {
+            const leads = snap.docs
+                .map((d) => normalizeLead(d.id, record(d.data())))
+                .sort((a, b) => (b.assignedAt ?? 0) - (a.assignedAt ?? 0));
+            callback(leads);
+        },
+        (err) => {
+            console.error("[subscribeUserLeads]", err.message);
+            callback([]);
+        }
+    );
 }
 
 /** Real-time subscription to daily events for stats (HOY / SEMANA). */
@@ -107,15 +116,17 @@ export function subscribeUserDailyEvents(
     endKey: string,
     callback: (events: DailyEventDoc[]) => void
 ): Unsubscribe {
+    // Range filter + equality on different fields — skip orderBy to avoid composite index requirement.
     const q = query(
         collection(db, "dailyEvents"),
         where("userId", "==", userId),
         where("dayKey", ">=", startKey),
-        where("dayKey", "<=", endKey),
-        orderBy("dayKey", "asc")
+        where("dayKey", "<=", endKey)
     );
 
-    return onSnapshot(q, (snap) => {
+    return onSnapshot(
+        q,
+        (snap) => {
         const events = snap.docs.map((d) => {
             const data = record(d.data());
             return {
@@ -137,8 +148,13 @@ export function subscribeUserDailyEvents(
                 note: text(data.note) || null,
             } satisfies DailyEventDoc;
         });
-        callback(events);
-    });
+        callback(events.sort((a, b) => a.dayKey.localeCompare(b.dayKey)));
+        },
+        (err) => {
+            console.error("[subscribeUserDailyEvents]", err.message);
+            callback([]);
+        }
+    );
 }
 
 function eventId(dayKey: string, leadId: string): string {

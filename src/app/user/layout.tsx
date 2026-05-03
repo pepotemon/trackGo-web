@@ -12,7 +12,7 @@ const BASE_NAV: { href: string; label: string; icon: NavIconName; permKey?: "can
     { href: "/user/leads", label: "Prospectos", icon: "leads" },
     { href: "/user/map", label: "Mapa", icon: "map", permKey: "canSeeMap" },
     { href: "/user/history", label: "Historial", icon: "history", permKey: "canSeeHistory" },
-    { href: "/user/chat", label: "Chat", icon: "chat", permKey: "canSeeChat" },
+    { href: "/user/chat", label: "Potenc.", icon: "chat", permKey: "canSeeChat" },
 ];
 
 export default function UserLayout({ children }: { children: ReactNode }) {
