@@ -347,18 +347,18 @@ service cloud.firestore {
       // Vendor reads not_suitable clients in their coverage (No Aptos tab)
       allow read: if isUser() && resource.data.verificationStatus == "not_suitable";
 
-      // Vendor marks unassigned pending_review client as not_suitable
+      // Vendor marks unassigned client as not_suitable
       allow update: if isUser()
-        && resource.data.verificationStatus == "pending_review"
+        && resource.data.verificationStatus in ["pending_review", "incomplete"]
         && (resource.data.assignedTo == null || resource.data.assignedTo == "")
         && request.resource.data.diff(resource.data).changedKeys().hasOnly([
           "verificationStatus", "leadQuality", "verificationStatusChangedAt", "updatedAt"
         ])
         && request.resource.data.verificationStatus == "not_suitable";
 
-      // Vendor can self-assign an unassigned pending_review client (Tomar)
+      // Vendor can self-assign an unassigned incomplete/pending_review client (Tomar)
       allow update: if isUser()
-        && resource.data.verificationStatus == "pending_review"
+        && resource.data.verificationStatus in ["pending_review", "incomplete"]
         && (resource.data.assignedTo == null || resource.data.assignedTo == "")
         && request.resource.data.diff(resource.data).changedKeys().hasOnly([
           "assignedTo", "assignedAt", "assignedDayKey",
