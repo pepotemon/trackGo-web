@@ -166,6 +166,7 @@ function MapPageInner() {
                 defaultCenter={defaultCenter}
                 defaultZoom={12}
                 mapId={MAP_ID}
+                mapTypeId="roadmap"
                 disableDefaultUI
                 gestureHandling="greedy"
                 style={{ width: "100%", height: "100%" }}
