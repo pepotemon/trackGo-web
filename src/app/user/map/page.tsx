@@ -480,6 +480,17 @@ function MapControls({
         map.setZoom(15);
     }, [map, userLocation]);
 
+    // Notify the map when its container resizes (dvh changes on mobile as browser chrome shows/hides)
+    useEffect(() => {
+        if (!map) return;
+        const container = map.getDiv();
+        const observer = new ResizeObserver(() => {
+            google.maps.event.trigger(map, "resize");
+        });
+        observer.observe(container);
+        return () => observer.disconnect();
+    }, [map]);
+
     const fitBounds = useCallback(() => {
         if (!map || leads.length === 0) return;
         const bounds = new google.maps.LatLngBounds();
