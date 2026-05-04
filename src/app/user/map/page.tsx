@@ -46,8 +46,6 @@ function MapPageInner() {
     const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
     const [locating, setLocating] = useState(false);
 
-    const [locationReady, setLocationReady] = useState(false);
-
     const [actionType, setActionType] = useState<"visit" | "reject" | null>(null);
     const [rejectStep, setRejectStep] = useState<1 | 2>(1);
     const [rejectReason, setRejectReason] = useState<RejectedReason | null>(null);
@@ -85,21 +83,14 @@ function MapPageInner() {
     }), [leadsWithCoords]);
 
     function locate() {
-        if (!navigator.geolocation) {
-            setLocationReady(true);
-            return;
-        }
+        if (!navigator.geolocation) return;
         setLocating(true);
         navigator.geolocation.getCurrentPosition(
             (pos) => {
                 setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
                 setLocating(false);
-                setLocationReady(true);
             },
-            () => {
-                setLocating(false);
-                setLocationReady(true);
-            },
+            () => { setLocating(false); },
             { enableHighAccuracy: true, timeout: 8000 }
         );
     }
@@ -165,24 +156,9 @@ function MapPageInner() {
         window.open(url, "_blank");
     }
 
-    const defaultCenter = userLocation
-        ?? (leadsWithCoords.length > 0
-            ? { lat: leadsWithCoords[0].location.lat!, lng: leadsWithCoords[0].location.lng! }
-            : { lat: -23.55, lng: -46.63 });
-
-    if (!locationReady) {
-        return (
-            <div className="flex h-[calc(100dvh-72px)] items-center justify-center bg-[#fbfaff] xl:h-screen">
-                <div className="flex flex-col items-center gap-3 rounded-2xl border border-[#E8E7FB] bg-white px-8 py-6 shadow-xl">
-                    <svg className="tg-spin h-8 w-8 text-[#7C3AED]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                        <path d="M21 12a9 9 0 1 1-3.1-6.8" />
-                    </svg>
-                    <p className="text-[14px] font-bold text-[#344054]">Obteniendo ubicación...</p>
-                    <p className="text-[12px] font-semibold text-[#98A2B3]">Centrando el mapa en tu posición</p>
-                </div>
-            </div>
-        );
-    }
+    const defaultCenter = leadsWithCoords.length > 0
+        ? { lat: leadsWithCoords[0].location.lat!, lng: leadsWithCoords[0].location.lng! }
+        : { lat: -23.55, lng: -46.63 };
 
     return (
         <div className="relative flex h-[calc(100dvh-72px)] flex-col overflow-hidden overscroll-none xl:h-screen">

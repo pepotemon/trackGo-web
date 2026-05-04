@@ -19,9 +19,8 @@ export default function UserLayout({ children }: { children: ReactNode }) {
     const router = useRouter();
     const pathname = usePathname();
     const { firebaseUser, profile, isUser, loading, logout, userPermissions } = useAuth();
-    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-    const swipeStartXRef = useRef<number | null>(null);
-    const drawerSwipeXRef = useRef<number | null>(null);
+    const [logoutVisible, setLogoutVisible] = useState(false);
+    const bottomNavTouchX = useRef(0);
 
     const MOBILE_NAV = BASE_NAV.filter((item) =>
         !item.permKey || userPermissions[item.permKey]
@@ -38,27 +37,14 @@ export default function UserLayout({ children }: { children: ReactNode }) {
         router.replace("/login");
     }
 
-    // Swipe from left edge → open drawer
-    function onMainTouchStart(e: React.TouchEvent) {
-        const x = e.touches[0].clientX;
-        if (x < 24) swipeStartXRef.current = x;
-    }
-    function onMainTouchEnd(e: React.TouchEvent) {
-        if (swipeStartXRef.current === null) return;
-        const dx = e.changedTouches[0].clientX - swipeStartXRef.current;
-        if (dx > 60) setMobileMenuOpen(true);
-        swipeStartXRef.current = null;
+    function onBottomNavTouchStart(e: React.TouchEvent) {
+        bottomNavTouchX.current = e.touches[0]?.clientX ?? 0;
     }
 
-    // Swipe left on drawer panel → close
-    function onDrawerTouchStart(e: React.TouchEvent) {
-        drawerSwipeXRef.current = e.touches[0].clientX;
-    }
-    function onDrawerTouchEnd(e: React.TouchEvent) {
-        if (drawerSwipeXRef.current === null) return;
-        const dx = e.changedTouches[0].clientX - drawerSwipeXRef.current;
-        if (dx < -60) setMobileMenuOpen(false);
-        drawerSwipeXRef.current = null;
+    function onBottomNavTouchEnd(e: React.TouchEvent) {
+        const dx = (e.changedTouches[0]?.clientX ?? 0) - bottomNavTouchX.current;
+        if (dx < -55) setLogoutVisible(true);
+        if (dx > 55) setLogoutVisible(false);
     }
 
     if (loading) {
@@ -77,12 +63,10 @@ export default function UserLayout({ children }: { children: ReactNode }) {
     const userName = profile?.name?.split(" ")[0] ?? "Vendedor";
     const userInitial = userName.slice(0, 1).toUpperCase();
 
+    const colsClass = (["grid-cols-1", "grid-cols-2", "grid-cols-3", "grid-cols-4"] as const)[Math.min(MOBILE_NAV.length, 4) - 1] ?? "grid-cols-4";
+
     return (
-        <div
-            className="min-h-screen bg-[#fbfaff] text-[#172033]"
-            onTouchStart={onMainTouchStart}
-            onTouchEnd={onMainTouchEnd}
-        >
+        <div className="min-h-screen bg-[#fbfaff] text-[#172033]">
             {/* ── DESKTOP SIDEBAR ─────────────────────────────────────── */}
             <aside className="fixed left-0 top-0 hidden h-screen w-[220px] flex-col border-r border-[#d9d2ff] bg-[linear-gradient(180deg,#f4f0ff_0%,#e9e4ff_48%,#fbfaff_100%)] px-3 py-4 shadow-[18px_0_55px_rgba(82,63,169,0.13)] xl:flex">
                 <div className="mb-5 flex justify-center border-b border-[#d9d2ff] px-2 pb-4">
@@ -137,93 +121,6 @@ export default function UserLayout({ children }: { children: ReactNode }) {
                 </div>
             </aside>
 
-            {/* ── MOBILE SLIDE DRAWER ─────────────────────────────────── */}
-            <div
-                className={[
-                    "fixed inset-0 z-50 xl:hidden transition-opacity duration-300",
-                    mobileMenuOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
-                ].join(" ")}
-            >
-                {/* backdrop */}
-                <button
-                    type="button"
-                    aria-label="Cerrar menú"
-                    className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
-                    onClick={() => setMobileMenuOpen(false)}
-                />
-                {/* panel — swipe left to close */}
-                <div
-                    className={[
-                        "absolute bottom-0 left-0 top-0 flex w-[260px] flex-col border-r border-[#d9d2ff] bg-[linear-gradient(180deg,#f4f0ff_0%,#e9e4ff_48%,#fbfaff_100%)] px-3 py-4 shadow-[18px_0_55px_rgba(82,63,169,0.2)] transition-transform duration-300 ease-out",
-                        mobileMenuOpen ? "translate-x-0" : "-translate-x-full",
-                    ].join(" ")}
-                    onTouchStart={onDrawerTouchStart}
-                    onTouchEnd={onDrawerTouchEnd}
-                >
-                    <div className="mb-5 flex items-center justify-between border-b border-[#d9d2ff] px-1 pb-4">
-                        <TrackGoLogo size="lg" />
-                        <button
-                            type="button"
-                            aria-label="Cerrar"
-                            onClick={() => setMobileMenuOpen(false)}
-                            className="flex h-8 w-8 items-center justify-center rounded-xl text-[#5b4ea6] transition active:bg-[#e9e4ff]"
-                        >
-                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M18 6 6 18M6 6l12 12" />
-                            </svg>
-                        </button>
-                    </div>
-
-                    <nav className="flex-1 space-y-0.5">
-                        {MOBILE_NAV.map((item) => {
-                            const active = pathname === item.href || pathname.startsWith(item.href);
-                            return (
-                                <Link
-                                    key={item.href}
-                                    href={item.href}
-                                    onClick={() => setMobileMenuOpen(false)}
-                                    className={[
-                                        "flex h-9 items-center gap-2 rounded-xl px-2 text-[12px] font-semibold transition",
-                                        active
-                                            ? "bg-white text-[#4f46e5] shadow-sm"
-                                            : "text-[#364260] active:bg-white/85",
-                                    ].join(" ")}
-                                >
-                                    <span className={[
-                                        "flex h-6 w-6 items-center justify-center rounded-lg ring-1 transition",
-                                        active
-                                            ? "bg-[#f3f0ff] text-[#5b21ff] ring-[#c8c0ff]"
-                                            : "bg-white/65 text-[#5b4ea6] ring-[#d9d2ff]",
-                                    ].join(" ")}>
-                                        <NavIcon name={item.icon} />
-                                    </span>
-                                    {item.label}
-                                </Link>
-                            );
-                        })}
-                    </nav>
-
-                    <div className="space-y-1">
-                        <button
-                            type="button"
-                            onClick={handleLogout}
-                            className="flex h-8 w-full items-center gap-2 rounded-lg px-2 text-[12px] font-medium text-[#dc2626] transition active:bg-[#fef2f2]"
-                        >
-                            <span className="flex h-5 w-5 items-center justify-center">
-                                <NavIcon name="logOut" />
-                            </span>
-                            Cerrar sesión
-                        </button>
-                        <div className="flex items-center gap-2 rounded-xl border border-[#d9d2ff] bg-white/80 px-2 py-2 shadow-sm">
-                            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-[#7c3aed] to-[#4f46e5] text-[11px] font-bold text-white">
-                                {userInitial}
-                            </div>
-                            <span className="truncate text-[12px] font-semibold text-[#101936]">{userName}</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             {/* ── MAIN CONTENT ────────────────────────────────────────── */}
             <div className="xl:pl-[220px]">
                 <main className="min-h-screen pb-[72px] xl:pb-0">
@@ -231,32 +128,54 @@ export default function UserLayout({ children }: { children: ReactNode }) {
                 </main>
 
                 {/* ── MOBILE BOTTOM NAV ───────────────────────────────── */}
-                <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#e8e7fb] bg-white/95 px-2 pb-[max(env(safe-area-inset-bottom),0.65rem)] pt-1 shadow-[0_-20px_56px_rgba(82,63,169,0.15)] backdrop-blur-xl xl:hidden">
-                    <div className={`mx-auto grid max-w-md ${MOBILE_NAV.length === 4 ? "grid-cols-4" : "grid-cols-3"}`}>
-                        {MOBILE_NAV.map((item) => {
-                            const active = pathname === item.href || pathname.startsWith(item.href);
-                            return (
-                                <Link
-                                    key={item.href}
-                                    href={item.href}
-                                    className={[
-                                        "relative flex flex-col items-center justify-center gap-0.5 px-1 pb-1 pt-2.5 text-[10px] font-black transition-colors active:opacity-70",
-                                        active ? "text-[#4f46e5]" : "text-[#98a2b3]",
-                                    ].join(" ")}
-                                >
-                                    {active && (
-                                        <span className="absolute inset-x-4 top-0 h-[3px] rounded-full bg-gradient-to-r from-[#7c3aed] to-[#4f46e5]" />
-                                    )}
-                                    <span className={[
-                                        "flex h-9 w-9 items-center justify-center rounded-[14px] transition-colors",
-                                        active ? "bg-[#f3f0ff]" : "",
-                                    ].join(" ")}>
-                                        <NavIcon name={item.icon} size="md" />
-                                    </span>
-                                    <span className="max-w-full truncate leading-none">{item.label}</span>
-                                </Link>
-                            );
-                        })}
+                <nav
+                    className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#e8e7fb] bg-white/95 px-2 pb-[max(env(safe-area-inset-bottom),0.65rem)] pt-1 shadow-[0_-20px_56px_rgba(82,63,169,0.15)] backdrop-blur-xl xl:hidden"
+                    onTouchStart={onBottomNavTouchStart}
+                    onTouchEnd={onBottomNavTouchEnd}
+                >
+                    <div className="relative mx-auto max-w-md overflow-hidden">
+                        <div className={[
+                            `grid ${colsClass} transition-transform duration-300`,
+                            logoutVisible ? "-translate-x-[72px]" : "translate-x-0",
+                        ].join(" ")}>
+                            {MOBILE_NAV.map((item) => {
+                                const active = pathname === item.href || pathname.startsWith(item.href);
+                                return (
+                                    <Link
+                                        key={item.href}
+                                        href={item.href}
+                                        className={[
+                                            "relative flex flex-col items-center justify-center gap-0.5 px-1 pb-1 pt-2.5 text-[10px] font-black transition-colors active:opacity-70",
+                                            active ? "text-[#4f46e5]" : "text-[#98a2b3]",
+                                        ].join(" ")}
+                                    >
+                                        {active && (
+                                            <span className="absolute inset-x-4 top-0 h-[3px] rounded-full bg-gradient-to-r from-[#7c3aed] to-[#4f46e5]" />
+                                        )}
+                                        <span className={[
+                                            "flex h-9 w-9 items-center justify-center rounded-[14px] transition-colors",
+                                            active ? "bg-[#f3f0ff]" : "",
+                                        ].join(" ")}>
+                                            <NavIcon name={item.icon} size="md" />
+                                        </span>
+                                        <span className="max-w-full truncate leading-none">{item.label}</span>
+                                    </Link>
+                                );
+                            })}
+                        </div>
+
+                        {logoutVisible ? (
+                            <button
+                                type="button"
+                                onClick={() => { setLogoutVisible(false); handleLogout(); }}
+                                className="absolute bottom-0 right-0 top-0 flex w-[68px] flex-col items-center justify-center gap-0.5 bg-red-50 pb-1 pt-2.5 text-[10px] font-black text-red-600 transition active:bg-red-100"
+                            >
+                                <span className="flex h-9 w-9 items-center justify-center rounded-[14px] bg-red-100">
+                                    <NavIcon name="logOut" size="md" />
+                                </span>
+                                <span className="leading-none">Salir</span>
+                            </button>
+                        ) : null}
                     </div>
                 </nav>
             </div>
