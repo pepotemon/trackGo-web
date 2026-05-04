@@ -1,7 +1,9 @@
 "use client";
 
 import {
+    browserLocalPersistence,
     onAuthStateChanged,
+    setPersistence,
     signInWithEmailAndPassword,
     signOut,
     type User,
@@ -110,6 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             },
             phoneCodes: profile?.phoneCodes ?? [],
             login: async (email, password) => {
+                await setPersistence(auth, browserLocalPersistence);
                 await signInWithEmailAndPassword(auth, email.trim(), password);
             },
             logout: async () => {

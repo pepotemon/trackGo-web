@@ -125,6 +125,7 @@ function whatsappUrl(phone?: string | null) {
 }
 
 export default function AdminLeadsPage() {
+    const canProspectos = useCan("prospectos");
     const canAssign = useCan("leadsAssign");
     const canEdit = useCan("leadsEdit");
     const canDelete = useCan("leadsDelete");
@@ -237,6 +238,16 @@ export default function AdminLeadsPage() {
             } catch { }
         }
     }, [myFilteredLeads, loading]);
+
+    if (!canProspectos) return (
+        <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#fef2f2]">
+                <svg viewBox="0 0 24 24" className="h-7 w-7 text-red-500" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" /></svg>
+            </div>
+            <p className="text-[16px] font-black text-[#101936]">Sin permisos</p>
+            <p className="max-w-xs text-[13px] font-semibold text-[#66739A]">No tienes acceso a esta pantalla. Contacta al superadmin.</p>
+        </div>
+    );
 
     return (
         <div className="mx-auto w-full max-w-[1220px]">

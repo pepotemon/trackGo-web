@@ -16,15 +16,23 @@ import {
 
 type HistoryFilter = "all" | "visited" | "rejected";
 
-const SPANISH_PHONE_PREFIXES = ["507","502","503","504","505","506","509","52","54","56","57","51","58","593","591","595","598"];
+const SPANISH_3DIGIT_CC = ["507","502","503","504","505","506","509","593","591","595","598"];
+const SPANISH_PHONE_PREFIXES = [...SPANISH_3DIGIT_CC, "52","54","56","57","51","58"];
 function isSpanishPhone(phone: string) {
     const d = phone.replace(/\D/g, "");
-    return SPANISH_PHONE_PREFIXES.some(p => d.startsWith(p));
+    if (SPANISH_PHONE_PREFIXES.some(p => d.startsWith(p))) return true;
+    if (d.startsWith("55") && SPANISH_3DIGIT_CC.some(cc => d.slice(2).startsWith(cc))) return true;
+    return false;
 }
 function buildWALink(phone: string, msg: string) {
     const d = phone.replace(/\D/g, "");
-    const intl = d.startsWith("55") || SPANISH_PHONE_PREFIXES.some(p => d.startsWith(p)) ? d : `55${d}`;
-    return `https://wa.me/${intl}?text=${encodeURIComponent(msg)}`;
+    if (SPANISH_PHONE_PREFIXES.some(p => d.startsWith(p))) return `https://wa.me/${d}?text=${encodeURIComponent(msg)}`;
+    if (d.startsWith("55")) {
+        const stripped = d.slice(2);
+        if (SPANISH_3DIGIT_CC.some(cc => stripped.startsWith(cc))) return `https://wa.me/${stripped}?text=${encodeURIComponent(msg)}`;
+        return `https://wa.me/${d}?text=${encodeURIComponent(msg)}`;
+    }
+    return `https://wa.me/55${d}?text=${encodeURIComponent(msg)}`;
 }
 type RangePreset = "all" | "week" | "7d" | "month" | "custom";
 

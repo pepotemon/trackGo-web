@@ -32,20 +32,34 @@ export const BRAZIL_DDDS: Record<string, string> = {
     "97": "Coari", "98": "São Luís", "99": "Imperatriz",
 };
 
+const INTL_COUNTRY_CODES = ["507","502","503","504","505","506","509","593","591","595","598"];
+
+const COUNTRY_NAMES: Record<string, string> = {
+    "507": "Panamá", "502": "Guatemala", "503": "El Salvador", "504": "Honduras",
+    "505": "Nicaragua", "506": "Costa Rica", "509": "Rep. Dom.", "593": "Ecuador",
+    "591": "Bolivia", "595": "Paraguay", "598": "Uruguay",
+};
+
 export function dddCity(ddd: string): string {
-    return BRAZIL_DDDS[ddd] ?? `DDD ${ddd}`;
+    return BRAZIL_DDDS[ddd] ?? COUNTRY_NAMES[ddd] ?? `+${ddd}`;
 }
 
 export function extractDDD(phone: string): string | null {
     const digits = phone.replace(/\D/g, "");
+    // Brazil with country code: +55 XX NNNN-NNNN (≥12 digits)
     if (digits.startsWith("55") && digits.length >= 12) return digits.slice(2, 4);
+    // Non-Brazil 3-digit country codes (Central/South America)
+    for (const cc of INTL_COUNTRY_CODES) {
+        if (digits.startsWith(cc)) return cc;
+    }
+    // Brazil local format: XX NNNN-NNNN
     if (digits.length >= 10 && digits.length <= 11) return digits.slice(0, 2);
     return null;
 }
 
 function matchesCoverage(lead: MetaLeadDoc, phoneCodes: string[]): boolean {
-    const ddd = extractDDD(lead.phone);
-    return ddd !== null && phoneCodes.includes(ddd);
+    const code = extractDDD(lead.phone);
+    return code !== null && phoneCodes.includes(code);
 }
 
 /**
@@ -129,5 +143,21 @@ export async function markClientNotSuitable(clientId: string): Promise<void> {
         leadQuality: "not_suitable",
         verificationStatusChangedAt: Date.now(),
         updatedAt: Date.now(),
+    });
+}
+
+/** Assign a not_suitable client to a vendor and reset it to pending_review so it appears in their prospectos. */
+export async function takeNotSuitableClient(clientId: string, userId: string): Promise<void> {
+    const now = Date.now();
+    await updateDoc(doc(db, "clients", clientId), {
+        assignedTo: userId,
+        assignedAt: now,
+        status: "pending",
+        statusBy: null,
+        statusAt: null,
+        verificationStatus: "pending_review",
+        leadQuality: "review",
+        verificationStatusChangedAt: now,
+        updatedAt: now,
     });
 }

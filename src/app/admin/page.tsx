@@ -7,6 +7,7 @@ import { getAdminDashboardSnapshot } from "@/data/adminDashboardRepo";
 import type { AdminDashboardRange, AdminDashboardSnapshot } from "@/types/dashboard";
 import type { AutoAssignLogDoc, LeadAutoAssignMatchType, MetaLeadDoc } from "@/types/leads";
 import { AppIcon, Badge, Button, Card, KpiCard, PageHeader } from "@/components/ui";
+import { usePermissions } from "@/features/auth/usePermissions";
 
 const EMPTY_SNAPSHOT: AdminDashboardSnapshot = {
     stats: {
@@ -108,6 +109,7 @@ function assignmentLeadTitle(log: AutoAssignLogDoc) {
 
 export default function AdminDashboardPage() {
     const router = useRouter();
+    const permissions = usePermissions();
     const [snapshot, setSnapshot] = useState<AdminDashboardSnapshot>(EMPTY_SNAPSHOT);
     const [queueRange, setQueueRange] = useState<AdminDashboardRange>("today");
     const [loading, setLoading] = useState(true);
@@ -156,10 +158,10 @@ export default function AdminDashboardPage() {
                 subtitle="Pulso operativo de leads, asignaciones y cobertura."
                 icon={<AppIcon name="activity" tone="purple" size="sm" className="bg-transparent text-white ring-0" />}
                 actions={
-                    <div className="grid w-full grid-cols-[1fr_1fr_1fr_44px] gap-2 sm:w-auto sm:flex sm:flex-wrap sm:justify-end">
-                        <QuickLink href="/admin/leads" icon="lead">Prospectos</QuickLink>
-                        <QuickLink href="/admin/leads/assignments" icon="assign">Asign.</QuickLink>
-                        <QuickLink href="/admin/settings/users" icon="users">Usuarios</QuickLink>
+                    <div className="flex flex-wrap justify-end gap-2">
+                        {permissions.prospectos ? <QuickLink href="/admin/leads" icon="lead">Prospectos</QuickLink> : null}
+                        {permissions.prospectos ? <QuickLink href="/admin/leads/assignments" icon="assign">Asign.</QuickLink> : null}
+                        {permissions.usersView ? <QuickLink href="/admin/settings/users" icon="users">Usuarios</QuickLink> : null}
                         <Button
                             variant="primary"
                             onClick={() => loadDashboard()}

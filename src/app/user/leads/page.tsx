@@ -19,15 +19,25 @@ import {
 
 type StatusFilter = "pending" | "visited" | "rejected" | "all";
 
-const SPANISH_PHONE_PREFIXES = ["507","502","503","504","505","506","509","52","54","56","57","51","58","593","591","595","598"];
+const SPANISH_3DIGIT_CC = ["507","502","503","504","505","506","509","593","591","595","598"];
+const SPANISH_PHONE_PREFIXES = [...SPANISH_3DIGIT_CC, "52","54","56","57","51","58"];
 function isSpanishPhone(phone: string) {
     const d = phone.replace(/\D/g, "");
-    return SPANISH_PHONE_PREFIXES.some(p => d.startsWith(p));
+    if (SPANISH_PHONE_PREFIXES.some(p => d.startsWith(p))) return true;
+    // Handle numbers stored with erroneous "55" prefix over a Spanish country code
+    if (d.startsWith("55") && SPANISH_3DIGIT_CC.some(cc => d.slice(2).startsWith(cc))) return true;
+    return false;
 }
 function buildWALink(phone: string, msg: string) {
     const d = phone.replace(/\D/g, "");
-    const intl = d.startsWith("55") || SPANISH_PHONE_PREFIXES.some(p => d.startsWith(p)) ? d : `55${d}`;
-    return `https://wa.me/${intl}?text=${encodeURIComponent(msg)}`;
+    if (SPANISH_PHONE_PREFIXES.some(p => d.startsWith(p))) return `https://wa.me/${d}?text=${encodeURIComponent(msg)}`;
+    if (d.startsWith("55")) {
+        const stripped = d.slice(2);
+        // Strip erroneous "55" prefix if what follows is a 3-digit Spanish country code
+        if (SPANISH_3DIGIT_CC.some(cc => stripped.startsWith(cc))) return `https://wa.me/${stripped}?text=${encodeURIComponent(msg)}`;
+        return `https://wa.me/${d}?text=${encodeURIComponent(msg)}`;
+    }
+    return `https://wa.me/55${d}?text=${encodeURIComponent(msg)}`;
 }
 
 const REJECTION_REASONS = Object.entries(REJECTED_REASON_LABELS) as [RejectedReason, string][];
@@ -59,6 +69,15 @@ function formatAssignedAt(ts: number | null | undefined): string {
     return new Intl.DateTimeFormat("es", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(ts));
 }
 
+function getNote(leadId: string): string {
+    return localStorage.getItem(`lead_note_${leadId}`) ?? "";
+}
+function saveNote(leadId: string, note: string) {
+    note.trim()
+        ? localStorage.setItem(`lead_note_${leadId}`, note.trim())
+        : localStorage.removeItem(`lead_note_${leadId}`);
+}
+
 export default function UserLeadsPage() {
     const { firebaseUser, profile } = useAuth();
     const [leads, setLeads] = useState<MetaLeadDoc[]>([]);
@@ -67,9 +86,12 @@ export default function UserLeadsPage() {
     const [filter, setFilter] = useState<StatusFilter>("pending");
     const [search, setSearch] = useState("");
     const [searchOpen, setSearchOpen] = useState(false);
+    const [notes, setNotes] = useState<Record<string, string>>({});
+    const [waSent, setWaSent] = useState<Set<string>>(new Set());
 
     const [actionLead, setActionLead] = useState<MetaLeadDoc | null>(null);
-    const [actionType, setActionType] = useState<"visit" | "reject" | null>(null);
+    const [actionType, setActionType] = useState<"visit" | "reject" | "note" | null>(null);
+    const [noteText, setNoteText] = useState("");
     const [rejectStep, setRejectStep] = useState<1 | 2>(1);
     const [rejectReason, setRejectReason] = useState<RejectedReason | null>(null);
     const [rejectText, setRejectText] = useState("");
@@ -83,6 +105,9 @@ export default function UserLeadsPage() {
         setLoading(true);
         const unsub = subscribeUserLeads(userId, (data) => {
             setLeads(data);
+            const noteMap: Record<string, string> = {};
+            data.forEach((l) => { const n = getNote(l.id); if (n) noteMap[l.id] = n; });
+            setNotes((prev) => ({ ...prev, ...noteMap }));
             setLoading(false);
         });
         return unsub;
@@ -139,7 +164,19 @@ export default function UserLeadsPage() {
         setActionLead(lead); setActionType("reject");
         setRejectStep(1); setRejectReason(null); setRejectText("");
     }
+    function openNoteAction(lead: MetaLeadDoc) {
+        setActionLead(lead);
+        setNoteText(notes[lead.id] ?? "");
+        setActionType("note");
+    }
     function closeAction() { setActionLead(null); setActionType(null); setSaving(false); }
+
+    function saveLeadNote() {
+        if (!actionLead) return;
+        saveNote(actionLead.id, noteText);
+        setNotes((prev) => ({ ...prev, [actionLead.id]: noteText.trim() }));
+        closeAction();
+    }
 
     async function confirmVisit() {
         if (!actionLead || !userId) return;
@@ -176,6 +213,7 @@ export default function UserLeadsPage() {
             ? `¡Buenas tardes! Somos de Crédito Comercial. Nos comunicamos para continuar con la liberación del crédito y el registro de tu negocio. ¡Quedamos atentos! 😊`
             : `Boa tarde! Somos da Crédito Comercial. Estamos entrando em contato para dar continuidade à liberação do crédito e realização do cadastro. Aguardamos seu retorno! 😊`;
         window.open(buildWALink(lead.phone, msg), "_blank");
+        setWaSent((prev) => new Set(prev).add(lead.id));
     }
 
     function openMaps(lead: MetaLeadDoc) {
@@ -272,6 +310,8 @@ export default function UserLeadsPage() {
                                 <LeadCard
                                     key={lead.id}
                                     lead={lead}
+                                    note={notes[lead.id]}
+                                    waSent={waSent.has(lead.id)}
                                     priority={priority >= 0 && priority < 3 ? priority + 1 : null}
                                     canUndo={canUndo(lead)}
                                     onVisit={() => openVisit(lead)}
@@ -279,6 +319,7 @@ export default function UserLeadsPage() {
                                     onUndo={() => handleUndo(lead)}
                                     onWhatsApp={() => openWhatsApp(lead)}
                                     onMaps={() => openMaps(lead)}
+                                    onNote={() => openNoteAction(lead)}
                                 />
                             );
                         })}
@@ -316,6 +357,8 @@ export default function UserLeadsPage() {
                                     <LeadCard
                                         key={lead.id}
                                         lead={lead}
+                                        note={notes[lead.id]}
+                                        waSent={waSent.has(lead.id)}
                                         priority={null}
                                         canUndo={canUndo(lead)}
                                         onVisit={() => { openVisit(lead); setSearchOpen(false); }}
@@ -323,6 +366,7 @@ export default function UserLeadsPage() {
                                         onUndo={() => handleUndo(lead)}
                                         onWhatsApp={() => openWhatsApp(lead)}
                                         onMaps={() => openMaps(lead)}
+                                        onNote={() => { openNoteAction(lead); setSearchOpen(false); }}
                                     />
                                 ))}
                             </div>
@@ -435,6 +479,25 @@ export default function UserLeadsPage() {
                     )}
                 </BottomSheet>
             ) : null}
+
+            {/* ── NOTE MODAL ──────────────────────────────────────────── */}
+            {actionType === "note" && actionLead ? (
+                <BottomSheet onClose={closeAction}>
+                    <p className="mb-3 text-[15px] font-black text-[#101936]">Nota · {displayName(actionLead)}</p>
+                    <textarea
+                        autoFocus
+                        className="w-full rounded-[14px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 py-2.5 text-[13px] font-semibold text-[#101936] outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-violet-100"
+                        rows={5}
+                        placeholder="Escribe una nota para este prospecto..."
+                        value={noteText}
+                        onChange={(e) => setNoteText(e.target.value)}
+                    />
+                    <div className="mt-3 flex gap-2">
+                        <button type="button" onClick={closeAction} className="flex-1 rounded-[14px] border border-[#E8E7FB] py-3 text-[13px] font-black text-[#66739A]">Cancelar</button>
+                        <button type="button" onClick={saveLeadNote} className="flex-1 rounded-[14px] bg-[#7C3AED] py-3 text-[13px] font-black text-white">Guardar</button>
+                    </div>
+                </BottomSheet>
+            ) : null}
         </div>
     );
 }
@@ -443,6 +506,8 @@ export default function UserLeadsPage() {
 
 function LeadCard({
     lead,
+    note,
+    waSent,
     priority,
     canUndo,
     onVisit,
@@ -450,8 +515,11 @@ function LeadCard({
     onUndo,
     onWhatsApp,
     onMaps,
+    onNote,
 }: {
     lead: MetaLeadDoc;
+    note?: string;
+    waSent?: boolean;
     priority: number | null;
     canUndo: boolean;
     onVisit: () => void;
@@ -459,6 +527,7 @@ function LeadCard({
     onUndo: () => void;
     onWhatsApp: () => void;
     onMaps: () => void;
+    onNote?: () => void;
 }) {
     const isPending = !lead.status || lead.status === "pending";
     const isVisited = lead.status === "visited";
@@ -514,16 +583,29 @@ function LeadCard({
                     ) : null}
                 </div>
 
+                {/* ── NOTE ── */}
+                {note ? (
+                    <div className="mt-2 flex items-start gap-1.5 rounded-[10px] border border-violet-100 bg-violet-50 px-2.5 py-1.5">
+                        <NoteIcon />
+                        <p className="text-[11px] font-semibold text-[#5B21FF]">{note}</p>
+                    </div>
+                ) : null}
+
                 {/* ── ACTIONS ── */}
                 <div className="mt-3 flex items-center gap-2 border-t border-[#F2F0FF] pt-2.5">
                     {/* Quick actions */}
                     <div className="flex gap-1.5">
-                        <ActionBtn onClick={onWhatsApp} title="WhatsApp" tone="green">
-                            <WAIcon />
+                        <ActionBtn onClick={onWhatsApp} title={waSent ? "Enviado" : "WhatsApp"} tone={waSent ? "sent" : "green"}>
+                            {waSent ? <WACheckIcon /> : <WAIcon />}
                         </ActionBtn>
                         <ActionBtn onClick={onMaps} title="Maps" tone="blue">
                             <MapsIcon />
                         </ActionBtn>
+                        {onNote ? (
+                            <ActionBtn onClick={onNote} title="Nota" tone="violet">
+                                <NoteIcon />
+                            </ActionBtn>
+                        ) : null}
                     </div>
 
                     <div className="flex-1" />
@@ -585,16 +667,19 @@ function StatPill({ label, value, tone }: { label: string; value: number; tone: 
     );
 }
 
-function ActionBtn({ onClick, title, tone, children }: { onClick: () => void; title: string; tone: "green" | "blue"; children: React.ReactNode }) {
+function ActionBtn({ onClick, title, tone, children }: { onClick: () => void; title: string; tone: "green" | "blue" | "violet" | "sent"; children: React.ReactNode }) {
+    const cls: Record<string, string> = {
+        green: "border-emerald-200 bg-emerald-50 text-emerald-700",
+        blue: "border-blue-200 bg-blue-50 text-blue-700",
+        violet: "border-violet-200 bg-violet-50 text-violet-700",
+        sent: "border-emerald-300 bg-emerald-100 text-emerald-700",
+    };
     return (
         <button
             type="button"
             onClick={onClick}
             title={title}
-            className={[
-                "flex h-8 w-8 items-center justify-center rounded-[11px] border transition active:opacity-70",
-                tone === "green" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-blue-200 bg-blue-50 text-blue-700",
-            ].join(" ")}
+            className={`flex h-8 w-8 items-center justify-center rounded-[11px] border transition active:opacity-70 ${cls[tone]}`}
         >
             {children}
         </button>
@@ -673,6 +758,12 @@ function XIcon() {
 }
 function UndoIcon() {
     return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M3 7v6h6" /><path d="M3 13a9 9 0 1 0 2.6-6.36L3 10" /></svg>;
+}
+function NoteIcon() {
+    return <svg viewBox="0 0 24 24" className="mt-0.5 h-3 w-3 shrink-0 text-[#7C3AED]" {...ic} strokeWidth={2}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" /><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" /></svg>;
+}
+function WACheckIcon() {
+    return <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M17.47 14.38c-.28-.14-1.65-.82-1.9-.91-.26-.09-.44-.14-.63.14-.19.28-.73.91-.9 1.1-.16.18-.33.2-.61.07-.28-.14-1.18-.44-2.25-1.39-.83-.74-1.39-1.66-1.55-1.93-.16-.28-.02-.43.12-.57.12-.12.28-.32.42-.48.14-.16.18-.28.28-.46.09-.18.05-.34-.02-.48-.07-.14-.63-1.52-.86-2.08-.23-.55-.46-.47-.63-.48-.16-.01-.35-.01-.53-.01-.18 0-.48.07-.73.34-.25.27-.97.95-.97 2.31 0 1.36.99 2.67 1.13 2.86.14.18 1.96 2.99 4.75 4.2.66.28 1.18.45 1.58.58.66.21 1.27.18 1.74.11.53-.08 1.65-.68 1.88-1.33.24-.65.24-1.2.17-1.33-.07-.12-.25-.19-.53-.33Z"/><path d="M12.05 2.01C6.49 2.01 2 6.5 2 12.07c0 1.87.51 3.63 1.4 5.14L2 22l4.93-1.36A10.04 10.04 0 0 0 12.05 22C17.61 22 22 17.5 22 11.93 22 6.5 17.61 2.01 12.05 2.01Zm0 18.37a8.34 8.34 0 0 1-4.23-1.15l-.3-.18-3.13.86.86-3.17-.2-.32a8.35 8.35 0 0 1-1.27-4.41c0-4.61 3.72-8.36 8.3-8.36 4.57 0 8.29 3.75 8.29 8.36-.01 4.61-3.72 8.37-8.32 8.37Z"/><path d="m14.5 9-4.5 4.5-2-2" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>;
 }
 function InboxIcon() {
     return <svg viewBox="0 0 24 24" className="h-7 w-7 text-[#7C3AED]" {...ic}><path d="M4 4h16l-2 9H6L4 4Z" /><path d="M6 13v5a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-5" /></svg>;

@@ -8,21 +8,30 @@ import {
     markClientNotSuitable,
     subscribeIncompleteClients,
     subscribeNotSuitableClients,
+    takeNotSuitableClient,
 } from "@/data/incompleteClientsRepo";
 import { assignLeadToUser } from "@/data/leadsRepo";
 import type { MetaLeadDoc } from "@/types/leads";
 
 type Tab = "incomplete" | "not_suitable";
 
-const SPANISH_PHONE_PREFIXES = ["507","502","503","504","505","506","509","52","54","56","57","51","58","593","591","595","598"];
+const SPANISH_3DIGIT_CC = ["507","502","503","504","505","506","509","593","591","595","598"];
+const SPANISH_PHONE_PREFIXES = [...SPANISH_3DIGIT_CC, "52","54","56","57","51","58"];
 function isSpanishPhone(phone: string) {
     const d = phone.replace(/\D/g, "");
-    return SPANISH_PHONE_PREFIXES.some(p => d.startsWith(p));
+    if (SPANISH_PHONE_PREFIXES.some(p => d.startsWith(p))) return true;
+    if (d.startsWith("55") && SPANISH_3DIGIT_CC.some(cc => d.slice(2).startsWith(cc))) return true;
+    return false;
 }
 function buildWALink(phone: string, msg: string) {
     const d = phone.replace(/\D/g, "");
-    const intl = d.startsWith("55") || SPANISH_PHONE_PREFIXES.some(p => d.startsWith(p)) ? d : `55${d}`;
-    return `https://wa.me/${intl}?text=${encodeURIComponent(msg)}`;
+    if (SPANISH_PHONE_PREFIXES.some(p => d.startsWith(p))) return `https://wa.me/${d}?text=${encodeURIComponent(msg)}`;
+    if (d.startsWith("55")) {
+        const stripped = d.slice(2);
+        if (SPANISH_3DIGIT_CC.some(cc => stripped.startsWith(cc))) return `https://wa.me/${stripped}?text=${encodeURIComponent(msg)}`;
+        return `https://wa.me/${d}?text=${encodeURIComponent(msg)}`;
+    }
+    return `https://wa.me/55${d}?text=${encodeURIComponent(msg)}`;
 }
 
 // ── localStorage notes ────────────────────────────────────────────────────────
@@ -69,6 +78,7 @@ export default function UserIncompleteClientsPage() {
     const [loadingIncomplete, setLoadingIncomplete] = useState(true);
     const [loadingNotSuitable, setLoadingNotSuitable] = useState(true);
     const [notes, setNotes] = useState<Record<string, string>>({});
+    const [waSent, setWaSent] = useState<Set<string>>(new Set());
     const [search, setSearch] = useState("");
     const [searchOpen, setSearchOpen] = useState(false);
     const [dddFilter, setDddFilter] = useState("all");
@@ -156,7 +166,12 @@ export default function UserIncompleteClientsPage() {
         if (!actionLead || !userId) return;
         setSaving(true);
         try {
-            await assignLeadToUser(actionLead.id, userId);
+            // If the client is not_suitable, use takeNotSuitableClient to also reset verificationStatus
+            if (actionLead.verificationStatus === "not_suitable") {
+                await takeNotSuitableClient(actionLead.id, userId);
+            } else {
+                await assignLeadToUser(actionLead.id, userId);
+            }
             closeAction();
         } catch { setSaving(false); }
     }
@@ -166,6 +181,7 @@ export default function UserIncompleteClientsPage() {
             ? `¡Hola! Somos de Crédito Comercial. Anteriormente nos contactaste sobre la liberación de crédito para tu negocio activo. Solo queremos confirmar si todavía tienes interés. ¡Gracias y disculpa la molestia! 🙏`
             : `Olá! Somos da Crédito Comercial. Você nos contatou anteriormente sobre a liberação de crédito para o seu comércio. Gostaríamos de saber se ainda tem interesse. Obrigado e desculpe o incômodo! 🙏`;
         window.open(buildWALink(lead.phone, msg), "_blank");
+        setWaSent((prev) => new Set(prev).add(lead.id));
     }
 
     if (!phoneCodes.length && !loadingIncomplete) {
@@ -249,6 +265,7 @@ export default function UserIncompleteClientsPage() {
                                 key={lead.id}
                                 lead={lead}
                                 note={notes[lead.id]}
+                                waSent={waSent.has(lead.id)}
                                 tab={tab}
                                 onWhatsApp={() => openWhatsApp(lead)}
                                 onNote={() => openNote(lead)}
@@ -366,11 +383,12 @@ export default function UserIncompleteClientsPage() {
 // ── CLIENT CARD ───────────────────────────────────────────────────────────────
 
 function ClientCard({
-    lead, note, tab,
+    lead, note, waSent, tab,
     onWhatsApp, onNote, onNotSuitable, onAccept,
 }: {
     lead: MetaLeadDoc;
     note?: string;
+    waSent?: boolean;
     tab: Tab;
     onWhatsApp: () => void;
     onNote: () => void;
@@ -440,10 +458,22 @@ function ClientCard({
                     </div>
                 ) : null}
 
+                {/* Not suitable reason */}
+                {tab === "not_suitable" && lead.notSuitableReason ? (
+                    <div className="mt-2 flex items-start gap-1.5 rounded-[10px] border border-orange-100 bg-orange-50/80 px-2.5 py-1.5">
+                        <BanIcon />
+                        <p className="text-[11px] font-semibold text-orange-700">{lead.notSuitableReason}</p>
+                    </div>
+                ) : null}
+
                 {/* Actions */}
                 <div className="mt-3 flex items-center gap-1.5 border-t border-[#F2F0FF] pt-2.5">
-                    <ActionBtn onClick={onWhatsApp} tone="green" title="WhatsApp"><WAIcon /></ActionBtn>
-                    <ActionBtn onClick={onNote} tone="violet" title="Nota"><NoteIcon /></ActionBtn>
+                    <ActionBtn onClick={onWhatsApp} tone={waSent ? "sent" : "green"} title={waSent ? "Enviado" : "WhatsApp"}>
+                        {waSent ? <WACheckIcon /> : <WAIcon />}
+                    </ActionBtn>
+                    {tab === "incomplete" ? (
+                        <ActionBtn onClick={onNote} tone="violet" title="Nota"><NoteIcon /></ActionBtn>
+                    ) : null}
                     <div className="flex-1" />
                     {tab === "incomplete" ? (
                         <>
@@ -463,9 +493,13 @@ function ClientCard({
                             </button>
                         </>
                     ) : (
-                        <span className="rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[10px] font-black text-orange-600">
-                            No apto
-                        </span>
+                        <button
+                            type="button"
+                            onClick={onAccept}
+                            className="flex h-8 items-center gap-1.5 rounded-[11px] border border-emerald-200 bg-emerald-50 px-2.5 text-[11px] font-black text-emerald-700 transition active:bg-emerald-100"
+                        >
+                            <CheckIcon /> Tomar igual
+                        </button>
                     )}
                 </div>
             </div>
@@ -495,11 +529,12 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
 function CountPill({ active, children }: { active: boolean; children: React.ReactNode }) {
     return <span className={["flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[9px] font-black", active ? "bg-white/25 text-white" : "bg-[#f3f0ff] text-[#7C3AED]"].join(" ")}>{children}</span>;
 }
-function ActionBtn({ onClick, tone, title, children }: { onClick: () => void; tone: "green" | "violet" | "gray"; title: string; children: React.ReactNode }) {
+function ActionBtn({ onClick, tone, title, children }: { onClick: () => void; tone: "green" | "violet" | "gray" | "sent"; title: string; children: React.ReactNode }) {
     const cls: Record<string, string> = {
         green: "border-emerald-200 bg-emerald-50 text-emerald-700",
         violet: "border-violet-200 bg-violet-50 text-violet-700",
         gray: "border-[#E8E7FB] bg-white text-[#66739A]",
+        sent: "border-emerald-300 bg-emerald-100 text-emerald-700",
     };
     return <button type="button" onClick={onClick} title={title} className={`flex h-8 w-8 items-center justify-center rounded-[11px] border transition active:opacity-70 ${cls[tone]}`}>{children}</button>;
 }
@@ -552,4 +587,5 @@ function CheckIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {
 function NoteIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" /><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" /></svg>; }
 function BanIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><circle cx="12" cy="12" r="10" /><path d="m4.9 4.9 14.2 14.2" /></svg>; }
 function WAIcon() { return <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M17.47 14.38c-.28-.14-1.65-.82-1.9-.91-.26-.09-.44-.14-.63.14-.19.28-.73.91-.9 1.1-.16.18-.33.2-.61.07-.28-.14-1.18-.44-2.25-1.39-.83-.74-1.39-1.66-1.55-1.93-.16-.28-.02-.43.12-.57.12-.12.28-.32.42-.48.14-.16.18-.28.28-.46.09-.18.05-.34-.02-.48-.07-.14-.63-1.52-.86-2.08-.23-.55-.46-.47-.63-.48-.16-.01-.35-.01-.53-.01-.18 0-.48.07-.73.34-.25.27-.97.95-.97 2.31 0 1.36.99 2.67 1.13 2.86.14.18 1.96 2.99 4.75 4.2.66.28 1.18.45 1.58.58.66.21 1.27.18 1.74.11.53-.08 1.65-.68 1.88-1.33.24-.65.24-1.2.17-1.33-.07-.12-.25-.19-.53-.33Z"/><path d="M12.05 2.01C6.49 2.01 2 6.5 2 12.07c0 1.87.51 3.63 1.4 5.14L2 22l4.93-1.36A10.04 10.04 0 0 0 12.05 22C17.61 22 22 17.5 22 11.93 22 6.5 17.61 2.01 12.05 2.01Zm0 18.37a8.34 8.34 0 0 1-4.23-1.15l-.3-.18-3.13.86.86-3.17-.2-.32a8.35 8.35 0 0 1-1.27-4.41c0-4.61 3.72-8.36 8.3-8.36 4.57 0 8.29 3.75 8.29 8.36-.01 4.61-3.72 8.37-8.32 8.37Z"/></svg>; }
+function WACheckIcon() { return <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M17.47 14.38c-.28-.14-1.65-.82-1.9-.91-.26-.09-.44-.14-.63.14-.19.28-.73.91-.9 1.1-.16.18-.33.2-.61.07-.28-.14-1.18-.44-2.25-1.39-.83-.74-1.39-1.66-1.55-1.93-.16-.28-.02-.43.12-.57.12-.12.28-.32.42-.48.14-.16.18-.28.28-.46.09-.18.05-.34-.02-.48-.07-.14-.63-1.52-.86-2.08-.23-.55-.46-.47-.63-.48-.16-.01-.35-.01-.53-.01-.18 0-.48.07-.73.34-.25.27-.97.95-.97 2.31 0 1.36.99 2.67 1.13 2.86.14.18 1.96 2.99 4.75 4.2.66.28 1.18.45 1.58.58.66.21 1.27.18 1.74.11.53-.08 1.65-.68 1.88-1.33.24-.65.24-1.2.17-1.33-.07-.12-.25-.19-.53-.33Z"/><path d="M12.05 2.01C6.49 2.01 2 6.5 2 12.07c0 1.87.51 3.63 1.4 5.14L2 22l4.93-1.36A10.04 10.04 0 0 0 12.05 22C17.61 22 22 17.5 22 11.93 22 6.5 17.61 2.01 12.05 2.01Zm0 18.37a8.34 8.34 0 0 1-4.23-1.15l-.3-.18-3.13.86.86-3.17-.2-.32a8.35 8.35 0 0 1-1.27-4.41c0-4.61 3.72-8.36 8.3-8.36 4.57 0 8.29 3.75 8.29 8.36-.01 4.61-3.72 8.37-8.32 8.37Z"/><path d="m14.5 9-4.5 4.5-2-2" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>; }
 function ClientsIcon({ className }: { className?: string }) { return <svg viewBox="0 0 24 24" className={className} {...ic}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>; }

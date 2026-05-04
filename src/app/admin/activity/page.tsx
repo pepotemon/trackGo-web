@@ -187,6 +187,9 @@ function viewModeLabel(mode: ActivityViewMode) {
 
 export default function ActivityPage() {
     const { profile, isSuperAdmin } = useAuth();
+    const canActividad = useCan("actividad");
+    const canChat = useCan("chatView");
+    const canEdit = useCan("leadsEdit");
     const [viewMode, setViewMode] = useState<ActivityViewMode>("week");
     const [filters, setFilters] = useState<ActivityFilters>(() => defaultFilters());
     const [users, setUsers] = useState<ActivityUserOption[]>([]);
@@ -297,14 +300,22 @@ export default function ActivityPage() {
     }, [filteredRows]);
 
     const stats = useMemo<ActivityStats>(() => {
+        const { startKey, endKey } = filters;
         return {
             total: deduplicatedRows.length,
             visited: deduplicatedRows.filter((row) => row.type === "visited").length,
             rejected: deduplicatedRows.filter((row) => row.type === "rejected").length,
             pending: deduplicatedRows.filter((row) => row.type === "pending").length,
-            users: deduplicatedRows.length,
+            // Count assignments within the selected date range (pending rows bypass filteredRows date-check,
+            // so we apply the range check here manually so the counter respects the filter)
+            users: deduplicatedRows.filter((row) => {
+                const dk = String(row.dayKey || "");
+                if (startKey && dk < startKey) return false;
+                if (endKey && dk > endKey) return false;
+                return true;
+            }).length,
         };
-    }, [deduplicatedRows]);
+    }, [deduplicatedRows, filters]);
 
     const activityRowsByType = useMemo(() => {
         return {
@@ -465,6 +476,8 @@ export default function ActivityPage() {
         setFilters(next);
         void loadInitial(next);
     }
+
+    if (!canActividad) return <NoPermission />;
 
     return (
         <div className="mx-auto w-full max-w-[1220px]">
@@ -1390,6 +1403,10 @@ function ActivityQuickActionsModal({
     row: ActivityEventRow | null;
     onClose: () => void;
 }) {
+    const canChat = useCan("chatView");
+    const canEdit = useCan("leadsEdit");
+    const canMaps = useCan("leadsWhatsapp");
+
     if (!row) return null;
 
     return (
@@ -1402,10 +1419,12 @@ function ActivityQuickActionsModal({
         >
             <div className="grid gap-2">
                 <ActionTile href={`/admin/clients/${row.clientId}`} label="Ver cliente" icon="users" tone="blue" />
-                {row.mapsUrl ? (
+                {row.mapsUrl && canMaps ? (
                     <ActionTile href={row.mapsUrl} label="Abrir Maps" icon="map" tone="green" external />
                 ) : null}
-                <ActionTile href={`/admin/leads/${row.clientId}`} label="Chat / Editar" icon="edit" tone="orange" />
+                {(canChat || canEdit) ? (
+                    <ActionTile href={`/admin/leads/${row.clientId}`} label="Chat / Editar" icon="edit" tone="orange" />
+                ) : null}
             </div>
         </Modal>
     );
@@ -1759,4 +1778,18 @@ function userToOption(user: UserDoc): ActivityUserOption {
         billingMode: user.billingMode || "per_visit",
         ...(user as any),
     };
+}
+
+function NoPermission() {
+    return (
+        <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#fef2f2]">
+                <svg viewBox="0 0 24 24" className="h-7 w-7 text-red-500" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" />
+                </svg>
+            </div>
+            <p className="text-[16px] font-black text-[#101936]">Sin permisos</p>
+            <p className="max-w-xs text-[13px] font-semibold text-[#66739A]">No tienes acceso a esta pantalla. Contacta al superadmin.</p>
+        </div>
+    );
 }
