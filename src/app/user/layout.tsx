@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { TrackGoLogo } from "@/components/brand/TrackGoLogo";
 
@@ -20,6 +20,8 @@ export default function UserLayout({ children }: { children: ReactNode }) {
     const pathname = usePathname();
     const { firebaseUser, profile, isUser, loading, logout, userPermissions } = useAuth();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const swipeStartXRef = useRef<number | null>(null);
+    const drawerSwipeXRef = useRef<number | null>(null);
 
     const MOBILE_NAV = BASE_NAV.filter((item) =>
         !item.permKey || userPermissions[item.permKey]
@@ -34,6 +36,29 @@ export default function UserLayout({ children }: { children: ReactNode }) {
     async function handleLogout() {
         await logout();
         router.replace("/login");
+    }
+
+    // Swipe from left edge → open drawer
+    function onMainTouchStart(e: React.TouchEvent) {
+        const x = e.touches[0].clientX;
+        if (x < 24) swipeStartXRef.current = x;
+    }
+    function onMainTouchEnd(e: React.TouchEvent) {
+        if (swipeStartXRef.current === null) return;
+        const dx = e.changedTouches[0].clientX - swipeStartXRef.current;
+        if (dx > 60) setMobileMenuOpen(true);
+        swipeStartXRef.current = null;
+    }
+
+    // Swipe left on drawer panel → close
+    function onDrawerTouchStart(e: React.TouchEvent) {
+        drawerSwipeXRef.current = e.touches[0].clientX;
+    }
+    function onDrawerTouchEnd(e: React.TouchEvent) {
+        if (drawerSwipeXRef.current === null) return;
+        const dx = e.changedTouches[0].clientX - drawerSwipeXRef.current;
+        if (dx < -60) setMobileMenuOpen(false);
+        drawerSwipeXRef.current = null;
     }
 
     if (loading) {
@@ -53,7 +78,11 @@ export default function UserLayout({ children }: { children: ReactNode }) {
     const userInitial = userName.slice(0, 1).toUpperCase();
 
     return (
-        <div className="min-h-screen bg-[#fbfaff] text-[#172033]">
+        <div
+            className="min-h-screen bg-[#fbfaff] text-[#172033]"
+            onTouchStart={onMainTouchStart}
+            onTouchEnd={onMainTouchEnd}
+        >
             {/* ── DESKTOP SIDEBAR ─────────────────────────────────────── */}
             <aside className="fixed left-0 top-0 hidden h-screen w-[220px] flex-col border-r border-[#d9d2ff] bg-[linear-gradient(180deg,#f4f0ff_0%,#e9e4ff_48%,#fbfaff_100%)] px-3 py-4 shadow-[18px_0_55px_rgba(82,63,169,0.13)] xl:flex">
                 <div className="mb-5 flex justify-center border-b border-[#d9d2ff] px-2 pb-4">
@@ -78,7 +107,7 @@ export default function UserLayout({ children }: { children: ReactNode }) {
                                     "flex h-6 w-6 items-center justify-center rounded-lg ring-1 transition",
                                     active
                                         ? "bg-[#f3f0ff] text-[#5b21ff] ring-[#c8c0ff]"
-                                        : "bg-white/65 text-[#5b4ea6] ring-[#d9d2ff] group-hover:bg-[#f3f0ff]",
+                                        : "bg-white/65 text-[#5b4ea6] ring-[#d9d2ff]",
                                 ].join(" ")}>
                                     <NavIcon name={item.icon} />
                                 </span>
@@ -122,12 +151,15 @@ export default function UserLayout({ children }: { children: ReactNode }) {
                     className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
                     onClick={() => setMobileMenuOpen(false)}
                 />
-                {/* panel */}
-                <div className={[
-                    "absolute bottom-0 left-0 top-0 flex w-[260px] flex-col border-r border-[#d9d2ff] bg-[linear-gradient(180deg,#f4f0ff_0%,#e9e4ff_48%,#fbfaff_100%)] px-3 py-4 shadow-[18px_0_55px_rgba(82,63,169,0.2)] transition-transform duration-300 ease-out",
-                    mobileMenuOpen ? "translate-x-0" : "-translate-x-full",
-                ].join(" ")}>
-                    {/* header */}
+                {/* panel — swipe left to close */}
+                <div
+                    className={[
+                        "absolute bottom-0 left-0 top-0 flex w-[260px] flex-col border-r border-[#d9d2ff] bg-[linear-gradient(180deg,#f4f0ff_0%,#e9e4ff_48%,#fbfaff_100%)] px-3 py-4 shadow-[18px_0_55px_rgba(82,63,169,0.2)] transition-transform duration-300 ease-out",
+                        mobileMenuOpen ? "translate-x-0" : "-translate-x-full",
+                    ].join(" ")}
+                    onTouchStart={onDrawerTouchStart}
+                    onTouchEnd={onDrawerTouchEnd}
+                >
                     <div className="mb-5 flex items-center justify-between border-b border-[#d9d2ff] px-1 pb-4">
                         <TrackGoLogo size="lg" />
                         <button
@@ -154,7 +186,7 @@ export default function UserLayout({ children }: { children: ReactNode }) {
                                         "flex h-9 items-center gap-2 rounded-xl px-2 text-[12px] font-semibold transition",
                                         active
                                             ? "bg-white text-[#4f46e5] shadow-sm"
-                                            : "text-[#364260] active:bg-white/85 active:text-[#4f46e5]",
+                                            : "text-[#364260] active:bg-white/85",
                                     ].join(" ")}
                                 >
                                     <span className={[
@@ -200,7 +232,7 @@ export default function UserLayout({ children }: { children: ReactNode }) {
 
                 {/* ── MOBILE BOTTOM NAV ───────────────────────────────── */}
                 <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#e8e7fb] bg-white/95 px-2 pb-[max(env(safe-area-inset-bottom),0.65rem)] pt-1 shadow-[0_-20px_56px_rgba(82,63,169,0.15)] backdrop-blur-xl xl:hidden">
-                    <div className="mx-auto flex max-w-md">
+                    <div className={`mx-auto grid max-w-md ${MOBILE_NAV.length === 4 ? "grid-cols-4" : "grid-cols-3"}`}>
                         {MOBILE_NAV.map((item) => {
                             const active = pathname === item.href || pathname.startsWith(item.href);
                             return (
@@ -208,7 +240,7 @@ export default function UserLayout({ children }: { children: ReactNode }) {
                                     key={item.href}
                                     href={item.href}
                                     className={[
-                                        "relative flex flex-1 flex-col items-center justify-center gap-0.5 px-1 pb-1 pt-2.5 text-[10px] font-black transition-colors active:opacity-70",
+                                        "relative flex flex-col items-center justify-center gap-0.5 px-1 pb-1 pt-2.5 text-[10px] font-black transition-colors active:opacity-70",
                                         active ? "text-[#4f46e5]" : "text-[#98a2b3]",
                                     ].join(" ")}
                                 >
@@ -225,20 +257,6 @@ export default function UserLayout({ children }: { children: ReactNode }) {
                                 </Link>
                             );
                         })}
-
-                        {/* Profile / menu button */}
-                        <button
-                            type="button"
-                            onClick={() => setMobileMenuOpen(true)}
-                            className="relative flex flex-1 flex-col items-center justify-center gap-0.5 px-1 pb-1 pt-2.5 text-[10px] font-black text-[#98a2b3] transition-colors active:opacity-70"
-                        >
-                            <span className="flex h-9 w-9 items-center justify-center rounded-[14px]">
-                                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-[#7c3aed] to-[#4f46e5] text-[11px] font-bold text-white shadow-md">
-                                    {userInitial}
-                                </div>
-                            </span>
-                            <span className="leading-none">Menú</span>
-                        </button>
                     </div>
                 </nav>
             </div>

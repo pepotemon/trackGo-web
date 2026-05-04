@@ -185,7 +185,7 @@ function MapPageInner() {
     }
 
     return (
-        <div className="relative flex h-[calc(100dvh-72px)] flex-col overflow-hidden xl:h-screen">
+        <div className="relative flex h-[calc(100dvh-72px)] flex-col overflow-hidden overscroll-none xl:h-screen">
 
             {/* ── MAP ─────────────────────────────────────────────────── */}
             <div className="flex-1">

@@ -67,13 +67,31 @@ function formatTime(ts: number | null | undefined): string {
     return new Intl.DateTimeFormat("es", { hour: "2-digit", minute: "2-digit" }).format(new Date(ts));
 }
 
-function formatRangeLabel(startKey: string, endKey: string): string {
+function formatRangeLabel(preset: RangePreset, startKey: string, endKey: string): string {
+    if (preset === "all") return "Todo el historial";
+    if (preset === "week") return "Esta semana";
+    if (preset === "7d") return "Últimos 7 días";
+    if (preset === "month") return "Este mes";
     const fmt = (k: string) => {
         const [y, m, d] = k.split("-");
         return new Intl.DateTimeFormat("es", { day: "2-digit", month: "short" }).format(new Date(+y, +m - 1, +d));
     };
     return `${fmt(startKey)} – ${fmt(endKey)}`;
 }
+
+const PRESETS: { key: RangePreset; label: string }[] = [
+    { key: "all", label: "Todo el historial" },
+    { key: "week", label: "Esta semana" },
+    { key: "7d", label: "Últimos 7 días" },
+    { key: "month", label: "Este mes" },
+    { key: "custom", label: "Personalizado" },
+];
+
+const FILTER_LABELS: Record<HistoryFilter, string> = {
+    all: "Todos",
+    visited: "Visitados",
+    rejected: "Rechazados",
+};
 
 export default function UserHistoryPage() {
     const { firebaseUser } = useAuth();
@@ -84,12 +102,12 @@ export default function UserHistoryPage() {
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState<HistoryFilter>("all");
     const [search, setSearch] = useState("");
-    const [searchOpen, setSearchOpen] = useState(false);
 
     const [rangePreset, setRangePreset] = useState<RangePreset>("all");
     const [customStart, setCustomStart] = useState(thisWeekRange().startKey);
     const [customEnd, setCustomEnd] = useState(today);
-    const [showCustom, setShowCustom] = useState(false);
+
+    const [filterModalOpen, setFilterModalOpen] = useState(false);
 
     const [actionLead, setActionLead] = useState<MetaLeadDoc | null>(null);
     const [actionType, setActionType] = useState<"visit" | "reject" | null>(null);
@@ -113,17 +131,15 @@ export default function UserHistoryPage() {
         if (rangePreset === "7d") return last7DaysRange();
         if (rangePreset === "month") return thisMonthRange();
         if (rangePreset === "custom") return { startKey: customStart, endKey: customEnd };
-        return { startKey: "", endKey: "" }; // "all" — no filter
+        return { startKey: "", endKey: "" };
     }, [rangePreset, customStart, customEnd]);
 
-    // All visited/rejected leads, sorted by statusAt desc
     const historyLeads = useMemo(() => {
         return leads
             .filter((l) => l.status === "visited" || l.status === "rejected")
             .sort((a, b) => (b.statusAt ?? b.assignedAt ?? 0) - (a.statusAt ?? a.assignedAt ?? 0));
     }, [leads]);
 
-    // Leads within the selected range
     const rangeLeads = useMemo(() => {
         if (rangePreset === "all") return historyLeads;
         return historyLeads.filter((l) => {
@@ -172,14 +188,11 @@ export default function UserHistoryPage() {
         return groups;
     }, [filtered]);
 
+    const filtersActive = rangePreset !== "all" || filter !== "all";
+
     function canUndo(lead: MetaLeadDoc) {
         if (!lead.statusAt) return true;
         return new Date(lead.statusAt).toISOString().slice(0, 10) === today;
-    }
-
-    function selectPreset(p: RangePreset) {
-        setRangePreset(p);
-        setShowCustom(p === "custom");
     }
 
     function openVisit(lead: MetaLeadDoc) { setActionLead(lead); setActionType("visit"); }
@@ -225,117 +238,55 @@ export default function UserHistoryPage() {
         window.open(url, "_blank");
     }
 
-    const PRESETS: { key: RangePreset; label: string }[] = [
-        { key: "all", label: "Todo" },
-        { key: "week", label: "Esta semana" },
-        { key: "7d", label: "7 días" },
-        { key: "month", label: "Este mes" },
-        { key: "custom", label: "Personalizado" },
-    ];
-
     return (
         <div className="flex min-h-screen flex-col bg-[radial-gradient(circle_at_top_right,rgba(124,58,237,0.08),transparent_36%),linear-gradient(180deg,#fbfaff_0%,#f6f3ff_52%,#f8fafc_100%)]">
 
             {/* ── STICKY HEADER ───────────────────────────────────────── */}
             <div className="sticky top-0 z-20 bg-[#fbfaff]/96 px-3 pb-3 pt-4 backdrop-blur-md xl:px-6">
 
-                {/* TITLE + SEARCH */}
-                <div className="mb-3 flex items-center justify-between gap-3">
-                    <div>
+                {/* TITLE ROW */}
+                <div className="mb-3 flex items-center gap-2">
+                    <div className="min-w-0 flex-1">
                         <h1 className="text-[20px] font-black tracking-[-0.03em] text-[#101936]">Historial</h1>
-                        <p className="mt-0.5 text-[11px] font-semibold text-[#66739A]">
-                            {rangePreset === "custom"
-                                ? formatRangeLabel(startKey, endKey)
-                                : PRESETS.find((p) => p.key === rangePreset)?.label}
+                        <p className="mt-0.5 truncate text-[11px] font-semibold text-[#66739A]">
+                            {formatRangeLabel(rangePreset, startKey, endKey)}
                             {" · "}{counts.all} {counts.all === 1 ? "prospecto" : "prospectos"}
+                            {filter !== "all" ? ` · ${FILTER_LABELS[filter]}` : ""}
                         </p>
                     </div>
+
+                    {/* Filter button */}
                     <button
                         type="button"
-                        onClick={() => setSearchOpen(true)}
-                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-white shadow-sm transition active:bg-[#f3f0ff]"
-                        aria-label="Buscar"
+                        onClick={() => setFilterModalOpen(true)}
+                        className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-white shadow-sm transition active:bg-[#f3f0ff]"
+                        aria-label="Filtros"
                     >
-                        <SearchIcon />
+                        <FilterIcon />
+                        {filtersActive ? (
+                            <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[#7C3AED]" />
+                        ) : null}
                     </button>
                 </div>
 
+                {/* SEARCH BAR */}
+                <div className="mb-3 flex items-center gap-2 rounded-[14px] border border-[#E8E7FB] bg-white px-3 py-2.5 shadow-sm">
+                    <SearchIcon />
+                    <input
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="Nombre, negocio, teléfono..."
+                        className="min-w-0 flex-1 bg-transparent text-[13px] font-semibold text-[#101936] outline-none placeholder:text-[#98A2B3]"
+                    />
+                    {search ? (
+                        <button type="button" onClick={() => setSearch("")} className="text-[16px] leading-none text-[#98A2B3]">×</button>
+                    ) : null}
+                </div>
+
                 {/* STATS */}
-                <div className="mb-3 grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                     <StatPill label="Visitados" value={stats.visited} tone="green" />
                     <StatPill label="Rechazados" value={stats.rejected} tone="red" />
-                </div>
-
-                {/* RANGE PRESETS */}
-                <div className="mb-2 flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    {PRESETS.map((p) => (
-                        <button
-                            key={p.key}
-                            type="button"
-                            onClick={() => selectPreset(p.key)}
-                            className={[
-                                "flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-[11px] font-black transition",
-                                rangePreset === p.key
-                                    ? "border-[#7C3AED] bg-[#7C3AED] text-white"
-                                    : "border-[#E8E7FB] bg-white text-[#66739A]",
-                            ].join(" ")}
-                        >
-                            {p.key === "custom" ? <CalendarIcon /> : null}
-                            {p.label}
-                        </button>
-                    ))}
-                </div>
-
-                {/* CUSTOM DATE INPUTS */}
-                {showCustom ? (
-                    <div className="mb-2 flex items-center gap-2 rounded-[14px] border border-[#E8E7FB] bg-white px-3 py-2 shadow-sm">
-                        <input
-                            type="date"
-                            value={customStart}
-                            max={customEnd}
-                            onChange={(e) => setCustomStart(e.target.value)}
-                            className="flex-1 bg-transparent text-[12px] font-bold text-[#101936] outline-none"
-                        />
-                        <span className="text-[10px] font-black text-[#98A2B3]">→</span>
-                        <input
-                            type="date"
-                            value={customEnd}
-                            min={customStart}
-                            max={today}
-                            onChange={(e) => setCustomEnd(e.target.value)}
-                            className="flex-1 bg-transparent text-[12px] font-bold text-[#101936] outline-none"
-                        />
-                    </div>
-                ) : null}
-
-                {/* FILTER TABS */}
-                <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    {(["all", "visited", "rejected"] as HistoryFilter[]).map((f) => {
-                        const labels: Record<HistoryFilter, string> = { all: "Todos", visited: "Visitados", rejected: "Rechazados" };
-                        const count = counts[f];
-                        const active = filter === f;
-                        return (
-                            <button
-                                key={f}
-                                type="button"
-                                onClick={() => setFilter(f)}
-                                className={[
-                                    "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-black transition",
-                                    active
-                                        ? "border-[#7C3AED] bg-[#7C3AED] text-white"
-                                        : "border-[#E8E7FB] bg-white text-[#66739A]",
-                                ].join(" ")}
-                            >
-                                {labels[f]}
-                                <span className={[
-                                    "flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[9px] font-black",
-                                    active ? "bg-white/25 text-white" : "bg-[#f3f0ff] text-[#7C3AED]",
-                                ].join(" ")}>
-                                    {count}
-                                </span>
-                            </button>
-                        );
-                    })}
                 </div>
             </div>
 
@@ -374,48 +325,90 @@ export default function UserHistoryPage() {
                 )}
             </div>
 
-            {/* ── SEARCH MODAL ────────────────────────────────────────── */}
-            {searchOpen ? (
-                <div className="fixed inset-0 z-50 flex flex-col bg-[#fbfaff]">
-                    <div className="flex items-center gap-3 border-b border-[#E8E7FB] px-4 py-3">
-                        <div className="flex flex-1 items-center gap-2 rounded-[14px] border border-[#E8E7FB] bg-white px-3 py-2.5 shadow-sm">
-                            <SearchIcon />
+            {/* ── FILTER MODAL ────────────────────────────────────────── */}
+            {filterModalOpen ? (
+                <BottomSheet onClose={() => setFilterModalOpen(false)} tall>
+                    <p className="mb-4 text-[16px] font-black text-[#101936]">Filtros</p>
+
+                    {/* Range presets */}
+                    <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-[#98A2B3]">Período</p>
+                    <div className="mb-4 grid gap-1.5">
+                        {PRESETS.map((p) => (
+                            <button
+                                key={p.key}
+                                type="button"
+                                onClick={() => setRangePreset(p.key)}
+                                className={[
+                                    "flex items-center gap-2.5 rounded-[12px] border px-3 py-2.5 text-left text-[13px] font-bold transition",
+                                    rangePreset === p.key
+                                        ? "border-[#7C3AED] bg-[#f3f0ff] text-[#5b21ff]"
+                                        : "border-[#E8E7FB] bg-white text-[#344054]",
+                                ].join(" ")}
+                            >
+                                <span className={[
+                                    "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition",
+                                    rangePreset === p.key ? "border-[#7C3AED] bg-[#7C3AED]" : "border-[#D0D5DD]",
+                                ].join(" ")} />
+                                {p.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Custom date inputs */}
+                    {rangePreset === "custom" ? (
+                        <div className="mb-4 flex items-center gap-2 rounded-[14px] border border-[#E8E7FB] bg-white px-3 py-2 shadow-sm">
                             <input
-                                autoFocus
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                placeholder="Nombre, negocio, teléfono..."
-                                className="min-w-0 flex-1 bg-transparent text-[14px] font-semibold text-[#101936] outline-none placeholder:text-[#98A2B3]"
+                                type="date"
+                                value={customStart}
+                                max={customEnd}
+                                onChange={(e) => setCustomStart(e.target.value)}
+                                className="flex-1 bg-transparent text-[12px] font-bold text-[#101936] outline-none"
                             />
-                            {search ? (
-                                <button type="button" onClick={() => setSearch("")} className="text-[18px] text-[#98A2B3]">×</button>
-                            ) : null}
+                            <span className="text-[10px] font-black text-[#98A2B3]">→</span>
+                            <input
+                                type="date"
+                                value={customEnd}
+                                min={customStart}
+                                max={today}
+                                onChange={(e) => setCustomEnd(e.target.value)}
+                                className="flex-1 bg-transparent text-[12px] font-bold text-[#101936] outline-none"
+                            />
                         </div>
-                        <button type="button" onClick={() => setSearchOpen(false)} className="text-[13px] font-black text-[#7C3AED]">
-                            Listo
-                        </button>
+                    ) : null}
+
+                    {/* Status filter */}
+                    <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-[#98A2B3]">Estado</p>
+                    <div className="mb-5 grid gap-1.5">
+                        {(["all", "visited", "rejected"] as HistoryFilter[]).map((f) => (
+                            <button
+                                key={f}
+                                type="button"
+                                onClick={() => setFilter(f)}
+                                className={[
+                                    "flex items-center gap-2.5 rounded-[12px] border px-3 py-2.5 text-left text-[13px] font-bold transition",
+                                    filter === f
+                                        ? "border-[#7C3AED] bg-[#f3f0ff] text-[#5b21ff]"
+                                        : "border-[#E8E7FB] bg-white text-[#344054]",
+                                ].join(" ")}
+                            >
+                                <span className={[
+                                    "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition",
+                                    filter === f ? "border-[#7C3AED] bg-[#7C3AED]" : "border-[#D0D5DD]",
+                                ].join(" ")} />
+                                {FILTER_LABELS[f]}
+                                <span className="ml-auto text-[11px] font-black text-[#98A2B3]">{counts[f]}</span>
+                            </button>
+                        ))}
                     </div>
-                    <div className="flex-1 overflow-y-auto px-4 pt-3">
-                        {filtered.length === 0 ? (
-                            <p className="pt-10 text-center text-[13px] font-semibold text-[#98A2B3]">Sin resultados</p>
-                        ) : (
-                            <div className="grid gap-2">
-                                {filtered.map((lead) => (
-                                    <HistoryCard
-                                        key={lead.id}
-                                        lead={lead}
-                                        canUndo={canUndo(lead)}
-                                        onVisit={() => { openVisit(lead); setSearchOpen(false); }}
-                                        onReject={() => { openReject(lead); setSearchOpen(false); }}
-                                        onUndo={() => handleUndo(lead)}
-                                        onWhatsApp={() => openWhatsApp(lead)}
-                                        onMaps={() => openMaps(lead)}
-                                    />
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                </div>
+
+                    <button
+                        type="button"
+                        onClick={() => setFilterModalOpen(false)}
+                        className="w-full rounded-[14px] bg-[#7C3AED] py-3 text-[14px] font-black text-white"
+                    >
+                        Aplicar
+                    </button>
+                </BottomSheet>
             ) : null}
 
             {/* ── VISIT MODAL ─────────────────────────────────────────── */}
@@ -689,13 +682,13 @@ function EmptyState({ filter, search }: { filter: HistoryFilter; search: string 
 
 const ic = { fill: "none", stroke: "currentColor", strokeLinecap: "round" as const, strokeLinejoin: "round" as const, strokeWidth: 1.8 };
 
-function SearchIcon() { return <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#7C3AED]" {...ic}><path d="m21 21-4.3-4.3M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16Z" /></svg>; }
+function SearchIcon() { return <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-[#98A2B3]" {...ic}><path d="m21 21-4.3-4.3M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16Z" /></svg>; }
+function FilterIcon() { return <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#7C3AED]" {...ic}><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3Z" /></svg>; }
 function PhoneIcon() { return <svg viewBox="0 0 24 24" className="h-3 w-3 shrink-0" {...ic}><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.1-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.8.4 1.6.7 2.4a2 2 0 0 1-.5 2.1L8.1 9.4a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.8.3 1.6.5 2.4.7a2 2 0 0 1 1.7 2Z" /></svg>; }
 function PinIcon() { return <svg viewBox="0 0 24 24" className="h-3 w-3 shrink-0" {...ic}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1 1 18 0Z" /><circle cx="12" cy="10" r="3" {...ic} /></svg>; }
 function CheckIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M20 6 9 17l-5-5" /></svg>; }
 function XIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M18 6 6 18M6 6l12 12" /></svg>; }
 function UndoIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M3 7v6h6" /><path d="M3 13a9 9 0 1 0 2.6-6.36L3 10" /></svg>; }
 function HistoryIcon() { return <svg viewBox="0 0 24 24" className="h-7 w-7 text-[#7C3AED]" {...ic}><path d="M12 7v5l3 2" /><path d="M3.05 11a9 9 0 1 1 .5 4M3 15v-4h4" /></svg>; }
-function CalendarIcon() { return <svg viewBox="0 0 24 24" className="h-3 w-3" {...ic}><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>; }
 function WAIcon() { return <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M17.47 14.38c-.28-.14-1.65-.82-1.9-.91-.26-.09-.44-.14-.63.14-.19.28-.73.91-.9 1.1-.16.18-.33.2-.61.07-.28-.14-1.18-.44-2.25-1.39-.83-.74-1.39-1.66-1.55-1.93-.16-.28-.02-.43.12-.57.12-.12.28-.32.42-.48.14-.16.18-.28.28-.46.09-.18.05-.34-.02-.48-.07-.14-.63-1.52-.86-2.08-.23-.55-.46-.47-.63-.48-.16-.01-.35-.01-.53-.01-.18 0-.48.07-.73.34-.25.27-.97.95-.97 2.31 0 1.36.99 2.67 1.13 2.86.14.18 1.96 2.99 4.75 4.2.66.28 1.18.45 1.58.58.66.21 1.27.18 1.74.11.53-.08 1.65-.68 1.88-1.33.24-.65.24-1.2.17-1.33-.07-.12-.25-.19-.53-.33Z"/><path d="M12.05 2.01C6.49 2.01 2 6.5 2 12.07c0 1.87.51 3.63 1.4 5.14L2 22l4.93-1.36A10.04 10.04 0 0 0 12.05 22C17.61 22 22 17.5 22 11.93 22 6.5 17.61 2.01 12.05 2.01Zm0 18.37a8.34 8.34 0 0 1-4.23-1.15l-.3-.18-3.13.86.86-3.17-.2-.32a8.35 8.35 0 0 1-1.27-4.41c0-4.61 3.72-8.36 8.3-8.36 4.57 0 8.29 3.75 8.29 8.36-.01 4.61-3.72 8.37-8.32 8.37Z"/></svg>; }
 function MapsIcon() { return <svg viewBox="0 0 24 24" className="h-4 w-4" {...ic}><path d="M9 18 3 21V6l6-3 6 3 6-3v15l-6 3-6-3Z" /><path d="M9 3v15M15 6v15" /></svg>; }
