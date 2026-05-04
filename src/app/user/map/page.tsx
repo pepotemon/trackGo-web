@@ -161,19 +161,16 @@ function MapPageInner() {
         : { lat: -23.55, lng: -46.63 };
 
     return (
-        <div className="relative flex h-[calc(100dvh-72px)] flex-col overflow-hidden overscroll-none xl:h-screen">
-
-            {/* ── MAP ─────────────────────────────────────────────────── */}
-            <div className="flex-1">
-                <Map
-                    defaultCenter={defaultCenter}
-                    defaultZoom={12}
-                    mapId={MAP_ID}
-                    disableDefaultUI
-                    gestureHandling="greedy"
-                    style={{ width: "100%", height: "100%" }}
-                    onClick={() => setSelectedLead(null)}
-                >
+        <div className="relative h-[calc(100dvh-72px)] overscroll-none xl:h-screen">
+            <Map
+                defaultCenter={defaultCenter}
+                defaultZoom={12}
+                mapId={MAP_ID}
+                disableDefaultUI
+                gestureHandling="greedy"
+                style={{ width: "100%", height: "100%" }}
+                onClick={() => setSelectedLead(null)}
+            >
                     {filteredLeads.map((lead) => (
                         <AdvancedMarker
                             key={lead.id}
@@ -201,8 +198,7 @@ function MapPageInner() {
                         locating={locating}
                         userLocation={userLocation}
                     />
-                </Map>
-            </div>
+            </Map>
 
             {/* ── FILTER DOCK ─────────────────────────────────────────── */}
             <div className="absolute right-3 top-4 z-10 flex flex-col gap-1.5">
