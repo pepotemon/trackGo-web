@@ -45,6 +45,7 @@ function MapPageInner() {
     const [selectedLead, setSelectedLead] = useState<MetaLeadDoc | null>(null);
     const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
     const [locating, setLocating] = useState(false);
+    const [mapReady, setMapReady] = useState(false);
 
     const [actionType, setActionType] = useState<"visit" | "reject" | null>(null);
     const [rejectStep, setRejectStep] = useState<1 | 2>(1);
@@ -97,6 +98,12 @@ function MapPageInner() {
 
     // Auto-locate on mount
     useEffect(() => { locate(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Fallback: reveal map after 8s even if GPS never responds
+    useEffect(() => {
+        const t = setTimeout(() => setMapReady(true), 8000);
+        return () => clearTimeout(t);
+    }, []);
 
     const today = todayKey();
 
@@ -198,6 +205,7 @@ function MapPageInner() {
                         onLocate={locate}
                         locating={locating}
                         userLocation={userLocation}
+                        onFirstCenter={() => setMapReady(true)}
                     />
             </Map>
 
@@ -235,8 +243,27 @@ function MapPageInner() {
                 })}
             </div>
 
-            {/* ── LOADING OVERLAY ─────────────────────────────────────── */}
-            {loadingLeads ? (
+            {/* ── INITIAL MAP LOADING SCREEN ──────────────────────────── */}
+            {!mapReady ? (
+                <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-white">
+                    <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-[22px] bg-[#f3f0ff]">
+                        <svg viewBox="0 0 24 24" className="h-8 w-8 text-[#7C3AED]" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M9 18 3 21V6l6-3 6 3 6-3v15l-6 3-6-3Z" />
+                            <path d="M9 3v15M15 6v15" />
+                        </svg>
+                    </div>
+                    <p className="text-[18px] font-black text-[#101936]">Cargando mapa</p>
+                    <div className="mt-2 flex items-center gap-2 text-[13px] font-semibold text-[#66739A]">
+                        <svg className="tg-spin h-4 w-4 text-[#7C3AED]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                            <path d="M21 12a9 9 0 1 1-3.1-6.8" />
+                        </svg>
+                        Obteniendo tu ubicación...
+                    </div>
+                </div>
+            ) : null}
+
+            {/* ── LEADS LOADING OVERLAY ───────────────────────────────── */}
+            {mapReady && loadingLeads ? (
                 <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/70 backdrop-blur-sm">
                     <div className="flex flex-col items-center gap-3 rounded-2xl bg-white p-6 shadow-xl">
                         <svg className="tg-spin h-8 w-8 text-[#7C3AED]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -463,22 +490,25 @@ function MapControls({
     onLocate,
     locating,
     userLocation,
+    onFirstCenter,
 }: {
     leads: MetaLeadDoc[];
     onLocate: () => void;
     locating: boolean;
     userLocation: { lat: number; lng: number } | null;
+    onFirstCenter?: () => void;
 }) {
     const map = useMap();
     const centeredRef = useRef(false);
 
-    // Auto-center on user location the first time it arrives
+    // Initial center: use setCenter (instant, no animation) so map reveals already in position
     useEffect(() => {
         if (!map || !userLocation || centeredRef.current) return;
         centeredRef.current = true;
-        map.panTo(userLocation);
+        map.setCenter(userLocation);
         map.setZoom(15);
-    }, [map, userLocation]);
+        onFirstCenter?.();
+    }, [map, userLocation, onFirstCenter]);
 
     // Notify the map when its container resizes (dvh changes on mobile as browser chrome shows/hides)
     useEffect(() => {
