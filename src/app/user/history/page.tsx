@@ -114,7 +114,7 @@ export default function UserHistoryPage() {
     const [filter, setFilter] = useState<HistoryFilter>("all");
     const [search, setSearch] = useState("");
 
-    const [rangePreset, setRangePreset] = useState<RangePreset>("all");
+    const [rangePreset, setRangePreset] = useState<RangePreset>("month");
     const [customStart, setCustomStart] = useState(thisWeekRange().startKey);
     const [customEnd, setCustomEnd] = useState(today);
 
