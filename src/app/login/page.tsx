@@ -9,10 +9,10 @@ export default function LoginPage() {
     const router = useRouter();
     const { login, firebaseUser, isAdmin, isUser, loading } = useAuth();
 
-    const [email, setEmail] = useState("");
+    const [email, setEmail]       = useState("");
     const [password, setPassword] = useState("");
-    const [saving, setSaving] = useState(false);
-    const [error, setError] = useState("");
+    const [saving, setSaving]     = useState(false);
+    const [error, setError]       = useState("");
 
     useEffect(() => {
         if (loading) return;
@@ -20,73 +20,193 @@ export default function LoginPage() {
         else if (firebaseUser && isUser) router.replace("/user/leads");
     }, [loading, firebaseUser, isAdmin, isUser, router]);
 
-    async function onSubmit(event: FormEvent) {
-        event.preventDefault();
+    async function onSubmit(e: FormEvent) {
+        e.preventDefault();
         setError("");
         setSaving(true);
-
         try {
             await login(email, password);
         } catch {
-            setError("Email o contrasena incorrectos.");
+            setError("Email o contraseña incorrectos.");
         } finally {
             setSaving(false);
         }
     }
 
+    const cardProps = { email, password, saving, loading, error, onEmail: setEmail, onPassword: setPassword, onSubmit };
+
     return (
-        <main className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top,#f3e8ff_0,#f8f7ff_34%,#ffffff_100%)] px-4 py-8 text-[#172033]">
-            <form
-                onSubmit={onSubmit}
-                className="w-full max-w-[320px] rounded-2xl border border-[#e8e7fb] bg-white/92 p-5 shadow-[0_24px_70px_rgba(91,33,255,0.12)] backdrop-blur"
-            >
-                <div className="mb-5 flex justify-center">
-                    <TrackGoLogo size="xl" />
-                </div>
+        <main
+            className="relative min-h-screen overflow-hidden"
+            style={{ backgroundImage: "url('/brand/backgroundLogin.png')", backgroundSize: "cover", backgroundPosition: "center" }}
+        >
+            {/* ── DESKTOP: landing izquierda + card derecha ───────────── */}
+            <div className="hidden xl:flex xl:min-h-screen xl:items-center xl:justify-center xl:gap-20 xl:px-20">
 
-                <div className="space-y-3">
-                    <label className="block">
-                        <span className="text-[11px] font-semibold uppercase tracking-[0.07em] text-[#667085]">
-                            Email
+                {/* LEFT */}
+                <div className="w-[420px] shrink-0">
+                    <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#E8E7FB] bg-white/80 px-3 py-1.5 shadow-sm backdrop-blur-sm">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                        <span className="text-[11px] font-bold text-[#66739A]">Plataforma activa</span>
+                    </div>
+
+                    <h1 className="mb-3 text-[38px] font-black leading-[1.12] tracking-[-0.03em] text-[#101936]">
+                        Consigue clientes<br />
+                        <span className="bg-gradient-to-r from-[#7C3AED] to-[#9333EA] bg-clip-text text-transparent">
+                            listos para comprar
                         </span>
-                        <input
-                            value={email}
-                            onChange={(event) => setEmail(event.target.value)}
-                            type="email"
-                            autoComplete="email"
-                            className="mt-1.5 h-9 w-full rounded-lg border border-[#d8ddea] bg-white px-3 text-[12px] font-medium text-[#172033] outline-none transition focus:border-[#7c3aed] focus:ring-2 focus:ring-violet-100"
-                            placeholder="admin@trackgo.com"
-                        />
-                    </label>
+                    </h1>
 
-                    <label className="block">
-                        <span className="text-[11px] font-semibold uppercase tracking-[0.07em] text-[#667085]">
-                            Contrasena
-                        </span>
-                        <input
-                            value={password}
-                            onChange={(event) => setPassword(event.target.value)}
-                            type="password"
-                            autoComplete="current-password"
-                            className="mt-1.5 h-9 w-full rounded-lg border border-[#d8ddea] bg-white px-3 text-[12px] font-medium text-[#172033] outline-none transition focus:border-[#7c3aed] focus:ring-2 focus:ring-violet-100"
-                            placeholder="Tu contrasena"
-                        />
-                    </label>
-                </div>
-
-                {error ? (
-                    <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-semibold text-red-600">
-                        {error}
+                    <p className="mb-9 text-[14px] font-semibold leading-relaxed text-[#66739A]">
+                        Conecta tu equipo con personas que ya quieren tu producto o servicio.
                     </p>
-                ) : null}
 
-                <button
-                    disabled={saving || loading}
-                    className="mt-5 inline-flex h-9 w-full items-center justify-center rounded-lg border border-[#6d28d9] bg-gradient-to-br from-[#7c3aed] to-[#4f46e5] px-4 text-[12px] font-semibold text-white shadow-[0_12px_28px_rgba(91,33,255,0.22)] transition hover:from-[#6d28d9] hover:to-[#4338ca] disabled:opacity-60"
-                >
-                    {saving ? "Entrando..." : "Entrar"}
-                </button>
-            </form>
+                    <div className="space-y-3.5">
+                        <FeatureRow icon={<CheckIcon />} label="Clientes verificados y filtrados" />
+                        <FeatureRow icon={<ZapIcon />}   label="Asignación automática, sin fricción" />
+                        <FeatureRow icon={<ChartIcon />} label="Visitas y resultados en tiempo real" />
+                    </div>
+                </div>
+
+                {/* RIGHT */}
+                <LoginCard {...cardProps} />
+            </div>
+
+            {/* ── MOBILE: solo card centrada ───────────────────────────── */}
+            <div className="flex min-h-screen items-center justify-center px-4 py-10 xl:hidden">
+                <LoginCard {...cardProps} />
+            </div>
         </main>
     );
 }
+
+// ── Login card ─────────────────────────────────────────────────────────────────
+
+function LoginCard({
+    email, password, saving, loading, error,
+    onEmail, onPassword, onSubmit,
+}: {
+    email: string; password: string; saving: boolean; loading: boolean; error: string;
+    onEmail: (v: string) => void; onPassword: (v: string) => void;
+    onSubmit: (e: React.FormEvent) => void;
+}) {
+    const [showPass, setShowPass] = useState(false);
+
+    return (
+        <div className="w-full max-w-[310px] shrink-0 rounded-2xl border border-[#e8e7fb] bg-white/95 p-6 shadow-[0_24px_70px_rgba(91,33,255,0.13)] backdrop-blur">
+
+            {/* Logo centrado */}
+            <div className="mb-6 flex justify-center">
+                <TrackGoLogo size="lg" />
+            </div>
+
+            <form onSubmit={onSubmit} className="space-y-3">
+
+                {/* Email */}
+                <label className="block">
+                    <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.07em] text-[#667085]">
+                        Email
+                    </span>
+                    <div className="relative">
+                        <div className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-[#98A2B3]">
+                            <MailIcon />
+                        </div>
+                        <input
+                            value={email}
+                            onChange={(e) => onEmail(e.target.value)}
+                            type="email"
+                            autoComplete="email"
+                            required
+                            placeholder="admin@trackgo.com"
+                            className="h-9 w-full rounded-lg border border-[#d8ddea] bg-white pl-9 pr-3 text-[12px] font-medium text-[#172033] outline-none transition focus:border-[#7c3aed] focus:ring-2 focus:ring-violet-100"
+                        />
+                    </div>
+                </label>
+
+                {/* Contraseña */}
+                <label className="block">
+                    <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.07em] text-[#667085]">
+                        Contraseña
+                    </span>
+                    <div className="relative">
+                        <div className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-[#98A2B3]">
+                            <LockIcon />
+                        </div>
+                        <input
+                            value={password}
+                            onChange={(e) => onPassword(e.target.value)}
+                            type={showPass ? "text" : "password"}
+                            autoComplete="current-password"
+                            required
+                            placeholder="Tu contraseña"
+                            className="h-9 w-full rounded-lg border border-[#d8ddea] bg-white pl-9 pr-9 text-[12px] font-medium text-[#172033] outline-none transition focus:border-[#7c3aed] focus:ring-2 focus:ring-violet-100"
+                        />
+                        <button
+                            type="button"
+                            onClick={() => setShowPass((v) => !v)}
+                            tabIndex={-1}
+                            aria-label={showPass ? "Ocultar contraseña" : "Mostrar contraseña"}
+                            className="absolute inset-y-0 right-2.5 flex items-center text-[#98A2B3] transition hover:text-[#7C3AED]"
+                        >
+                            {showPass ? <EyeOffIcon /> : <EyeIcon />}
+                        </button>
+                    </div>
+                </label>
+
+                {/* Error */}
+                {error ? (
+                    <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+                        <AlertIcon />
+                        <p className="text-[12px] font-semibold text-red-600">{error}</p>
+                    </div>
+                ) : null}
+
+                {/* Botón */}
+                <button
+                    type="submit"
+                    disabled={saving || loading}
+                    className="group mt-1 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-[#6d28d9] bg-gradient-to-br from-[#7c3aed] to-[#4f46e5] text-[12px] font-semibold text-white shadow-[0_12px_28px_rgba(91,33,255,0.22)] transition hover:from-[#6d28d9] hover:to-[#4338ca] disabled:opacity-60"
+                >
+                    {saving ? <><SpinnerIcon /> Entrando...</> : <>Entrar <ArrowRight /></>}
+                </button>
+            </form>
+
+            {/* Footer de la card */}
+            <p className="mt-3 flex items-center justify-center gap-1 text-[10px] font-semibold text-[#B0BAD0]">
+                <LockTinyIcon /> Acceso seguro y privado
+            </p>
+            <p className="mt-2 text-center text-[10px] font-semibold text-[#C8D0DC]">
+                © 2025 TrackGo
+            </p>
+        </div>
+    );
+}
+
+// ── Feature row ────────────────────────────────────────────────────────────────
+
+function FeatureRow({ icon, label }: { icon: React.ReactNode; label: string }) {
+    return (
+        <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-white/80 text-[#7C3AED] shadow-sm backdrop-blur-sm">
+                {icon}
+            </div>
+            <span className="text-[13px] font-bold text-[#344054]">{label}</span>
+        </div>
+    );
+}
+
+// ── Icons ──────────────────────────────────────────────────────────────────────
+
+const ic = { fill: "none", stroke: "currentColor", strokeLinecap: "round" as const, strokeLinejoin: "round" as const, strokeWidth: 1.8 };
+
+function CheckIcon()    { return <svg viewBox="0 0 24 24" className="h-4 w-4" {...ic}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4 12 14.01l-3-3"/></svg>; }
+function ZapIcon()      { return <svg viewBox="0 0 24 24" className="h-4 w-4" {...ic}><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>; }
+function ChartIcon()    { return <svg viewBox="0 0 24 24" className="h-4 w-4" {...ic}><path d="M18 20V10M12 20V4M6 20v-6"/></svg>; }
+function MailIcon()     { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>; }
+function LockIcon()     { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>; }
+function EyeIcon()      { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>; }
+function EyeOffIcon()   { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61M2 2l20 20"/></svg>; }
+function AlertIcon()    { return <svg viewBox="0 0 24 24" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-500" {...ic}><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>; }
+function LockTinyIcon() { return <svg viewBox="0 0 24 24" className="h-3 w-3 shrink-0" {...ic} strokeWidth={2}><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>; }
+function ArrowRight()   { return <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 8h12M9 3l5 5-5 5"/></svg>; }
+function SpinnerIcon()  { return <svg className="tg-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 12a9 9 0 1 1-3.1-6.8"/></svg>; }

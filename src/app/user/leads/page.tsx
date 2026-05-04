@@ -19,6 +19,17 @@ import {
 
 type StatusFilter = "pending" | "visited" | "rejected" | "all";
 
+const SPANISH_PHONE_PREFIXES = ["507","502","503","504","505","506","509","52","54","56","57","51","58","593","591","595","598"];
+function isSpanishPhone(phone: string) {
+    const d = phone.replace(/\D/g, "");
+    return SPANISH_PHONE_PREFIXES.some(p => d.startsWith(p));
+}
+function buildWALink(phone: string, msg: string) {
+    const d = phone.replace(/\D/g, "");
+    const intl = d.startsWith("55") || SPANISH_PHONE_PREFIXES.some(p => d.startsWith(p)) ? d : `55${d}`;
+    return `https://wa.me/${intl}?text=${encodeURIComponent(msg)}`;
+}
+
 const REJECTION_REASONS = Object.entries(REJECTED_REASON_LABELS) as [RejectedReason, string][];
 
 function todayKey() { return new Date().toISOString().slice(0, 10); }
@@ -161,10 +172,10 @@ export default function UserLeadsPage() {
     }
 
     function openWhatsApp(lead: MetaLeadDoc) {
-        const phone = lead.phone.replace(/\D/g, "");
-        const br = phone.startsWith("55") ? phone : `55${phone}`;
-        const msg = encodeURIComponent(`Olá, ${lead.name || "tudo bem"}! Estou entrando em contato sobre seu interesse.`);
-        window.open(`https://wa.me/${br}?text=${msg}`, "_blank");
+        const msg = isSpanishPhone(lead.phone)
+            ? `¡Buenas tardes! Somos de Crédito Comercial. Nos comunicamos para continuar con la liberación del crédito y el registro de tu negocio. ¡Quedamos atentos! 😊`
+            : `Boa tarde! Somos da Crédito Comercial. Estamos entrando em contato para dar continuidade à liberação do crédito e realização do cadastro. Aguardamos seu retorno! 😊`;
+        window.open(buildWALink(lead.phone, msg), "_blank");
     }
 
     function openMaps(lead: MetaLeadDoc) {

@@ -14,6 +14,17 @@ import type { MetaLeadDoc } from "@/types/leads";
 
 type Tab = "incomplete" | "not_suitable";
 
+const SPANISH_PHONE_PREFIXES = ["507","502","503","504","505","506","509","52","54","56","57","51","58","593","591","595","598"];
+function isSpanishPhone(phone: string) {
+    const d = phone.replace(/\D/g, "");
+    return SPANISH_PHONE_PREFIXES.some(p => d.startsWith(p));
+}
+function buildWALink(phone: string, msg: string) {
+    const d = phone.replace(/\D/g, "");
+    const intl = d.startsWith("55") || SPANISH_PHONE_PREFIXES.some(p => d.startsWith(p)) ? d : `55${d}`;
+    return `https://wa.me/${intl}?text=${encodeURIComponent(msg)}`;
+}
+
 // ── localStorage notes ────────────────────────────────────────────────────────
 
 function getNote(leadId: string): string {
@@ -151,10 +162,10 @@ export default function UserIncompleteClientsPage() {
     }
 
     function openWhatsApp(lead: MetaLeadDoc) {
-        const phone = lead.phone.replace(/\D/g, "");
-        const br = phone.startsWith("55") ? phone : `55${phone}`;
-        const msg = encodeURIComponent(`Olá, ${lead.name || lead.business || "tudo bem"}! Estou entrando em contato sobre seu interesse.`);
-        window.open(`https://wa.me/${br}?text=${msg}`, "_blank");
+        const msg = isSpanishPhone(lead.phone)
+            ? `¡Hola! Somos de Crédito Comercial. Anteriormente nos contactaste sobre la liberación de crédito para tu negocio activo. Solo queremos confirmar si todavía tienes interés. ¡Gracias y disculpa la molestia! 🙏`
+            : `Olá! Somos da Crédito Comercial. Você nos contatou anteriormente sobre a liberação de crédito para o seu comércio. Gostaríamos de saber se ainda tem interesse. Obrigado e desculpe o incômodo! 🙏`;
+        window.open(buildWALink(lead.phone, msg), "_blank");
     }
 
     if (!phoneCodes.length && !loadingIncomplete) {
