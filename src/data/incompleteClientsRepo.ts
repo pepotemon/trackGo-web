@@ -109,6 +109,9 @@ function subscribeCoverageByPhonePrefixes(
     for (const prefix of prefixes) {
         const q = query(
             collection(db, "clients"),
+            statuses.length === 1
+                ? where("verificationStatus", "==", statuses[0])
+                : where("verificationStatus", "in", [...statuses]),
             orderBy("phone"),
             startAt(prefix),
             endAt(`${prefix}\uf8ff`),

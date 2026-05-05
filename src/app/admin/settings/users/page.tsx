@@ -105,6 +105,24 @@ function normalizeCoverageText(value: unknown) {
         .replace(/^_+|_+$/g, "");
 }
 
+const COUNTRY_PHONE_CODES: Record<string, string> = {
+    panama: "507",
+    guatemala: "502",
+    el_salvador: "503",
+    honduras: "504",
+    nicaragua: "505",
+    costa_rica: "506",
+    republica_dominicana: "509",
+    ecuador: "593",
+    bolivia: "591",
+    paraguay: "595",
+    uruguay: "598",
+};
+
+function countryPhoneCode(countryLabel: string) {
+    return COUNTRY_PHONE_CODES[normalizeCoverageText(countryLabel)] ?? null;
+}
+
 function coverageLabel(user: UserDoc) {
     const items = Array.isArray(user.geoCoverage) ? user.geoCoverage : [];
     if (!items.length) return "Sin cobertura";
@@ -1492,6 +1510,12 @@ function EditUserModal({
                                 item,
                                 ...prev.filter((existing) => existing.id !== item.id),
                             ]);
+                            const phoneCode = item.type === "country" ? countryPhoneCode(item.countryLabel) : null;
+                            if (role === "user" && phoneCode) {
+                                setPhoneCodes((prev) =>
+                                    prev.includes(phoneCode) ? prev : [...prev, phoneCode].sort()
+                                );
+                            }
                             setCoverageCity("");
                         }}
                         onToggle={(id) => {
@@ -1506,9 +1530,9 @@ function EditUserModal({
                         }}
                     />
                     {role === "user" ? (
-                        <EditorBlock title="Indicativos telefónicos (DDD)">
+                        <EditorBlock title="Indicativos telefónicos">
                             <p className="text-[11px] font-semibold text-[#667085]">
-                                DDDs de Brasil que cubre este vendedor. Los clientes con ese indicativo aparecerán en su pantalla de Chat.
+                                Usa DDDs de Brasil de 2 dígitos o códigos país de 3 dígitos, como 507 para Panamá. Estos clientes aparecerán en Incompletos/Chat.
                             </p>
                             <div className="flex flex-wrap gap-1.5">
                                 {phoneCodes.length === 0 ? (
@@ -1529,21 +1553,21 @@ function EditUserModal({
                             <div className="flex gap-2">
                                 <input
                                     value={phoneCodeInput}
-                                    onChange={(e) => setPhoneCodeInput(e.target.value.replace(/\D/g, "").slice(0, 2))}
-                                    placeholder="DDD (ej: 91)"
-                                    maxLength={2}
-                                    className="h-9 w-24 rounded-lg border border-[#e4e7ec] bg-white px-3 text-[13px] font-bold text-[#344054] outline-none focus:border-[#7C3AED]"
+                                    onChange={(e) => setPhoneCodeInput(e.target.value.replace(/\D/g, "").slice(0, 3))}
+                                    placeholder="91 o 507"
+                                    maxLength={3}
+                                    className="h-9 w-28 rounded-lg border border-[#e4e7ec] bg-white px-3 text-[13px] font-bold text-[#344054] outline-none focus:border-[#7C3AED]"
                                 />
                                 <button
                                     type="button"
                                     onClick={() => {
                                         const code = phoneCodeInput.trim();
-                                        if (code.length === 2 && !phoneCodes.includes(code)) {
+                                        if ((code.length === 2 || code.length === 3) && !phoneCodes.includes(code)) {
                                             setPhoneCodes((prev) => [...prev, code].sort());
                                         }
                                         setPhoneCodeInput("");
                                     }}
-                                    disabled={phoneCodeInput.length !== 2}
+                                    disabled={phoneCodeInput.length !== 2 && phoneCodeInput.length !== 3}
                                     className="h-9 rounded-lg border border-[#7C3AED] bg-[#7C3AED] px-4 text-[12px] font-bold text-white disabled:opacity-40"
                                 >
                                     Agregar
