@@ -72,8 +72,19 @@ export default function LoginPage() {
             </div>
 
             {/* ── MOBILE: solo card centrada ───────────────────────────── */}
-            <div className="flex min-h-screen items-center justify-center px-4 py-10 xl:hidden">
-                <LoginCard {...cardProps} />
+            <div className="relative flex min-h-screen flex-col items-center px-5 pb-6 pt-[max(env(safe-area-inset-top),4.75rem)] xl:hidden">
+                <div className="mb-8 text-center">
+                    <TrackGoLogo variant="mark" size="xl" className="mb-5 justify-center scale-[1.35]" />
+                    <div className="text-[42px] font-black leading-none tracking-[-0.055em] text-[#08122f]">
+                        Track<span className="bg-gradient-to-r from-[#5b21ff] to-[#8b2cff] bg-clip-text text-transparent">Go</span>
+                    </div>
+                    <p className="mx-auto mt-4 max-w-[250px] text-[16px] font-semibold leading-[1.35] text-[#7b8499]">
+                        Monitorea lo que mas importa,<br />
+                        en <span className="font-black text-[#6d28d9]">tiempo real.</span>
+                    </p>
+                </div>
+
+                <LoginCard {...cardProps} variant="mobile" />
             </div>
         </main>
     );
@@ -84,30 +95,49 @@ export default function LoginPage() {
 function LoginCard({
     email, password, saving, loading, error,
     onEmail, onPassword, onSubmit,
+    variant = "desktop",
 }: {
     email: string; password: string; saving: boolean; loading: boolean; error: string;
     onEmail: (v: string) => void; onPassword: (v: string) => void;
     onSubmit: (e: React.FormEvent) => void;
+    variant?: "desktop" | "mobile";
 }) {
     const [showPass, setShowPass] = useState(false);
+    const isMobile = variant === "mobile";
 
     return (
-        <div className="w-full max-w-[310px] shrink-0 rounded-2xl border border-[#e8e7fb] bg-white/95 p-6 shadow-[0_24px_70px_rgba(91,33,255,0.13)] backdrop-blur">
+        <div className={[
+            "w-full shrink-0 border border-[#e8e7fb] bg-white/95 shadow-[0_24px_70px_rgba(91,33,255,0.13)] backdrop-blur",
+            isMobile ? "max-w-[340px] rounded-[30px] px-6 pb-7 pt-8" : "max-w-[310px] rounded-2xl p-6",
+        ].join(" ")}>
 
             {/* Logo centrado */}
-            <div className="mb-6 flex justify-center">
-                <TrackGoLogo size="lg" />
-            </div>
+            {isMobile ? (
+                <div className="mb-7 text-center">
+                    <h1 className="text-[24px] font-black tracking-[-0.03em] text-[#08122f]">Bienvenido de nuevo</h1>
+                    <p className="mt-3 text-[15px] font-semibold text-[#98a2b3]">Inicia sesion para continuar</p>
+                </div>
+            ) : (
+                <div className="mb-6 flex justify-center">
+                    <TrackGoLogo size="lg" />
+                </div>
+            )}
 
-            <form onSubmit={onSubmit} className="space-y-3">
+            <form onSubmit={onSubmit} className={isMobile ? "space-y-5" : "space-y-3"}>
 
                 {/* Email */}
                 <label className="block">
-                    <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.07em] text-[#667085]">
-                        Email
+                    <span className={isMobile
+                        ? "mb-2.5 block text-[15px] font-black text-[#08122f]"
+                        : "mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.07em] text-[#667085]"
+                    }>
+                        {isMobile ? "Correo electronico" : "Email"}
                     </span>
                     <div className="relative">
-                        <div className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-[#98A2B3]">
+                        <div className={isMobile
+                            ? "pointer-events-none absolute inset-y-0 left-4 flex items-center text-[#98A2B3]"
+                            : "pointer-events-none absolute inset-y-0 left-3 flex items-center text-[#98A2B3]"
+                        }>
                             <MailIcon />
                         </div>
                         <input
@@ -117,18 +147,27 @@ function LoginCard({
                             autoComplete="email"
                             required
                             placeholder="admin@trackgo.com"
-                            className="h-9 w-full rounded-lg border border-[#d8ddea] bg-white pl-9 pr-3 text-[12px] font-medium text-[#172033] outline-none transition focus:border-[#7c3aed] focus:ring-2 focus:ring-violet-100"
+                            className={isMobile
+                                ? "h-14 w-full rounded-[14px] border border-[#d9b8ff] bg-white/80 pl-12 pr-4 text-[16px] font-semibold text-[#172033] outline-none transition placeholder:text-[#98A2B3] focus:border-[#8b2cff] focus:ring-4 focus:ring-violet-100"
+                                : "h-9 w-full rounded-lg border border-[#d8ddea] bg-white pl-9 pr-3 text-[12px] font-medium text-[#172033] outline-none transition focus:border-[#7c3aed] focus:ring-2 focus:ring-violet-100"
+                            }
                         />
                     </div>
                 </label>
 
                 {/* Contraseña */}
                 <label className="block">
-                    <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.07em] text-[#667085]">
+                    <span className={isMobile
+                        ? "mb-2.5 block text-[15px] font-black text-[#08122f]"
+                        : "mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.07em] text-[#667085]"
+                    }>
                         Contraseña
                     </span>
                     <div className="relative">
-                        <div className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-[#98A2B3]">
+                        <div className={isMobile
+                            ? "pointer-events-none absolute inset-y-0 left-4 flex items-center text-[#98A2B3]"
+                            : "pointer-events-none absolute inset-y-0 left-3 flex items-center text-[#98A2B3]"
+                        }>
                             <LockIcon />
                         </div>
                         <input
@@ -138,19 +177,37 @@ function LoginCard({
                             autoComplete="current-password"
                             required
                             placeholder="Tu contraseña"
-                            className="h-9 w-full rounded-lg border border-[#d8ddea] bg-white pl-9 pr-9 text-[12px] font-medium text-[#172033] outline-none transition focus:border-[#7c3aed] focus:ring-2 focus:ring-violet-100"
+                            className={isMobile
+                                ? "h-14 w-full rounded-[14px] border border-[#d9b8ff] bg-white/80 pl-12 pr-12 text-[16px] font-semibold text-[#172033] outline-none transition placeholder:text-[#98A2B3] focus:border-[#8b2cff] focus:ring-4 focus:ring-violet-100"
+                                : "h-9 w-full rounded-lg border border-[#d8ddea] bg-white pl-9 pr-9 text-[12px] font-medium text-[#172033] outline-none transition focus:border-[#7c3aed] focus:ring-2 focus:ring-violet-100"
+                            }
                         />
                         <button
                             type="button"
                             onClick={() => setShowPass((v) => !v)}
                             tabIndex={-1}
                             aria-label={showPass ? "Ocultar contraseña" : "Mostrar contraseña"}
-                            className="absolute inset-y-0 right-2.5 flex items-center text-[#98A2B3] transition hover:text-[#7C3AED]"
+                            className={isMobile
+                                ? "absolute inset-y-0 right-4 flex items-center text-[#98A2B3] transition hover:text-[#7C3AED]"
+                                : "absolute inset-y-0 right-2.5 flex items-center text-[#98A2B3] transition hover:text-[#7C3AED]"
+                            }
                         >
                             {showPass ? <EyeOffIcon /> : <EyeIcon />}
                         </button>
                     </div>
                 </label>
+
+                {isMobile ? (
+                    <div className="flex items-center justify-between gap-3">
+                        <label className="inline-flex items-center gap-2 text-[13px] font-semibold text-[#66739a]">
+                            <input type="checkbox" defaultChecked className="h-4 w-4 rounded border-[#d9b8ff] accent-[#7c3aed]" />
+                            Recordarme
+                        </label>
+                        <button type="button" className="text-[13px] font-black text-[#7c3aed]">
+                            Olvidaste tu contraseña?
+                        </button>
+                    </div>
+                ) : null}
 
                 {/* Error */}
                 {error ? (
@@ -164,17 +221,26 @@ function LoginCard({
                 <button
                     type="submit"
                     disabled={saving || loading}
-                    className="group mt-1 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-[#6d28d9] bg-gradient-to-br from-[#7c3aed] to-[#4f46e5] text-[12px] font-semibold text-white shadow-[0_12px_28px_rgba(91,33,255,0.22)] transition hover:from-[#6d28d9] hover:to-[#4338ca] disabled:opacity-60"
+                    className={isMobile
+                        ? "group mt-1 inline-flex h-14 w-full items-center justify-center gap-3 rounded-[14px] border border-[#6d28d9] bg-gradient-to-br from-[#8b2cff] via-[#7c3aed] to-[#5b21ff] text-[20px] font-black text-white shadow-[0_18px_34px_rgba(91,33,255,0.25)] transition active:scale-[0.99] disabled:opacity-60"
+                        : "group mt-1 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-[#6d28d9] bg-gradient-to-br from-[#7c3aed] to-[#4f46e5] text-[12px] font-semibold text-white shadow-[0_12px_28px_rgba(91,33,255,0.22)] transition hover:from-[#6d28d9] hover:to-[#4338ca] disabled:opacity-60"
+                    }
                 >
                     {saving ? <><SpinnerIcon /> Entrando...</> : <>Entrar <ArrowRight /></>}
                 </button>
             </form>
 
             {/* Footer de la card */}
-            <p className="mt-3 flex items-center justify-center gap-1 text-[10px] font-semibold text-[#B0BAD0]">
+            <p className={isMobile
+                ? "mt-7 flex items-center justify-center gap-1 text-[12px] font-semibold text-[#B0BAD0]"
+                : "mt-3 flex items-center justify-center gap-1 text-[10px] font-semibold text-[#B0BAD0]"
+            }>
                 <LockTinyIcon /> Acceso seguro y privado
             </p>
-            <p className="mt-2 text-center text-[10px] font-semibold text-[#C8D0DC]">
+            <p className={isMobile
+                ? "mt-3 text-center text-[12px] font-semibold text-[#C8D0DC]"
+                : "mt-2 text-center text-[10px] font-semibold text-[#C8D0DC]"
+            }>
                 © 2025 TrackGo
             </p>
         </div>
