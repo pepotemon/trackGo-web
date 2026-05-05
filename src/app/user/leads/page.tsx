@@ -70,6 +70,24 @@ function formatAssignedAt(ts: number | null | undefined): string {
     return new Intl.DateTimeFormat("es", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(ts));
 }
 
+function dayKeyFromMs(value?: number | null): string {
+    if (!value) return "";
+    return new Date(value).toISOString().slice(0, 10);
+}
+
+function leadRangeKey(lead: MetaLeadDoc): string {
+    if (lead.status === "visited" || lead.status === "rejected") {
+        return dayKeyFromMs(lead.statusAt);
+    }
+    return typeof lead.assignedDayKey === "string" ? lead.assignedDayKey : dayKeyFromMs(lead.assignedAt);
+}
+
+function leadInRange(lead: MetaLeadDoc, startKey: string, endKey: string) {
+    const key = leadRangeKey(lead);
+    if (!key) return false;
+    return key >= startKey && key <= endKey;
+}
+
 function getNote(leadId: string): string {
     return localStorage.getItem(`lead_note_${leadId}`) ?? "";
 }
@@ -100,6 +118,7 @@ export default function UserLeadsPage() {
 
     const userId = firebaseUser?.uid ?? "";
     const userName = profile?.name?.split(" ")[0] ?? "Vendedor";
+    const activeWeek = useMemo(() => weekRange(), []);
 
     useEffect(() => {
         if (!userId) return;
@@ -117,10 +136,10 @@ export default function UserLeadsPage() {
 
     useEffect(() => {
         if (!userId) return;
-        const { startKey, endKey } = weekRange();
+        const { startKey, endKey } = activeWeek;
         const unsub = subscribeUserDailyEvents(userId, startKey, endKey, setEvents);
         return unsub;
-    }, [userId]);
+    }, [activeWeek, userId]);
 
     const stats = useMemo<UserLeadStats>(() => {
         const today = todayKey();
@@ -134,14 +153,14 @@ export default function UserLeadsPage() {
     }, [events]);
 
     const counts = useMemo(() => ({
-        pending: leads.filter((l) => !l.status || l.status === "pending").length,
-        visited: leads.filter((l) => l.status === "visited").length,
-        rejected: leads.filter((l) => l.status === "rejected").length,
-        all: leads.length,
-    }), [leads]);
+        pending: leads.filter((l) => (!l.status || l.status === "pending") && leadInRange(l, activeWeek.startKey, activeWeek.endKey)).length,
+        visited: leads.filter((l) => l.status === "visited" && leadInRange(l, activeWeek.startKey, activeWeek.endKey)).length,
+        rejected: leads.filter((l) => l.status === "rejected" && leadInRange(l, activeWeek.startKey, activeWeek.endKey)).length,
+        all: leads.filter((l) => leadInRange(l, activeWeek.startKey, activeWeek.endKey)).length,
+    }), [activeWeek, leads]);
 
     const visibleLeads = useMemo(() => {
-        let list = leads;
+        let list = leads.filter((lead) => leadInRange(lead, activeWeek.startKey, activeWeek.endKey));
         if (filter === "pending") list = list.filter((l) => !l.status || l.status === "pending");
         else if (filter === "visited") list = list.filter((l) => l.status === "visited");
         else if (filter === "rejected") list = list.filter((l) => l.status === "rejected");
@@ -157,7 +176,7 @@ export default function UserLeadsPage() {
             );
         }
         return list;
-    }, [leads, filter, search]);
+    }, [activeWeek, leads, filter, search]);
 
     // ── Actions ─────────────────────────────────────────────────────────
 
@@ -230,6 +249,27 @@ export default function UserLeadsPage() {
     function openMaps(lead: MetaLeadDoc) {
         const url = lead.location.mapsUrl || `https://maps.google.com/?q=${lead.location.lat},${lead.location.lng}`;
         window.open(url, "_blank");
+    }
+
+    async function copyLead(lead: MetaLeadDoc) {
+        const mapsUrl = lead.location.mapsUrl || (
+            lead.location.lat !== null && lead.location.lng !== null
+                ? `https://maps.google.com/?q=${lead.location.lat},${lead.location.lng}`
+                : ""
+        );
+        const text = [
+            lead.name ? `Nombre: ${lead.name}` : "",
+            lead.phone ? `Telefono: ${lead.phone}` : "",
+            lead.business ? `Negocio: ${lead.business}` : "",
+            lead.location.address ? `Direccion: ${lead.location.address}` : "",
+            mapsUrl ? `Maps: ${mapsUrl}` : "",
+        ].filter(Boolean).join("\n");
+
+        try {
+            await navigator.clipboard.writeText(text);
+        } catch {
+            window.prompt("Copia los datos del cliente", text);
+        }
     }
 
     const today = todayKey();
@@ -329,6 +369,7 @@ export default function UserLeadsPage() {
                                     onUndo={() => handleUndo(lead)}
                                     onWhatsApp={() => openWhatsApp(lead)}
                                     onMaps={() => openMaps(lead)}
+                                    onCopy={() => copyLead(lead)}
                                     onNote={() => openNoteAction(lead)}
                                 />
                             );
@@ -375,6 +416,7 @@ export default function UserLeadsPage() {
                                         onUndo={() => handleUndo(lead)}
                                         onWhatsApp={() => openWhatsApp(lead)}
                                         onMaps={() => openMaps(lead)}
+                                        onCopy={() => copyLead(lead)}
                                         onNote={() => { openNoteAction(lead); setSearchOpen(false); }}
                                     />
                                 ))}
@@ -557,6 +599,7 @@ function LeadCard({
     onUndo,
     onWhatsApp,
     onMaps,
+    onCopy,
     onNote,
 }: {
     lead: MetaLeadDoc;
@@ -568,6 +611,7 @@ function LeadCard({
     onUndo: () => void;
     onWhatsApp: () => void;
     onMaps: () => void;
+    onCopy: () => void;
     onNote?: () => void;
 }) {
     const isPending = !lead.status || lead.status === "pending";
@@ -641,6 +685,9 @@ function LeadCard({
                         </ActionBtn>
                         <ActionBtn onClick={onMaps} title="Maps" tone="blue">
                             <MapsIcon />
+                        </ActionBtn>
+                        <ActionBtn onClick={onCopy} title="Copiar" tone="violet">
+                            <CopyIcon />
                         </ActionBtn>
                         {onNote ? (
                             <ActionBtn onClick={onNote} title="Nota" tone="violet">
@@ -782,6 +829,9 @@ function WAIcon() {
 }
 function MapsIcon() {
     return <svg viewBox="0 0 24 24" className="h-4 w-4" {...ic}><path d="M9 18 3 21V6l6-3 6 3 6-3v15l-6 3-6-3Z" /><path d="M9 3v15M15 6v15" /></svg>;
+}
+function CopyIcon() {
+    return <svg viewBox="0 0 24 24" className="h-4 w-4" {...ic}><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>;
 }
 function CheckIcon() {
     return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M20 6 9 17l-5-5" /></svg>;

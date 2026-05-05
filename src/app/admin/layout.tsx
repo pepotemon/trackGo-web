@@ -149,7 +149,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             </aside>
 
             <div className="xl:pl-[228px]">
-                <PullToRefresh />
+                <PullToRefresh disabled={pathname.startsWith("/admin/leads/") && pathname !== "/admin/leads/assignments"} />
                 <MobileDrawer
                     open={mobileMenuOpen}
                     onClose={() => setMobileMenuOpen(false)}

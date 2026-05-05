@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useAutoAssignLogs, type AssignViewMode } from "@/features/leads/useAutoAssignLogs";
-import { listAllAutoAssignLogsForRange, listAssignedClientsByRange } from "@/data/autoAssignLogsRepo";
+import { listAssignedClientsByRange } from "@/data/autoAssignLogsRepo";
+import { useAuth } from "@/features/auth/AuthProvider";
 import type {
     AutoAssignLogDoc,
     AutoAssignLogFilters,
@@ -74,6 +75,7 @@ function leadGeo(log: AutoAssignLogDoc) {
 }
 
 export default function AutoAssignLogsPage() {
+    const { profile, isSuperAdmin } = useAuth();
     const [filterModalOpen, setFilterModalOpen] = useState(false);
     const [userBreakdownOpen, setUserBreakdownOpen] = useState(false);
     const [actionLog, setActionLog] = useState<AutoAssignLogDoc | null>(null);
@@ -96,6 +98,37 @@ export default function AutoAssignLogsPage() {
         loadMore,
     } = useAutoAssignLogs();
 
+    const scopedUserIds = useMemo(() => {
+        if (isSuperAdmin || !profile) return null;
+        return new Set(
+            users
+                .filter((user) => user.sharedWith?.some((entry) => entry.adminId === profile.id))
+                .map((user) => user.id)
+        );
+    }, [isSuperAdmin, profile, users]);
+
+    const scopedUsers = useMemo(() => {
+        if (!scopedUserIds) return users;
+        return users.filter((user) => scopedUserIds.has(user.id));
+    }, [scopedUserIds, users]);
+
+    const scopedLogs = useMemo(() => {
+        if (!scopedUserIds) return filteredLogs;
+        return filteredLogs.filter((log) => !!log.userId && scopedUserIds.has(log.userId));
+    }, [filteredLogs, scopedUserIds]);
+
+    const scopedStats = useMemo(() => {
+        const userIds = new Set(scopedLogs.map((log) => log.userId).filter(Boolean));
+        return {
+            total: scopedLogs.length,
+            users: userIds.size,
+            city: scopedLogs.filter((log) => log.matchType === "city").length,
+            hubCity: scopedLogs.filter((log) => log.matchType === "hub_city").length,
+            state: scopedLogs.filter((log) => log.matchType === "state").length,
+            country: scopedLogs.filter((log) => log.matchType === "country").length,
+        };
+    }, [scopedLogs]);
+
     const activeFiltersCount = useMemo(() => {
         let total = 0;
         if (filters.userId !== "all") total++;
@@ -104,8 +137,8 @@ export default function AutoAssignLogsPage() {
         return total;
     }, [filters]);
 
-    const manualCount = useMemo(() => filteredLogs.filter(isManual).length, [filteredLogs]);
-    const autoCount = filteredLogs.length - manualCount;
+    const manualCount = useMemo(() => scopedLogs.filter(isManual).length, [scopedLogs]);
+    const autoCount = scopedLogs.length - manualCount;
 
     function patchFilters(patch: Partial<AutoAssignLogFilters>) {
         setFilters((prev) => ({ ...prev, ...patch }));
@@ -116,13 +149,13 @@ export default function AutoAssignLogsPage() {
             {/* ── MOBILE ── */}
             <div className="xl:hidden">
                 <MobileAssignmentsView
-                    logs={filteredLogs}
-                    stats={stats}
+                    logs={scopedLogs}
+                    stats={scopedStats}
                     autoCount={autoCount}
                     manualCount={manualCount}
                     filters={filters}
                     viewMode={viewMode}
-                    users={users}
+                    users={scopedUsers}
                     loading={loading}
                     loadingMore={loadingMore}
                     hasMore={hasMore}
@@ -171,16 +204,16 @@ export default function AutoAssignLogsPage() {
                 ) : null}
 
                 <section className="mb-4 grid grid-cols-4 gap-4">
-                    <KpiCard label="Asignaciones" value={stats.total} caption="En el rango seleccionado" icon="assign" tone="green" />
+                    <KpiCard label="Asignaciones" value={scopedStats.total} caption="En el rango seleccionado" icon="assign" tone="green" />
                     <button
                         type="button"
                         onClick={() => setUserBreakdownOpen(true)}
                         className="block w-full cursor-pointer rounded-2xl text-left ring-2 ring-blue-100 transition hover:ring-blue-300 hover:scale-[1.01] hover:shadow-md active:scale-[0.99]"
                     >
-                        <KpiCard label="Usuarios" value={stats.users} caption="Ver detalle →" icon="users" tone="blue" />
+                        <KpiCard label="Usuarios" value={scopedStats.users} caption="Ver detalle →" icon="users" tone="blue" />
                     </button>
-                    <KpiCard label="Ciudad / Hub" value={stats.city + stats.hubCity} caption="Matches precisos" icon="map" tone="purple" />
-                    <KpiCard label="Estado / País" value={stats.state + stats.country} caption="Matches amplios" icon="filter" tone="orange" />
+                    <KpiCard label="Ciudad / Hub" value={scopedStats.city + scopedStats.hubCity} caption="Matches precisos" icon="map" tone="purple" />
+                    <KpiCard label="Estado / País" value={scopedStats.state + scopedStats.country} caption="Matches amplios" icon="filter" tone="orange" />
                 </section>
 
                 <Card className="overflow-hidden">
@@ -189,7 +222,7 @@ export default function AutoAssignLogsPage() {
                             <div>
                                 <h2 className="text-[14px] font-semibold text-[#171717]">Registros</h2>
                                 <p className="mt-0.5 text-[12px] font-medium text-[#9ca3af]">
-                                    {filteredLogs.length} asignaciones · {filters.startKey} → {filters.endKey}
+                                    {scopedLogs.length} asignaciones · {filters.startKey} → {filters.endKey}
                                 </p>
                             </div>
                             <Input
@@ -223,7 +256,7 @@ export default function AutoAssignLogsPage() {
                                     className={selectClassName("w-full")}
                                 >
                                     <option value="all">Todos los usuarios</option>
-                                    {users.map((user) => (
+                                    {scopedUsers.map((user) => (
                                         <option key={user.id} value={user.id}>
                                             {user.name || user.email || "Sin nombre"}
                                         </option>
@@ -247,11 +280,11 @@ export default function AutoAssignLogsPage() {
                         </div>
                     </div>
 
-                    <AssignmentsDesktopTable logs={filteredLogs} loading={loading} onQuickActions={setQuickLog} />
+                    <AssignmentsDesktopTable logs={scopedLogs} loading={loading} onQuickActions={setQuickLog} />
 
                     <div className="flex items-center justify-between gap-3 border-t border-[#f0f1f2] px-4 py-3">
                         <p className="text-[12px] font-medium text-[#9ca3af]">
-                            {filteredLogs.length} asignaciones cargadas
+                            {scopedLogs.length} asignaciones cargadas
                         </p>
                         {hasMore ? (
                             <Button onClick={loadMore} disabled={loadingMore}>
@@ -278,7 +311,7 @@ export default function AutoAssignLogsPage() {
                 onClose={() => setUserBreakdownOpen(false)}
                 startKey={filters.startKey}
                 endKey={filters.endKey}
-                users={users}
+                users={scopedUsers}
             />
         </div>
     );
@@ -946,8 +979,12 @@ function UserBreakdownModal({
         listAssignedClientsByRange(startKey, endKey)
             .then((items) => {
                 if (cancelled) return;
+                const allowedUserIds = new Set(users.map((user) => user.id));
+                const visibleItems = allowedUserIds.size > 0
+                    ? items.filter((item) => allowedUserIds.has(item.userId))
+                    : items;
                 const map = new Map<string, number>();
-                for (const item of items) {
+                for (const item of visibleItems) {
                     map.set(item.userId, (map.get(item.userId) ?? 0) + 1);
                 }
                 const rows: BreakdownRow[] = Array.from(map.entries()).map(([uid, count]) => {
@@ -959,7 +996,7 @@ function UserBreakdownModal({
                     };
                 }).sort((a, b) => b.count - a.count);
                 setBreakdownRows(rows);
-                setBreakdownTotal(items.length);
+                setBreakdownTotal(visibleItems.length);
                 setLoadingBreakdown(false);
             })
             .catch(() => { if (!cancelled) setLoadingBreakdown(false); });
@@ -1010,3 +1047,4 @@ function UserBreakdownModal({
         </Modal>
     );
 }
+

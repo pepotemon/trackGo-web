@@ -125,6 +125,7 @@ function MapPageInner() {
     const [waSent, setWaSent] = useState<Set<string>>(new Set());
     const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
     const [locating, setLocating] = useState(false);
+    const [locationSettled, setLocationSettled] = useState(false);
     const [mapReady, setMapReady] = useState(false);
 
     const [actionType, setActionType] = useState<"visit" | "reject" | null>(null);
@@ -172,14 +173,22 @@ function MapPageInner() {
     const clearSelectedLead = useCallback(() => setSelectedLead(null), []);
 
     function locate() {
-        if (!navigator.geolocation) return;
+        if (!navigator.geolocation) {
+            setLocationSettled(true);
+            return;
+        }
         setLocating(true);
+        setLocationSettled(false);
         navigator.geolocation.getCurrentPosition(
             (pos) => {
                 setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
                 setLocating(false);
+                setLocationSettled(true);
             },
-            () => { setLocating(false); },
+            () => {
+                setLocating(false);
+                setLocationSettled(true);
+            },
             { enableHighAccuracy: true, timeout: 8000 }
         );
     }
@@ -359,7 +368,7 @@ function MapPageInner() {
                     "circle-opacity": 0.95,
                 },
             });
-            if (leadsRef.current.length > 0) {
+            if (leadsRef.current.length > 0 && locationSettled) {
                 setMapReady(true);
             }
         });
@@ -448,10 +457,10 @@ function MapPageInner() {
     }, [filteredLeads]);
 
     useEffect(() => {
-        if (!mapRef.current || !mapLoadedRef.current || mapReady || filteredLeads.length === 0) return;
+        if (!mapRef.current || !mapLoadedRef.current || mapReady || filteredLeads.length === 0 || !locationSettled) return;
         fitMapBounds();
         setMapReady(true);
-    }, [filteredLeads.length, fitMapBounds, mapReady]);
+    }, [filteredLeads.length, fitMapBounds, locationSettled, mapReady]);
 
     const goToUserLocation = useCallback(() => {
         locate();

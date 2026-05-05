@@ -189,18 +189,19 @@ export default function LeadChatPage() {
 
     const canOpenThisLead = useMemo(() => {
         if (!lead || isSuperAdmin || !profile || profile.role !== "admin") return true;
+        if (users.length === 0) return true;
 
         const myUsers = users.filter((user) =>
             user.sharedWith?.some((entry) => entry.adminId === profile.id)
         );
         const myUserIds = new Set(myUsers.map((user) => user.id));
 
-        if (lead.assignedTo) return myUserIds.has(lead.assignedTo);
-
         const phoneCodes = new Set<string>();
         for (const user of myUsers) {
             for (const code of user.phoneCodes ?? []) phoneCodes.add(code);
         }
+
+        if (lead.assignedTo && myUserIds.has(lead.assignedTo)) return true;
 
         return phoneCodes.size > 0 && phoneMatchesCoverageCodes(lead.phone, phoneCodes);
     }, [isSuperAdmin, lead, profile, users]);
