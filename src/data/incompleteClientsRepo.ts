@@ -1,9 +1,12 @@
 import {
     collection,
     doc,
+    endAt,
     limit,
     onSnapshot,
+    orderBy,
     query,
+    startAt,
     updateDoc,
     where,
     type Unsubscribe,
@@ -33,6 +36,7 @@ export const BRAZIL_DDDS: Record<string, string> = {
 };
 
 const INTL_COUNTRY_CODES = ["507","502","503","504","505","506","509","593","591","595","598"];
+const INCOMPLETE_STATUSES = ["pending_review", "incomplete"] as const;
 
 const COUNTRY_NAMES: Record<string, string> = {
     "507": "Panamá", "502": "Guatemala", "503": "El Salvador", "504": "Honduras",
@@ -67,6 +71,71 @@ function matchesCoverage(lead: MetaLeadDoc, phoneCodes: string[]): boolean {
     return code !== null && phoneCodes.includes(code);
 }
 
+function phonePrefixesForCode(code: string) {
+    if (INTL_COUNTRY_CODES.includes(code)) {
+        return [code, `+${code}`, `55${code}`];
+    }
+    return [code, `55${code}`, `+55${code}`];
+}
+
+function subscribeCoverageByPhonePrefixes(
+    phoneCodes: string[],
+    statuses: readonly string[],
+    callback: (leads: MetaLeadDoc[]) => void,
+    extraFilter: (lead: MetaLeadDoc) => boolean,
+    sortBy: (lead: MetaLeadDoc) => number
+): Unsubscribe {
+    const snapshots = new Map<string, MetaLeadDoc[]>();
+    const unsubs: Unsubscribe[] = [];
+    const prefixes = [...new Set(phoneCodes.flatMap(phonePrefixesForCode))];
+
+    function emit() {
+        const seen = new Map<string, MetaLeadDoc>();
+        for (const leads of snapshots.values()) {
+            for (const lead of leads) {
+                if (!seen.has(lead.id)) seen.set(lead.id, lead);
+            }
+        }
+
+        callback(
+            [...seen.values()]
+                .filter((lead) => statuses.includes(lead.verificationStatus))
+                .filter((lead) => matchesCoverage(lead, phoneCodes))
+                .filter(extraFilter)
+                .sort((a, b) => sortBy(b) - sortBy(a))
+        );
+    }
+
+    for (const prefix of prefixes) {
+        const q = query(
+            collection(db, "clients"),
+            orderBy("phone"),
+            startAt(prefix),
+            endAt(`${prefix}\uf8ff`),
+            limit(300)
+        );
+
+        const unsub = onSnapshot(
+            q,
+            (snap) => {
+                snapshots.set(
+                    prefix,
+                    snap.docs.map((d) => normalizeLeadDoc(d.id, d.data() as Record<string, unknown>))
+                );
+                emit();
+            },
+            (err) => {
+                console.error("[subscribeCoverageByPhonePrefixes]", prefix, err.message);
+                snapshots.set(prefix, []);
+                emit();
+            }
+        );
+        unsubs.push(unsub);
+    }
+
+    return () => unsubs.forEach((unsub) => unsub());
+}
+
 /**
  * Incomplete clients: pending_review, not assigned to anyone, business field filled.
  * These are clients who sent their business type but didn't complete the flow.
@@ -80,9 +149,19 @@ export function subscribeIncompleteClients(
         return () => {};
     }
 
+    if (phoneCodes.some((code) => INTL_COUNTRY_CODES.includes(code))) {
+        return subscribeCoverageByPhonePrefixes(
+            phoneCodes,
+            INCOMPLETE_STATUSES,
+            callback,
+            (lead) => !!lead.business && !lead.assignedTo,
+            (lead) => lead.lastInboundMessageAt ?? 0
+        );
+    }
+
     const q = query(
         collection(db, "clients"),
-        where("verificationStatus", "in", ["pending_review", "incomplete"]),
+        where("verificationStatus", "in", INCOMPLETE_STATUSES),
         limit(300)
     );
 
@@ -117,6 +196,16 @@ export function subscribeNotSuitableClients(
     if (!phoneCodes.length) {
         callback([]);
         return () => {};
+    }
+
+    if (phoneCodes.some((code) => INTL_COUNTRY_CODES.includes(code))) {
+        return subscribeCoverageByPhonePrefixes(
+            phoneCodes,
+            ["not_suitable"],
+            callback,
+            () => true,
+            (lead) => lead.verificationStatusChangedAt ?? lead.lastInboundMessageAt ?? 0
+        );
     }
 
     const q = query(
