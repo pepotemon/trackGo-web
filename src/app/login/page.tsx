@@ -12,28 +12,33 @@ export default function LoginPage() {
     const [email, setEmail]       = useState("");
     const [password, setPassword] = useState("");
     const [saving, setSaving]     = useState(false);
+    const [verifying, setVerifying] = useState(false);
     const [error, setError]       = useState("");
 
     useEffect(() => {
         if (loading) return;
         if (firebaseUser && isAdmin) router.replace("/admin/accounting");
         else if (firebaseUser && isUser) router.replace("/user/leads");
+        else if (firebaseUser) router.replace("/no-access");
     }, [loading, firebaseUser, isAdmin, isUser, router]);
 
     async function onSubmit(e: FormEvent) {
         e.preventDefault();
         setError("");
         setSaving(true);
+        setVerifying(false);
         try {
             await login(email, password);
+            setVerifying(true);
         } catch {
+            setVerifying(false);
             setError("Email o contraseña incorrectos.");
         } finally {
             setSaving(false);
         }
     }
 
-    const cardProps = { email, password, saving, loading, error, onEmail: setEmail, onPassword: setPassword, onSubmit };
+    const cardProps = { email, password, saving, loading, verifying, error, onEmail: setEmail, onPassword: setPassword, onSubmit };
 
     return (
         <main
@@ -93,11 +98,11 @@ export default function LoginPage() {
 // ── Login card ─────────────────────────────────────────────────────────────────
 
 function LoginCard({
-    email, password, saving, loading, error,
+    email, password, saving, loading, verifying, error,
     onEmail, onPassword, onSubmit,
     variant = "desktop",
 }: {
-    email: string; password: string; saving: boolean; loading: boolean; error: string;
+    email: string; password: string; saving: boolean; loading: boolean; verifying: boolean; error: string;
     onEmail: (v: string) => void; onPassword: (v: string) => void;
     onSubmit: (e: React.FormEvent) => void;
     variant?: "desktop" | "mobile";
@@ -220,14 +225,20 @@ function LoginCard({
                 {/* Botón */}
                 <button
                     type="submit"
-                    disabled={saving || loading}
+                    disabled={saving || loading || verifying}
                     className={isMobile
                         ? "group mt-1 inline-flex h-11 w-full items-center justify-center gap-2 rounded-[12px] border border-[#6d28d9] bg-gradient-to-br from-[#8b2cff] via-[#7c3aed] to-[#5b21ff] text-[15px] font-black text-white shadow-[0_14px_26px_rgba(91,33,255,0.22)] transition active:scale-[0.99] disabled:opacity-60"
                         : "group mt-1 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-[#6d28d9] bg-gradient-to-br from-[#7c3aed] to-[#4f46e5] text-[12px] font-semibold text-white shadow-[0_12px_28px_rgba(91,33,255,0.22)] transition hover:from-[#6d28d9] hover:to-[#4338ca] disabled:opacity-60"
                     }
                 >
-                    {saving ? <><SpinnerIcon /> Entrando...</> : <>Entrar <ArrowRight /></>}
+                    {saving ? <><SpinnerIcon /> Entrando...</> : verifying ? <><SpinnerIcon /> Verificando...</> : <>Entrar <ArrowRight /></>}
                 </button>
+
+                {verifying ? (
+                    <p className="text-center text-[11px] font-semibold text-[#7b8499]">
+                        Validando sesion y permisos...
+                    </p>
+                ) : null}
             </form>
 
             {/* Footer de la card */}

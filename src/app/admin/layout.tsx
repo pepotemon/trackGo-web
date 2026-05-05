@@ -7,6 +7,7 @@ import { useAuth } from "@/features/auth/AuthProvider";
 import { usePermissions } from "@/features/auth/usePermissions";
 import { TrackGoLogo } from "@/components/brand/TrackGoLogo";
 import { PullToRefresh } from "@/components/mobile/PullToRefresh";
+import { ResumeRefresh } from "@/components/mobile/ResumeRefresh";
 import type { AdminPermissions } from "@/types/users";
 
 type NavIconName =
@@ -149,6 +150,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             </aside>
 
             <div className="xl:pl-[228px]">
+                <ResumeRefresh />
                 <PullToRefresh disabled={pathname.startsWith("/admin/leads/") && pathname !== "/admin/leads/assignments"} />
                 <MobileDrawer
                     open={mobileMenuOpen}

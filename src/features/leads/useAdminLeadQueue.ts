@@ -33,10 +33,10 @@ function defaultFilters(): LeadFilters {
     };
 }
 
-const DEFAULT_PAGE_SIZE = 150;
-const FILTERED_PAGE_SIZE = 150;
+const DEFAULT_PAGE_SIZE = 43;
+const FILTERED_PAGE_SIZE = 43;
 const MIN_FILTERED_RESULTS = 50;
-const MAX_AUTO_FETCH_PAGES = 20;
+const MAX_AUTO_FETCH_PAGES = 1;
 
 const CITY_FILTER_FIELDS = new Set<LeadQueueCityField>([
     "geoAdminCityNormalized",

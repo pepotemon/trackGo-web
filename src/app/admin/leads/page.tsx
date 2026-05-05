@@ -125,6 +125,10 @@ function whatsappUrl(phone?: string | null) {
     )}`;
 }
 
+function loadedCount(value: number, hasMore: boolean) {
+    return hasMore ? `${value}+` : value;
+}
+
 export default function AdminLeadsPage() {
     const canProspectos = useCan("prospectos");
     const canAssign = useCan("leadsAssign");
@@ -347,10 +351,10 @@ export default function AdminLeadsPage() {
                 <LeadQuickAccessCards />
 
                 <section className="mb-4 grid grid-cols-4 gap-4">
-                    <KpiCard label="Cola activa" value={stats.total} caption="Sin asignar" icon="users" tone="blue" />
-                    <KpiCard label="Por revisar" value={stats.pendingReview} caption="Listos para validar" icon="lead" tone="purple" />
-                    <KpiCard label="Incompletos" value={stats.incomplete} caption="Falta negocio o maps" icon="alert" tone="orange" />
-                    <KpiCard label="No aptos" value={stats.notSuitable} caption="Descartados operativos" icon="close" tone="red" />
+                    <KpiCard label="Cola activa" value={loadedCount(stats.total, hasMore)} caption="Sin asignar" icon="users" tone="blue" />
+                    <KpiCard label="Por revisar" value={loadedCount(stats.pendingReview, hasMore)} caption="Listos para validar" icon="lead" tone="purple" />
+                    <KpiCard label="Incompletos" value={loadedCount(stats.incomplete, hasMore)} caption="Falta negocio o maps" icon="alert" tone="orange" />
+                    <KpiCard label="No aptos" value={loadedCount(stats.notSuitable, hasMore)} caption="Descartados operativos" icon="close" tone="red" />
                 </section>
 
                 <Card className="overflow-hidden">
@@ -361,7 +365,7 @@ export default function AdminLeadsPage() {
                                     Cola de revisión
                                 </h2>
                                 <p className="mt-0.5 text-[12px] font-medium text-[#9ca3af]">
-                                    {myFilteredLeads.length} visibles de {stats.total}
+                                    {myFilteredLeads.length} visibles de {loadedCount(stats.total, hasMore)}
                                 </p>
                             </div>
 
@@ -561,7 +565,7 @@ function MobileLeadQueue({
                         </h1>
                         <p className="mt-0.5 truncate text-[11px] font-semibold text-[#66739A]">
                             <span className="font-black text-[#7C3AED]">{leads.length}</span> visibles
-                            {" · "}total <span className="font-black text-[#101936]">{stats.total}</span>
+                            {" · "}total <span className="font-black text-[#101936]">{loadedCount(stats.total, hasMore)}</span>
                         </p>
                     </div>
 
@@ -584,7 +588,7 @@ function MobileLeadQueue({
                 <div className="mb-3 grid grid-cols-4 gap-2">
                     <LeadStatCard
                         label="Revisar"
-                        value={stats.pendingReview}
+                        value={loadedCount(stats.pendingReview, hasMore)}
                         icon="search"
                         color="text-blue-500"
                         active={filters.status === "pending_review"}
@@ -592,7 +596,7 @@ function MobileLeadQueue({
                     />
                     <LeadStatCard
                         label="Incompl."
-                        value={stats.incomplete}
+                        value={loadedCount(stats.incomplete, hasMore)}
                         icon="edit"
                         color="text-amber-500"
                         active={filters.status === "incomplete"}
@@ -600,7 +604,7 @@ function MobileLeadQueue({
                     />
                     <LeadStatCard
                         label="No aptos"
-                        value={stats.notSuitable}
+                        value={loadedCount(stats.notSuitable, hasMore)}
                         icon="pause"
                         color="text-red-500"
                         active={filters.status === "not_suitable"}
@@ -608,7 +612,7 @@ function MobileLeadQueue({
                     />
                     <LeadStatCard
                         label="Todos"
-                        value={stats.total}
+                        value={loadedCount(stats.total, hasMore)}
                         icon="filter"
                         color="text-violet-500"
                         active={filters.status === "all"}
@@ -725,7 +729,7 @@ function LeadStatCard({
     onClick,
 }: {
     label: string;
-    value: number;
+    value: string | number;
     icon: "search" | "clock" | "ban" | "filter" | "edit" | "pause";
     color: string;
     active: boolean;
