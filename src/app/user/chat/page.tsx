@@ -73,22 +73,23 @@ function formatMessageTime(ts: number | null | undefined): string {
     return new Intl.DateTimeFormat("es", { hour: "2-digit", minute: "2-digit" }).format(new Date(ts));
 }
 
-function detectedRows(lead: MetaLeadDoc) {
+function reviewClientName(lead: MetaLeadDoc) {
+    return lead.name || "Cliente sin nombre";
+}
+
+function reviewSummaryRows(lead: MetaLeadDoc) {
     return [
-        { label: "Nombre", value: lead.name || "" },
         { label: "Negocio", value: lead.business || "" },
         { label: "Telefono", value: lead.phone || "" },
-        { label: "Ciudad", value: lead.location?.displayLabel || lead.location?.adminCityLabel || lead.location?.cityLabel || "" },
         { label: "Direccion", value: lead.location?.address || "" },
-        { label: "Maps", value: lead.location?.mapsUrl || (lead.location?.lat ? "Ubicacion detectada" : "") },
     ].filter((row) => row.value);
 }
 
 function missingFields(lead: MetaLeadDoc) {
     const missing: string[] = [];
-    if (!lead.name) missing.push("nombre");
-    if (!lead.business) missing.push("tipo de negocio");
-    if (!lead.location?.mapsUrl && !lead.location?.lat) missing.push("ubicacion en Maps");
+    if (!lead.name) missing.push("Falta nombre");
+    if (!lead.business) missing.push("Falta negocio");
+    if (!lead.location?.mapsUrl && !lead.location?.lat) missing.push("Falta ubicacion Maps");
     return missing;
 }
 
@@ -474,33 +475,23 @@ export default function UserIncompleteClientsPage() {
                     <div className="flex min-h-0 flex-1 flex-col">
                         <div className="mb-2 flex items-start justify-between gap-3">
                             <div className="min-w-0">
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex flex-wrap items-center gap-1.5">
                                     <span className="inline-flex items-center rounded-full bg-[#f3f0ff] px-2 py-0.5 text-[9px] font-black text-[#7C3AED]">REVISION</span>
-                                    <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-black text-amber-700">Solo lectura</span>
+                                    {missingFields(actionLead).map((field) => (
+                                        <span key={field} className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-black text-amber-700">{field}</span>
+                                    ))}
                                 </div>
-                                <p className="mt-1.5 truncate text-[15px] font-black text-[#101936]">{displayName(actionLead)}</p>
-                                <p className="mt-0.5 text-[11px] font-semibold text-[#66739A]">{actionLead.phone}</p>
+                                <p className="mt-1.5 truncate text-[15px] font-black text-[#101936]">{reviewClientName(actionLead)}</p>
                             </div>
                         </div>
 
                         <div className="mb-2 flex gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                            {detectedRows(actionLead).map((row) => (
+                            {reviewSummaryRows(actionLead).map((row) => (
                                 <div key={row.label} className="min-w-[118px] max-w-[160px] shrink-0 rounded-[11px] border border-[#E8E7FB] bg-[#f8f7ff] px-2.5 py-1.5">
                                     <p className="text-[8px] font-black uppercase tracking-[0.06em] text-[#98A2B3]">{row.label}</p>
                                     <p className="mt-0.5 truncate text-[11px] font-black text-[#101936]">{row.value}</p>
                                 </div>
                             ))}
-                        </div>
-
-                        <div className="mb-2 rounded-[12px] border border-amber-100 bg-amber-50 px-2.5 py-2">
-                            <div className="flex flex-wrap items-center gap-1.5">
-                                <span className="text-[9px] font-black uppercase tracking-[0.06em] text-amber-700">Falta</span>
-                                {missingFields(actionLead).length ? missingFields(actionLead).map((field) => (
-                                    <span key={field} className="rounded-full bg-white px-2 py-0.5 text-[9px] font-black text-amber-700">{field}</span>
-                                )) : (
-                                    <span className="rounded-full bg-white px-2 py-0.5 text-[9px] font-black text-emerald-700">Datos principales detectados</span>
-                                )}
-                            </div>
                         </div>
 
                         <div className="min-h-[260px] flex-1 overflow-y-auto overscroll-contain rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 py-3">
