@@ -12,7 +12,9 @@ import { assignLeadToUser } from "@/data/leadsRepo";
 import { subscribeLeadClient, subscribeLeadMessages } from "@/data/leadChatRepo";
 import { listAdminUsers } from "@/data/usersRepo";
 import { LeadEditModal } from "@/features/leads/LeadEditModal";
+import { useCan } from "@/features/auth/usePermissions";
 import { auth } from "@/lib/firebase";
+import { buildWhatsAppUrl } from "@/lib/whatsapp";
 import { money } from "@/lib/date";
 import type { DailyEventDoc } from "@/types/accounting";
 import type { LeadMessageDoc, MetaLeadDoc } from "@/types/leads";
@@ -89,6 +91,11 @@ export default function ClientDetailPage() {
     const params = useParams<{ id: string }>();
     const clientId = String(params.id ?? "").trim();
     const router = useRouter();
+    const canActivity = useCan("actividad");
+    const canChat = useCan("chatView") || useCan("activityChat");
+    const canEdit = useCan("leadsEdit") || useCan("activityEdit");
+    const canMaps = useCan("activityMaps");
+    const canWhatsapp = useCan("leadsWhatsapp");
 
     const [client, setClient] = useState<MetaLeadDoc | null>(null);
     const [messages, setMessages] = useState<LeadMessageDoc[]>([]);
@@ -164,6 +171,7 @@ export default function ClientDetailPage() {
     const rejectedReasonText = rawText(client, "rejectedReasonText");
 
     async function changeStatus(nextStatus: "pending" | "visited") {
+        if (!canEdit) return;
         if (!client) return;
 
         const actorId = auth.currentUser?.uid ?? "";
@@ -196,6 +204,7 @@ export default function ClientDetailPage() {
     }
 
     async function submitRejected() {
+        if (!canEdit) return;
         if (!client) return;
 
         if (rejectReason === "otro" && !rejectText.trim()) {
@@ -236,6 +245,7 @@ export default function ClientDetailPage() {
     }
 
     async function assignFromEdit(lead: MetaLeadDoc, userId: string) {
+        if (!canEdit) return;
         await assignLeadToUser(lead.id, userId);
     }
 
@@ -422,38 +432,41 @@ export default function ClientDetailPage() {
                             </div>
 
                             {/* STATUS ACTIONS */}
-                            <div className="mb-4 grid grid-cols-3 gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => { setQuickActionsOpen(false); setRejectOpen(true); }}
-                                    disabled={!client || savingStatus || status === "rejected"}
-                                    className="flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-[16px] border border-red-200 bg-red-50 text-[11px] font-black text-red-600 shadow-sm transition active:bg-red-100 disabled:opacity-40"
-                                >
-                                    <AppIcon name="close" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-red-500 ring-0" />
-                                    Rechazar
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => { setQuickActionsOpen(false); setConfirmStatus("pending"); }}
-                                    disabled={!client || savingStatus || status === "pending"}
-                                    className="flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-[16px] border border-amber-200 bg-amber-50 text-[11px] font-black text-amber-700 shadow-sm transition active:bg-amber-100 disabled:opacity-40"
-                                >
-                                    <AppIcon name="refresh" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-amber-600 ring-0" />
-                                    Revertir
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => { setQuickActionsOpen(false); setConfirmStatus("visited"); }}
-                                    disabled={!client || savingStatus || status === "visited"}
-                                    className="flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-[16px] border border-emerald-200 bg-emerald-50 text-[11px] font-black text-emerald-700 shadow-sm transition active:bg-emerald-100 disabled:opacity-40"
-                                >
-                                    <AppIcon name="check" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-emerald-600 ring-0" />
-                                    Visitado
-                                </button>
-                            </div>
+                            {canEdit ? (
+                                <div className="mb-4 grid grid-cols-3 gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => { setQuickActionsOpen(false); setRejectOpen(true); }}
+                                        disabled={!client || savingStatus || status === "rejected"}
+                                        className="flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-[16px] border border-red-200 bg-red-50 text-[11px] font-black text-red-600 shadow-sm transition active:bg-red-100 disabled:opacity-40"
+                                    >
+                                        <AppIcon name="close" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-red-500 ring-0" />
+                                        Rechazar
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setQuickActionsOpen(false); setConfirmStatus("pending"); }}
+                                        disabled={!client || savingStatus || status === "pending"}
+                                        className="flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-[16px] border border-amber-200 bg-amber-50 text-[11px] font-black text-amber-700 shadow-sm transition active:bg-amber-100 disabled:opacity-40"
+                                    >
+                                        <AppIcon name="refresh" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-amber-600 ring-0" />
+                                        Revertir
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setQuickActionsOpen(false); setConfirmStatus("visited"); }}
+                                        disabled={!client || savingStatus || status === "visited"}
+                                        className="flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-[16px] border border-emerald-200 bg-emerald-50 text-[11px] font-black text-emerald-700 shadow-sm transition active:bg-emerald-100 disabled:opacity-40"
+                                    >
+                                        <AppIcon name="check" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-emerald-600 ring-0" />
+                                        Visitado
+                                    </button>
+                                </div>
+                            ) : null}
 
                             {/* LINK ACTIONS */}
                             <div className="grid grid-cols-4 gap-3">
+                                {canChat ? (
                                 <Link
                                     href={`/admin/leads/${clientId}`}
                                     className="flex flex-col items-center gap-2 rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] py-4 transition active:bg-[#f3f0ff]"
@@ -462,8 +475,9 @@ export default function ClientDetailPage() {
                                     <AppIcon name="chat" tone="purple" size="sm" className="h-6 w-6 bg-transparent text-[#7C3AED] ring-0" />
                                     <span className="text-[10px] font-black text-[#66739A]">Chat</span>
                                 </Link>
+                                ) : null}
 
-                                {client?.location?.mapsUrl ? (
+                                {client?.location?.mapsUrl && canMaps ? (
                                     <Link
                                         href={client.location.mapsUrl}
                                         target="_blank"
@@ -476,9 +490,9 @@ export default function ClientDetailPage() {
                                     </Link>
                                 ) : null}
 
-                                {client?.phone ? (
+                                {client?.phone && canWhatsapp ? (
                                     <Link
-                                        href={`https://wa.me/${client.phone.replace(/\D/g, "")}`}
+                                        href={buildWhatsAppUrl(client.phone)}
                                         target="_blank"
                                         rel="noreferrer"
                                         className="flex flex-col items-center gap-2 rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] py-4 transition active:bg-[#f3f0ff]"
@@ -489,14 +503,16 @@ export default function ClientDetailPage() {
                                     </Link>
                                 ) : null}
 
-                                <button
-                                    type="button"
-                                    className="flex flex-col items-center gap-2 rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] py-4 transition active:bg-[#f3f0ff]"
-                                    onClick={() => { setQuickActionsOpen(false); setEditOpen(true); }}
-                                >
-                                    <AppIcon name="edit" tone="purple" size="sm" className="h-6 w-6 bg-transparent text-[#7C3AED] ring-0" />
-                                    <span className="text-[10px] font-black text-[#66739A]">Editar</span>
-                                </button>
+                                {canEdit ? (
+                                    <button
+                                        type="button"
+                                        className="flex flex-col items-center gap-2 rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] py-4 transition active:bg-[#f3f0ff]"
+                                        onClick={() => { setQuickActionsOpen(false); setEditOpen(true); }}
+                                    >
+                                        <AppIcon name="edit" tone="purple" size="sm" className="h-6 w-6 bg-transparent text-[#7C3AED] ring-0" />
+                                        <span className="text-[10px] font-black text-[#66739A]">Editar</span>
+                                    </button>
+                                ) : null}
                             </div>
                         </div>
                     </div>
@@ -511,37 +527,41 @@ export default function ClientDetailPage() {
                     icon={<AppIcon name="users" tone="blue" size="sm" className="bg-transparent text-white ring-0" />}
                     actions={
                         <>
-                            <QuickLink href="/admin/activity" icon="activity" label="Actividad" />
-                            <QuickLink href={`/admin/leads/${clientId}`} icon="chat" label="Chat" />
-                            {client?.location?.mapsUrl ? (
+                            {canActivity ? <QuickLink href="/admin/activity" icon="activity" label="Actividad" /> : null}
+                            {canChat ? <QuickLink href={`/admin/leads/${clientId}`} icon="chat" label="Chat" /> : null}
+                            {client?.location?.mapsUrl && canMaps ? (
                                 <QuickLink href={client.location.mapsUrl} icon="map" label="Maps" external />
                             ) : null}
-                            <IconButton
-                                icon="edit"
-                                label="Editar lead"
-                                onClick={() => setEditOpen(true)}
-                                disabled={!client}
-                            />
-                            <IconButton
-                                icon="pause"
-                                label="Volver a pendiente"
-                                onClick={() => setConfirmStatus("pending")}
-                                disabled={!client || savingStatus || status === "pending"}
-                            />
-                            <IconButton
-                                icon="close"
-                                label="Rechazar"
-                                onClick={() => setRejectOpen(true)}
-                                disabled={!client || savingStatus || status === "rejected"}
-                                variant="danger"
-                            />
-                            <IconButton
-                                icon="check"
-                                label="Marcar visitado"
-                                onClick={() => setConfirmStatus("visited")}
-                                disabled={!client || savingStatus || status === "visited"}
-                                variant="primary"
-                            />
+                            {canEdit ? (
+                                <>
+                                    <IconButton
+                                        icon="edit"
+                                        label="Editar lead"
+                                        onClick={() => setEditOpen(true)}
+                                        disabled={!client}
+                                    />
+                                    <IconButton
+                                        icon="pause"
+                                        label="Volver a pendiente"
+                                        onClick={() => setConfirmStatus("pending")}
+                                        disabled={!client || savingStatus || status === "pending"}
+                                    />
+                                    <IconButton
+                                        icon="close"
+                                        label="Rechazar"
+                                        onClick={() => setRejectOpen(true)}
+                                        disabled={!client || savingStatus || status === "rejected"}
+                                        variant="danger"
+                                    />
+                                    <IconButton
+                                        icon="check"
+                                        label="Marcar visitado"
+                                        onClick={() => setConfirmStatus("visited")}
+                                        disabled={!client || savingStatus || status === "visited"}
+                                        variant="primary"
+                                    />
+                                </>
+                            ) : null}
                         </>
                     }
                 />
@@ -604,16 +624,18 @@ export default function ClientDetailPage() {
                                         </div>
 
                                         <div className="grid grid-cols-2 gap-2 pt-1">
-                                            <SmallAction href={`/admin/leads/${clientId}`} icon="chat" label="Chat" />
-                                            <button
-                                                type="button"
-                                                onClick={() => setEditOpen(true)}
-                                                className="inline-flex h-10 items-center justify-center rounded-xl border border-[#e8e7fb] bg-[#fbfaff] text-[#7c3aed] transition hover:bg-[#f5f3ff]"
-                                                aria-label="Editar lead"
-                                                title="Editar lead"
-                                            >
-                                                <AppIcon name="edit" tone="purple" size="sm" plain />
-                                            </button>
+                                            {canChat ? <SmallAction href={`/admin/leads/${clientId}`} icon="chat" label="Chat" /> : null}
+                                            {canEdit ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setEditOpen(true)}
+                                                    className="inline-flex h-10 items-center justify-center rounded-xl border border-[#e8e7fb] bg-[#fbfaff] text-[#7c3aed] transition hover:bg-[#f5f3ff]"
+                                                    aria-label="Editar lead"
+                                                    title="Editar lead"
+                                                >
+                                                    <AppIcon name="edit" tone="purple" size="sm" plain />
+                                                </button>
+                                            ) : null}
                                         </div>
                                     </div>
                                 )}
@@ -707,7 +729,7 @@ export default function ClientDetailPage() {
 
             {/* SHARED MODALS */}
             <Modal
-                open={rejectOpen}
+                open={rejectOpen && canEdit}
                 onClose={() => setRejectOpen(false)}
                 title="Rechazar cliente"
                 subtitle={displayName(client)}
@@ -757,7 +779,7 @@ export default function ClientDetailPage() {
             </Modal>
 
             <Modal
-                open={!!confirmStatus}
+                open={!!confirmStatus && canEdit}
                 onClose={() => setConfirmStatus(null)}
                 title={
                     confirmStatus === "visited"
@@ -795,7 +817,7 @@ export default function ClientDetailPage() {
             </Modal>
 
             <LeadEditModal
-                open={editOpen}
+                open={editOpen && canEdit}
                 lead={client}
                 onClose={() => setEditOpen(false)}
                 onSaved={refreshEvents}

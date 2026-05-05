@@ -1,9 +1,12 @@
 {
   "name": "TrackGo",
   "short_name": "TrackGo",
-  "description": "Panel administrativo TrackGo",
-  "start_url": "/",
+  "description": "TrackGo",
+  "id": "/",
+  "start_url": "/?source=pwa",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "fullscreen"],
   "background_color": "#f4f0ff",
   "theme_color": "#7c3aed",
   "orientation": "portrait-primary",
@@ -19,6 +22,18 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/trackgo-icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
     }
   ]
 }

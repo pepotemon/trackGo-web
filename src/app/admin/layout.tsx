@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { usePermissions } from "@/features/auth/usePermissions";
 import { TrackGoLogo } from "@/components/brand/TrackGoLogo";
+import type { AdminPermissions } from "@/types/users";
 
 type NavIconName =
     | "activity"
@@ -74,6 +75,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         if (item.href === "/admin/settings/users") return permissions.usersView;
         return true;
     });
+    const routeAllowed = isAdminRouteAllowed(pathname, permissions);
 
     async function handleLogout() {
         await logout();
@@ -108,6 +110,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
     if (!isAdmin) {
         return <AdminAccessState title="Sin acceso" body="Tu usuario no tiene permisos de administrador activo." />;
+    }
+
+    if (!routeAllowed) {
+        return <AdminAccessState title="Sin permiso" body="Tu usuario no tiene permiso para abrir esta seccion." />;
     }
 
     return (
@@ -379,6 +385,18 @@ function MobileNavSection({
 function isDetailPage(pathname: string) {
     if (pathname.startsWith("/admin/leads/") && pathname !== "/admin/leads/assignments") return true;
     if (pathname.startsWith("/admin/clients/")) return true;
+    return false;
+}
+
+function isAdminRouteAllowed(pathname: string, permissions: AdminPermissions) {
+    if (pathname === "/admin") return true;
+    if (pathname.startsWith("/admin/settings/users")) return permissions.usersView;
+    if (pathname.startsWith("/admin/accounting")) return permissions.accountingView;
+    if (pathname.startsWith("/admin/activity")) return permissions.actividad;
+    if (pathname.startsWith("/admin/leads/assignments")) return permissions.assignmentsView;
+    if (pathname.startsWith("/admin/leads/")) return permissions.chatView || permissions.leadsEdit || permissions.activityChat || permissions.activityEdit;
+    if (pathname.startsWith("/admin/leads")) return permissions.prospectos;
+    if (pathname.startsWith("/admin/clients/")) return permissions.activityClientView || permissions.chatView || permissions.leadsEdit;
     return false;
 }
 

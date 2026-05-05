@@ -8,7 +8,7 @@ import {
     signOut,
     type User,
 } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, getDocFromCache, type DocumentSnapshot } from "firebase/firestore";
 import {
     createContext,
     useContext,
@@ -19,6 +19,78 @@ import {
 } from "react";
 import { auth, db } from "@/lib/firebase";
 import type { AdminPermissions, UserPermissions } from "@/types/users";
+
+const COUNTRY_PHONE_CODES: Record<string, string> = {
+    panama: "507",
+    guatemala: "502",
+    el_salvador: "503",
+    honduras: "504",
+    nicaragua: "505",
+    costa_rica: "506",
+    republica_dominicana: "509",
+    ecuador: "593",
+    bolivia: "591",
+    paraguay: "595",
+    uruguay: "598",
+};
+
+function normalizeCountryKey(value: unknown) {
+    return String(value ?? "")
+        .trim()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[\s\-/]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+}
+
+function resolvePhoneCodes(data: Record<string, unknown>) {
+    const codes = new Set(
+        (Array.isArray(data.phoneCodes) ? data.phoneCodes : [])
+            .map((code) => String(code ?? "").replace(/\D+/g, ""))
+            .filter(Boolean)
+    );
+
+    const coverage = Array.isArray(data.geoCoverage) ? data.geoCoverage : [];
+    for (const raw of coverage) {
+        const item = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+        const country = normalizeCountryKey(item.countryNormalized || item.countryLabel);
+        const code = COUNTRY_PHONE_CODES[country];
+        if (code) codes.add(code);
+    }
+
+    return Array.from(codes);
+}
+
+function profileFromSnapshot(id: string, data: Record<string, unknown>, authEmail?: string | null): AppUser {
+    return {
+        id,
+        name: String(data.name ?? ""),
+        email: String(data.email ?? authEmail ?? ""),
+        role: data.role === "admin" ? "admin" : "user",
+        active: data.active === true,
+        isSuperAdmin: data.isSuperAdmin === true,
+        permissions: (data.permissions as AdminPermissions | undefined) ?? undefined,
+        userPermissions: (data.userPermissions as UserPermissions | undefined) ?? undefined,
+        phoneCodes: resolvePhoneCodes(data),
+    };
+}
+
+async function readUserProfile(uid: string): Promise<DocumentSnapshot> {
+    const ref = doc(db, "users", uid);
+    try {
+        return await getDoc(ref);
+    } catch (error) {
+        console.warn("[auth] Firestore profile read failed, retrying.", error);
+        await new Promise((resolve) => window.setTimeout(resolve, 450));
+        try {
+            return await getDoc(ref);
+        } catch (retryError) {
+            console.warn("[auth] Firestore profile retry failed, trying cache.", retryError);
+            return await getDocFromCache(ref);
+        }
+    }
+}
 
 export type AppUser = {
     id: string;
@@ -68,26 +140,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     return;
                 }
 
-                const snap = await getDoc(doc(db, "users", user.uid));
+                const snap = await readUserProfile(user.uid);
 
                 if (!snap.exists()) {
                     setProfile(null);
                     return;
                 }
 
-                const data = snap.data() as any;
+                const data = snap.data() as Record<string, unknown>;
 
-                setProfile({
-                    id: snap.id,
-                    name: data.name ?? "",
-                    email: data.email ?? user.email ?? "",
-                    role: data.role ?? "user",
-                    active: data.active === true,
-                    isSuperAdmin: data.isSuperAdmin === true,
-                    permissions: data.permissions ?? undefined,
-                    userPermissions: data.userPermissions ?? undefined,
-                    phoneCodes: Array.isArray(data.phoneCodes) ? (data.phoneCodes as string[]) : [],
-                });
+                setProfile(profileFromSnapshot(snap.id, data, user.email));
             } finally {
                 setLoading(false);
             }

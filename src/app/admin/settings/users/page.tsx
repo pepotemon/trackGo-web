@@ -9,6 +9,7 @@ import {
     updateUserAutoAssign,
     updateUserBilling,
     updateUserGeoCoverage,
+    updateManagedUserCredentials,
     updateUserPermissions,
     updateUserPhoneCodes,
     updateUserProfile,
@@ -534,6 +535,7 @@ export default function UsersPage() {
                     user={selectedUser}
                     open={!!selectedUser}
                     savingId={savingId}
+                    canManageCredentials={isSuperAdmin}
                     adminUsers={users.filter((u) => u.role === "admin" && !u.isSuperAdmin)}
                     onClose={() => setSelectedUserId(null)}
                     onSaving={setSavingId}
@@ -1157,6 +1159,7 @@ function EditUserModal({
     user,
     open,
     savingId,
+    canManageCredentials,
     adminUsers,
     onClose,
     onSaving,
@@ -1166,6 +1169,7 @@ function EditUserModal({
     user: UserDoc | null;
     open: boolean;
     savingId: string | null;
+    canManageCredentials: boolean;
     adminUsers: UserDoc[];
     onClose: () => void;
     onSaving: (id: string | null) => void;
@@ -1175,6 +1179,7 @@ function EditUserModal({
     const [activeTab, setActiveTab] = useState<EditorTab>("profile");
     const [name, setName] = useState("");
     const [email, setEmail] = useState("");
+    const [newPassword, setNewPassword] = useState("");
     const [whatsappPhone, setWhatsappPhone] = useState("");
     const [role, setRole] = useState<UserRole>("user");
     const [active, setActive] = useState(true);
@@ -1207,6 +1212,7 @@ function EditUserModal({
             setActiveTab("profile");
             setName(user.name ?? "");
             setEmail(user.email ?? "");
+            setNewPassword("");
             setWhatsappPhone(user.whatsappPhone ?? "");
             setRole(user.role ?? "user");
             setActive(user.active !== false);
@@ -1267,10 +1273,13 @@ function EditUserModal({
 
         const dailyLimitRaw = onlyNumberLike(autoAssignDailyLimit);
         const dailyLimit = dailyLimitRaw ? safeNumber(dailyLimitRaw, 0) : null;
+        const cleanEmail = email.trim().toLowerCase();
+        const cleanPassword = canManageCredentials ? newPassword.trim() : "";
+        const emailChanged = cleanEmail !== String(user.email ?? "").trim().toLowerCase();
 
         const patch: Partial<UserDoc> = {
             name: name.trim() || "Usuario",
-            email: email.trim(),
+            email: canManageCredentials && emailChanged ? (user.email ?? "") : (user.email ?? cleanEmail),
             whatsappPhone: whatsappPhone.trim(),
             role,
             active,
@@ -1286,6 +1295,15 @@ function EditUserModal({
         };
 
         try {
+            if (canManageCredentials && ((emailChanged && cleanEmail) || cleanPassword)) {
+                await updateManagedUserCredentials({
+                    userId: user.id,
+                    email: emailChanged ? cleanEmail : undefined,
+                    password: cleanPassword || undefined,
+                });
+                if (emailChanged) patch.email = cleanEmail;
+            }
+
             await updateUserProfile(user.id, patch);
             await updateUserRole(user.id, role);
             await updateUserBilling(user.id, patch);
@@ -1360,8 +1378,27 @@ function EditUserModal({
                         </Field>
 
                         <Field label="Email">
-                            <Input value={email} onChange={(e) => setEmail(e.target.value)} />
+                            <Input
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                disabled={!canManageCredentials}
+                            />
                         </Field>
+
+                        {canManageCredentials ? (
+                            <Field label="Nueva contraseña">
+                                <Input
+                                    type="password"
+                                    value={newPassword}
+                                    onChange={(e) => setNewPassword(e.target.value)}
+                                    placeholder="Dejar vacío para no cambiar"
+                                />
+                            </Field>
+                        ) : (
+                            <p className="rounded-xl border border-[#E8E7FB] bg-[#fbfaff] px-3 py-2 text-[11px] font-semibold text-[#667085]">
+                                Solo el superadmin puede cambiar credenciales de acceso.
+                            </p>
+                        )}
 
                         <Field label="WhatsApp operativo">
                             <Input
@@ -1633,7 +1670,8 @@ function EditUserModal({
                                 <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.06em] text-[#98A2B3]">Prospectos</p>
                                 <div className="space-y-1.5">
                                     {([
-                                        { key: "prospectos", label: "Ver Prospectos y Asignaciones" },
+                                        { key: "prospectos", label: "Ver Prospectos" },
+                                        { key: "assignmentsView", label: "Ver auditoria de asignaciones" },
                                         { key: "leadsAssign", label: "Asignar por cobertura y reasignar" },
                                         { key: "leadsWhatsapp", label: "Abrir WhatsApp de clientes" },
                                         { key: "leadsEdit", label: "Editar prospectos" },
@@ -1654,6 +1692,10 @@ function EditUserModal({
                                 <div className="space-y-1.5">
                                     {([
                                         { key: "actividad", label: "Ver pantalla de Actividad" },
+                                        { key: "activityClientView", label: "Abrir perfil de cliente" },
+                                        { key: "activityMaps", label: "Abrir Maps desde Actividad" },
+                                        { key: "activityChat", label: "Abrir chat desde Actividad" },
+                                        { key: "activityEdit", label: "Editar desde Actividad" },
                                     ] as { key: keyof AdminPermissions; label: string }[]).map(({ key, label }) => (
                                         <PermissionToggle
                                             key={key}

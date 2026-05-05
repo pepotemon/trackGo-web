@@ -14,6 +14,7 @@ import {
     REJECTED_REASON_LABELS,
     type RejectedReason,
 } from "@/types/userLeads";
+import { buildWhatsAppUrl } from "@/lib/whatsapp";
 
 type MapFilter = "all" | "pending" | "visited" | "rejected";
 const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY ?? "";
@@ -152,6 +153,11 @@ function MapPageInner() {
     }
 
     function openWhatsApp(lead: MetaLeadDoc) {
+        const fixedUrl = buildWhatsAppUrl(lead.phone, `Olá, ${lead.name || "tudo bem"}! Estou entrando em contato sobre seu interesse.`);
+        if (fixedUrl) {
+            window.open(fixedUrl, "_blank");
+            return;
+        }
         const phone = lead.phone.replace(/\D/g, "");
         const br = phone.startsWith("55") ? phone : `55${phone}`;
         const msg = encodeURIComponent(`Olá, ${lead.name || "tudo bem"}! Estou entrando em contato sobre seu interesse.`);

@@ -160,7 +160,7 @@ export default function AdminDashboardPage() {
                 actions={
                     <div className="flex flex-wrap justify-end gap-2">
                         {permissions.prospectos ? <QuickLink href="/admin/leads" icon="lead">Prospectos</QuickLink> : null}
-                        {permissions.prospectos ? <QuickLink href="/admin/leads/assignments" icon="assign">Asign.</QuickLink> : null}
+                        {permissions.assignmentsView ? <QuickLink href="/admin/leads/assignments" icon="assign">Asign.</QuickLink> : null}
                         {permissions.usersView ? <QuickLink href="/admin/settings/users" icon="users">Usuarios</QuickLink> : null}
                         <Button
                             variant="primary"
@@ -185,7 +185,9 @@ export default function AdminDashboardPage() {
             <section className="mb-3 grid grid-cols-2 gap-2 md:gap-4 xl:mb-4 xl:grid-cols-4">
                 <KpiCard label="Cola activa" value={snapshot.stats.queueTotal} caption="Sin asignar" icon="users" tone="blue" />
                 <KpiCard label="Por revisar" value={snapshot.stats.pendingReview} caption="Listos para validar" icon="lead" tone="purple" />
-                <KpiCard label="Asignaciones hoy" value={snapshot.stats.autoAssignmentsToday} caption="Auto-asignacion" icon="assign" tone="green" />
+                {permissions.assignmentsView ? (
+                    <KpiCard label="Asignaciones hoy" value={snapshot.stats.autoAssignmentsToday} caption="Auto-asignacion" icon="assign" tone="green" />
+                ) : null}
                 <KpiCard label="Usuarios activos" value={snapshot.stats.activeUsers} caption={`${snapshot.stats.autoAssignUsers} con auto ON`} icon="check" tone="orange" />
             </section>
 
@@ -249,24 +251,26 @@ export default function AdminDashboardPage() {
                     </div>
                 </Card>
 
-                <Card className="overflow-hidden">
-                    <PanelHeader
-                        title="Ultimas asignaciones"
-                        caption={`${snapshot.recentAssignments.length} logs recientes de hoy`}
-                        href="/admin/leads/assignments"
-                    />
-                    <div className="divide-y divide-[#f0f1f2]">
-                        {loading ? (
-                            <EmptyRow text="Cargando asignaciones..." />
-                        ) : snapshot.recentAssignments.length ? (
-                            snapshot.recentAssignments.map((log) => (
-                                <RecentAssignmentRow key={log.id} log={log} />
-                            ))
-                        ) : (
-                            <EmptyRow text="Aun no hay auto-asignaciones hoy." />
-                        )}
-                    </div>
-                </Card>
+                {permissions.assignmentsView ? (
+                    <Card className="overflow-hidden">
+                        <PanelHeader
+                            title="Ultimas asignaciones"
+                            caption={`${snapshot.recentAssignments.length} logs recientes de hoy`}
+                            href="/admin/leads/assignments"
+                        />
+                        <div className="divide-y divide-[#f0f1f2]">
+                            {loading ? (
+                                <EmptyRow text="Cargando asignaciones..." />
+                            ) : snapshot.recentAssignments.length ? (
+                                snapshot.recentAssignments.map((log) => (
+                                    <RecentAssignmentRow key={log.id} log={log} />
+                                ))
+                            ) : (
+                                <EmptyRow text="Aun no hay auto-asignaciones hoy." />
+                            )}
+                        </div>
+                    </Card>
+                ) : null}
             </section>
             </div>
         </div>

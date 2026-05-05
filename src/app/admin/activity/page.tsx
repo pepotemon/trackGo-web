@@ -10,9 +10,10 @@ import {
 } from "@/data/activityRepo";
 import { listAccountingUsers } from "@/data/accountingRepo";
 import { assignLeadToUser, deleteLead, getClientCurrentStates } from "@/data/leadsRepo";
-import { writeManualAssignLog } from "@/data/autoAssignLogsRepo";
+import { listAllAutoAssignLogsForRange, writeManualAssignLog } from "@/data/autoAssignLogsRepo";
 import { AssignUserModal } from "@/features/leads/AssignUserModal";
 import { dayKeyFromDate, weekRangeKeysMonToSun } from "@/lib/date";
+import { buildWhatsAppUrl } from "@/lib/whatsapp";
 import type {
     ActivityEventRow,
     ActivityEventType,
@@ -23,6 +24,7 @@ import type {
 import { useCan } from "@/features/auth/usePermissions";
 import { useAuth } from "@/features/auth/AuthProvider";
 import type { DailyEventDoc, UserDoc } from "@/types/accounting";
+import type { AutoAssignLogDoc } from "@/types/leads";
 import {
     ActionTile,
     AppIcon,
@@ -140,6 +142,8 @@ function eventSubtitle(event: ActivityEventRow) {
 }
 
 function whatsappUrl(phone?: string | null) {
+    const fixedUrl = buildWhatsAppUrl(phone, "Olá! Estou entrando em contato sobre seu cadastro");
+    if (fixedUrl) return fixedUrl;
     const clean = String(phone ?? "").replace(/\D+/g, "");
     if (!clean) return "";
     return `https://wa.me/${clean}?text=${encodeURIComponent("Olá! Estou entrando em contato sobre seu cadastro 🙌")}`;
@@ -188,13 +192,13 @@ function viewModeLabel(mode: ActivityViewMode) {
 export default function ActivityPage() {
     const { profile, isSuperAdmin } = useAuth();
     const canActividad = useCan("actividad");
-    const canChat = useCan("chatView");
-    const canEdit = useCan("leadsEdit");
+    const canAssignmentsView = useCan("assignmentsView");
     const [viewMode, setViewMode] = useState<ActivityViewMode>("week");
     const [filters, setFilters] = useState<ActivityFilters>(() => defaultFilters());
     const [users, setUsers] = useState<ActivityUserOption[]>([]);
     const [rawUsers, setRawUsers] = useState<UserDoc[]>([]);
     const [events, setEvents] = useState<DailyEventDoc[]>([]);
+    const [assignmentLogs, setAssignmentLogs] = useState<AutoAssignLogDoc[]>([]);
     const [cursor, setCursor] = useState<ActivityCursor>(null);
     const [hasMore, setHasMore] = useState(false);
     const [quickRow, setQuickRow] = useState<ActivityEventRow | null>(null);
@@ -308,14 +312,16 @@ export default function ActivityPage() {
             pending: deduplicatedRows.filter((row) => row.type === "pending").length,
             // Count assignments within the selected date range (pending rows bypass filteredRows date-check,
             // so we apply the range check here manually so the counter respects the filter)
-            users: deduplicatedRows.filter((row) => {
-                const dk = String(row.dayKey || "");
+            users: assignmentLogs.filter((log) => {
+                if (myUserIds && (!log.userId || !myUserIds.has(log.userId))) return false;
+                if (filters.userId !== "all" && log.userId !== filters.userId) return false;
+                const dk = String(log.dayKey || "");
                 if (startKey && dk < startKey) return false;
                 if (endKey && dk > endKey) return false;
                 return true;
             }).length,
         };
-    }, [deduplicatedRows, filters]);
+    }, [assignmentLogs, deduplicatedRows, filters, myUserIds]);
 
     const activityRowsByType = useMemo(() => {
         return {
@@ -375,13 +381,14 @@ export default function ActivityPage() {
         setErr(null);
 
         try {
-            const [userDocs, pendingClients] = await Promise.all([
+            const [userDocs, pendingClients, nextAssignmentLogs] = await Promise.all([
                 listAccountingUsers(),
                 listPendingClientsForActivity({
                     startKey: PENDING_START_KEY,
                     endKey: "9999-12-31",
                     pageSize: 2000,
                 }),
+                listAllAutoAssignLogsForRange(nextFilters.startKey, nextFilters.endKey),
             ]);
 
             let allEvents: DailyEventDoc[] = [];
@@ -405,6 +412,7 @@ export default function ActivityPage() {
 
             setRawUsers(userDocs);
             setUsers(userDocs.map(userToOption));
+            setAssignmentLogs(nextAssignmentLogs);
             setEvents(mergeActivityEvents(allEvents, pendingClients));
             setCursor(nextCursor);
             setHasMore(nextHasMore);
@@ -491,6 +499,7 @@ export default function ActivityPage() {
                     loading={loading}
                     loadingMore={loadingMore}
                     hasMore={hasMore}
+                    canAssignmentsView={canAssignmentsView}
                     activeFiltersCount={activeFiltersCount}
                     amountTotal={amountTotal}
                     filterModalOpen={mobileFiltersOpen}
@@ -548,14 +557,18 @@ export default function ActivityPage() {
                     </div>
                 ) : null}
 
-                <section className="mb-4 grid grid-cols-5 gap-4">
+                <section className={["mb-4 grid gap-4", canAssignmentsView ? "grid-cols-5" : "grid-cols-4"].join(" ")}>
                     <KpiCard label="Actividad" value={stats.total} caption={`${viewModeLabel(viewMode)} · eventos + pendientes`} icon="activity" tone="purple" />
                     <KpiCard label="Visitados" value={stats.visited} caption="Clientes trabajados" icon="check" tone="green" />
                     <KpiCard label="Rechazados" value={stats.rejected} caption="No concretados" icon="close" tone="red" />
                     <KpiCard label="Pendientes" value={stats.pending} caption="Todos los pendientes activos" icon="alert" tone="orange" />
-                    <Link href="/admin/leads/assignments" className="block transition hover:opacity-90 hover:scale-[1.01]">
-                        <KpiCard label="Asignaciones" value={stats.users} caption="Ver historial de asignaciones" icon="assign" tone="blue" />
-                    </Link>
+                    {canAssignmentsView ? (
+                        <Link href="/admin/leads/assignments" className="block transition hover:opacity-90 hover:scale-[1.01]">
+                            <KpiCard label="Asignaciones" value={stats.users} caption="Ver historial de asignaciones" icon="assign" tone="blue" />
+                        </Link>
+                    ) : (
+                        <KpiCard label="Asignaciones" value={stats.users} caption="En el rango seleccionado" icon="assign" tone="blue" />
+                    )}
                 </section>
 
                 <Card className="overflow-hidden">
@@ -749,6 +762,7 @@ function MobileActivityView({
     loading,
     loadingMore,
     hasMore,
+    canAssignmentsView,
     activeFiltersCount,
     amountTotal,
     filterModalOpen,
@@ -772,6 +786,7 @@ function MobileActivityView({
     loading: boolean;
     loadingMore: boolean;
     hasMore: boolean;
+    canAssignmentsView: boolean;
     activeFiltersCount: number;
     amountTotal: number;
     filterModalOpen: boolean;
@@ -865,7 +880,7 @@ function MobileActivityView({
                         value={stats.users}
                         icon="assign"
                         color="text-blue-600"
-                        href="/admin/leads/assignments"
+                        href={canAssignmentsView ? "/admin/leads/assignments" : undefined}
                     />
                 </div>
 
@@ -1154,6 +1169,10 @@ function ActivityActionSheet({
     const canAssign = useCan("leadsAssign");
     const canDelete = useCan("leadsDelete");
     const canWhatsapp = useCan("leadsWhatsapp");
+    const canClientView = useCan("activityClientView");
+    const canActivityMaps = useCan("activityMaps");
+    const canActivityChat = useCan("activityChat");
+    const canActivityEdit = useCan("activityEdit");
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [deleting, setDeleting] = useState(false);
 
@@ -1226,21 +1245,25 @@ function ActivityActionSheet({
                 ) : (
                     <>
                         <div className="grid gap-2">
-                            <Link
-                                href={`/admin/clients/${row.clientId}`}
-                                className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#eff6ff] px-4 text-[14px] font-bold text-[#101936] transition active:bg-blue-100"
-                            >
-                                <AppIcon name="users" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-blue-600 ring-0" />
-                                Ver cliente
-                            </Link>
+                            {canClientView ? (
+                                <Link
+                                    href={`/admin/clients/${row.clientId}`}
+                                    className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#eff6ff] px-4 text-[14px] font-bold text-[#101936] transition active:bg-blue-100"
+                                >
+                                    <AppIcon name="users" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-blue-600 ring-0" />
+                                    Ver cliente
+                                </Link>
+                            ) : null}
 
-                            <Link
-                                href={`/admin/leads/${row.clientId}`}
-                                className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#f3f0ff] px-4 text-[14px] font-bold text-[#101936] transition active:bg-violet-200"
-                            >
-                                <AppIcon name="chat" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#7C3AED] ring-0" />
-                                Chat / Editar
-                            </Link>
+                            {(canActivityChat || canActivityEdit) ? (
+                                <Link
+                                    href={`/admin/leads/${row.clientId}`}
+                                    className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#f3f0ff] px-4 text-[14px] font-bold text-[#101936] transition active:bg-violet-200"
+                                >
+                                    <AppIcon name={canActivityChat ? "chat" : "edit"} tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#7C3AED] ring-0" />
+                                    {canActivityChat && canActivityEdit ? "Chat / Editar" : canActivityChat ? "Chat" : "Editar"}
+                                </Link>
+                            ) : null}
 
                             {canAssign && onOpenAssign ? (
                                 <button
@@ -1253,7 +1276,7 @@ function ActivityActionSheet({
                                 </button>
                             ) : null}
 
-                            {row.mapsUrl ? (
+                            {row.mapsUrl && canActivityMaps ? (
                                 <a
                                     href={row.mapsUrl}
                                     target="_blank"
@@ -1403,9 +1426,10 @@ function ActivityQuickActionsModal({
     row: ActivityEventRow | null;
     onClose: () => void;
 }) {
-    const canChat = useCan("chatView");
-    const canEdit = useCan("leadsEdit");
-    const canMaps = useCan("leadsWhatsapp");
+    const canClientView = useCan("activityClientView");
+    const canMaps = useCan("activityMaps");
+    const canChat = useCan("activityChat");
+    const canEdit = useCan("activityEdit");
 
     if (!row) return null;
 
@@ -1418,12 +1442,19 @@ function ActivityQuickActionsModal({
             size="sm"
         >
             <div className="grid gap-2">
-                <ActionTile href={`/admin/clients/${row.clientId}`} label="Ver cliente" icon="users" tone="blue" />
+                {canClientView ? (
+                    <ActionTile href={`/admin/clients/${row.clientId}`} label="Ver cliente" icon="users" tone="blue" />
+                ) : null}
                 {row.mapsUrl && canMaps ? (
                     <ActionTile href={row.mapsUrl} label="Abrir Maps" icon="map" tone="green" external />
                 ) : null}
                 {(canChat || canEdit) ? (
-                    <ActionTile href={`/admin/leads/${row.clientId}`} label="Chat / Editar" icon="edit" tone="orange" />
+                    <ActionTile href={`/admin/leads/${row.clientId}`} label={canChat && canEdit ? "Chat / Editar" : canChat ? "Chat" : "Editar"} icon={canChat ? "chat" : "edit"} tone="orange" />
+                ) : null}
+                {!canClientView && !canMaps && !canChat && !canEdit ? (
+                    <div className="rounded-xl border border-[#e5e7eb] bg-[#fafafa] p-4 text-center text-[12px] font-semibold text-[#667085]">
+                        No tienes permisos para acciones sobre este cliente.
+                    </div>
                 ) : null}
             </div>
         </Modal>
@@ -1584,7 +1615,9 @@ function ActivityListModal({
                                                             </div>
                                                         ) : null}
                                                     </Link>
-                                                    <Badge tone={typeTone[row.type]}>{typeLabel[row.type]}</Badge>
+                                                    <Badge tone={typeTone[row.type]}>
+                                                        {row.type === "rejected" ? rejectedReasonText(row) || "Sin motivo" : typeLabel[row.type]}
+                                                    </Badge>
                                                     {followUpBadge(clientStates.get(row.clientId), row.userId)}
                                                     {onOpenSheet ? (
                                                         <button

@@ -224,6 +224,34 @@ export async function updateUserProfile(userId: string, patch: Partial<UserDoc>)
     await updateDoc(doc(db, "users", userId), cleanUserPatch(patch));
 }
 
+export async function updateManagedUserCredentials({
+    userId,
+    email,
+    password,
+}: {
+    userId: string;
+    email?: string;
+    password?: string;
+}) {
+    const updateManagedUserAuth = httpsCallable<
+        { uid: string; email?: string; password?: string },
+        { ok?: boolean; changed?: boolean; email?: string | null }
+    >(functions, "updateManagedUserAuth");
+
+    const cleanEmail = cleanText(email).toLowerCase();
+    const cleanPassword = cleanText(password);
+
+    if (!cleanEmail && !cleanPassword) return { changed: false };
+
+    const result = await updateManagedUserAuth({
+        uid: userId,
+        ...(cleanEmail ? { email: cleanEmail } : {}),
+        ...(cleanPassword ? { password: cleanPassword } : {}),
+    });
+
+    return result.data;
+}
+
 export async function updateUserBilling(userId: string, patch: Partial<UserDoc>) {
     await updateDoc(doc(db, "users", userId), cleanUserPatch(patch));
 }

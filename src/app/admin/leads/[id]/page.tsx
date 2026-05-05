@@ -13,6 +13,8 @@ import {
 import { assignLeadToUser, updateLeadStatus } from "@/data/leadsRepo";
 import { LeadEditModal } from "@/features/leads/LeadEditModal";
 import { listAdminUsers } from "@/data/usersRepo";
+import { useCan } from "@/features/auth/usePermissions";
+import { buildWhatsAppUrl } from "@/lib/whatsapp";
 import type { LeadChatMode, LeadMessageDoc, LeadReviewStatus, MetaLeadDoc } from "@/types/leads";
 import type { UserDoc } from "@/types/users";
 import { AppIcon, Badge, Button, Card, CardHeader, IconButton, Input, PageHeader } from "@/components/ui";
@@ -79,6 +81,12 @@ function lastInboundAt(lead: MetaLeadDoc | null, messages: LeadMessageDoc[]) {
 export default function LeadChatPage() {
     const params = useParams<{ id: string }>();
     const clientId = String(params.id ?? "").trim();
+    const canChat = useCan("chatView") || useCan("activityChat");
+    const canEdit = useCan("leadsEdit") || useCan("activityEdit");
+    const canAssign = useCan("leadsAssign");
+    const canMaps = useCan("activityMaps");
+    const canWhatsapp = useCan("leadsWhatsapp");
+    const canClientView = useCan("activityClientView");
 
     const [lead, setLead] = useState<MetaLeadDoc | null>(null);
     const [messages, setMessages] = useState<LeadMessageDoc[]>([]);
@@ -167,10 +175,11 @@ export default function LeadChatPage() {
     const nextId = queueIndex < mobileQueue.length - 1 ? mobileQueue[queueIndex + 1] : null;
 
     const canSend = useMemo(() => {
-        return mode === "human" && !!draft.trim() && !sending;
-    }, [draft, mode, sending]);
+        return canChat && mode === "human" && !!draft.trim() && !sending;
+    }, [canChat, draft, mode, sending]);
 
     async function changeMode(nextMode: Exclude<LeadChatMode, "hybrid">) {
+        if (!canChat) return;
         setBusyMode(true);
         setErr(null);
 
@@ -184,7 +193,7 @@ export default function LeadChatPage() {
     }
 
     async function activateHumanMode() {
-        if (mode !== "bot" || busyMode) return;
+        if (!canChat || mode !== "bot" || busyMode) return;
         setBusyMode(true);
         try {
             await setLeadChatMode(clientId, "human");
@@ -197,7 +206,7 @@ export default function LeadChatPage() {
 
     async function sendMessage() {
         const text = draft.trim();
-        if (!text || !clientId) return;
+        if (!canChat || !text || !clientId) return;
 
         setSending(true);
         setErr(null);
@@ -213,7 +222,7 @@ export default function LeadChatPage() {
     }
 
     async function assign(userId: string) {
-        if (!userId) return;
+        if (!canAssign || !userId) return;
         setErr(null);
 
         try {
@@ -397,7 +406,7 @@ export default function LeadChatPage() {
                                     <span className="text-[10px] font-black text-[#66739A]">Ver cliente</span>
                                 </Link>
 
-                                {lead?.location?.mapsUrl ? (
+                                {lead?.location?.mapsUrl && canMaps ? (
                                     <Link
                                         href={lead.location.mapsUrl}
                                         target="_blank"
@@ -410,9 +419,9 @@ export default function LeadChatPage() {
                                     </Link>
                                 ) : null}
 
-                                {lead?.phone ? (
+                                {lead?.phone && canWhatsapp ? (
                                     <Link
-                                        href={`https://wa.me/${lead.phone.replace(/\D/g, "")}`}
+                                        href={buildWhatsAppUrl(lead.phone)}
                                         target="_blank"
                                         rel="noreferrer"
                                         className="flex flex-col items-center gap-2 rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] py-4 transition active:bg-[#f3f0ff]"
@@ -423,14 +432,16 @@ export default function LeadChatPage() {
                                     </Link>
                                 ) : null}
 
-                                <button
-                                    type="button"
-                                    className="flex flex-col items-center gap-2 rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] py-4 transition active:bg-[#f3f0ff]"
-                                    onClick={() => { setQuickActionsOpen(false); setEditOpen(true); }}
-                                >
-                                    <AppIcon name="edit" tone="purple" size="sm" className="h-6 w-6 bg-transparent text-[#7C3AED] ring-0" />
-                                    <span className="text-[10px] font-black text-[#66739A]">Editar</span>
-                                </button>
+                                {canEdit ? (
+                                    <button
+                                        type="button"
+                                        className="flex flex-col items-center gap-2 rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] py-4 transition active:bg-[#f3f0ff]"
+                                        onClick={() => { setQuickActionsOpen(false); setEditOpen(true); }}
+                                    >
+                                        <AppIcon name="edit" tone="purple" size="sm" className="h-6 w-6 bg-transparent text-[#7C3AED] ring-0" />
+                                        <span className="text-[10px] font-black text-[#66739A]">Editar</span>
+                                    </button>
+                                ) : null}
                             </div>
                         </div>
                     </div>
@@ -446,29 +457,35 @@ export default function LeadChatPage() {
                     actions={
                         <>
                             <QuickLink href="/admin/leads" icon="lead" label="Prospectos" />
-                            <QuickLink href={`/admin/clients/${clientId}`} icon="users" label="Cliente" />
-                            {lead?.location?.mapsUrl ? (
+                            {canClientView ? <QuickLink href={`/admin/clients/${clientId}`} icon="users" label="Cliente" /> : null}
+                            {lead?.location?.mapsUrl && canMaps ? (
                                 <QuickLink href={lead.location.mapsUrl} icon="map" label="Maps" external />
                             ) : null}
-                            <IconButton
-                                icon="edit"
-                                label="Editar lead"
-                                onClick={() => setEditOpen(true)}
-                                disabled={!lead}
-                            />
-                            <Button
-                                onClick={() => changeMode("human")}
-                                disabled={busyMode || mode === "human"}
-                            >
-                                Tomar chat
-                            </Button>
-                            <Button
-                                variant="primary"
-                                onClick={() => changeMode("bot")}
-                                disabled={busyMode || mode === "bot"}
-                            >
-                                Activar bot
-                            </Button>
+                            {canEdit ? (
+                                <IconButton
+                                    icon="edit"
+                                    label="Editar lead"
+                                    onClick={() => setEditOpen(true)}
+                                    disabled={!lead}
+                                />
+                            ) : null}
+                            {canChat ? (
+                                <>
+                                    <Button
+                                        onClick={() => changeMode("human")}
+                                        disabled={busyMode || mode === "human"}
+                                    >
+                                        Tomar chat
+                                    </Button>
+                                    <Button
+                                        variant="primary"
+                                        onClick={() => changeMode("bot")}
+                                        disabled={busyMode || mode === "bot"}
+                                    >
+                                        Activar bot
+                                    </Button>
+                                </>
+                            ) : null}
                         </>
                     }
                 />
@@ -523,44 +540,48 @@ export default function LeadChatPage() {
                                         </div>
 
                                         <div className="grid grid-cols-3 gap-2">
-                                            <SmallAction href={`/admin/clients/${clientId}`} icon="users" label="Cliente" />
-                                            {lead.location.mapsUrl ? (
+                                            {canClientView ? <SmallAction href={`/admin/clients/${clientId}`} icon="users" label="Cliente" /> : null}
+                                            {lead.location.mapsUrl && canMaps ? (
                                                 <SmallAction href={lead.location.mapsUrl} icon="map" label="Maps" external />
                                             ) : null}
-                                            <button
-                                                type="button"
-                                                onClick={() => setEditOpen(true)}
-                                                className="inline-flex h-10 items-center justify-center rounded-xl border border-[#e8e7fb] bg-[#fbfaff] text-[#7c3aed] transition hover:bg-[#f5f3ff]"
-                                                aria-label="Editar lead"
-                                                title="Editar lead"
-                                            >
-                                                <AppIcon name="edit" tone="purple" size="sm" plain />
-                                            </button>
+                                            {canEdit ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setEditOpen(true)}
+                                                    className="inline-flex h-10 items-center justify-center rounded-xl border border-[#e8e7fb] bg-[#fbfaff] text-[#7c3aed] transition hover:bg-[#f5f3ff]"
+                                                    aria-label="Editar lead"
+                                                    title="Editar lead"
+                                                >
+                                                    <AppIcon name="edit" tone="purple" size="sm" plain />
+                                                </button>
+                                            ) : null}
                                         </div>
                                     </div>
                                 )}
                             </div>
                         </Card>
 
-                        <Card className="overflow-hidden">
-                            <CardHeader title="Control de bot" subtitle="Modo de atencion actual" />
-                            <div className="space-y-3 border-t border-[#eef1f5] p-4">
-                                <div className="flex items-center justify-between rounded-2xl border border-[#eef1f5] bg-[#fbfaff] px-3 py-2">
-                                    <span className="text-[12px] font-bold text-[#66739a]">Modo</span>
-                                    <Badge tone={mode === "human" ? "blue" : "green"}>
-                                        {modeLabel(mode)}
-                                    </Badge>
+                        {canChat ? (
+                            <Card className="overflow-hidden">
+                                <CardHeader title="Control de bot" subtitle="Modo de atencion actual" />
+                                <div className="space-y-3 border-t border-[#eef1f5] p-4">
+                                    <div className="flex items-center justify-between rounded-2xl border border-[#eef1f5] bg-[#fbfaff] px-3 py-2">
+                                        <span className="text-[12px] font-bold text-[#66739a]">Modo</span>
+                                        <Badge tone={mode === "human" ? "blue" : "green"}>
+                                            {modeLabel(mode)}
+                                        </Badge>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <Button onClick={() => changeMode("human")} disabled={busyMode || mode === "human"}>
+                                            Tomar
+                                        </Button>
+                                        <Button variant="primary" onClick={() => changeMode("bot")} disabled={busyMode || mode === "bot"}>
+                                            Bot
+                                        </Button>
+                                    </div>
                                 </div>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <Button onClick={() => changeMode("human")} disabled={busyMode || mode === "human"}>
-                                        Tomar
-                                    </Button>
-                                    <Button variant="primary" onClick={() => changeMode("bot")} disabled={busyMode || mode === "bot"}>
-                                        Bot
-                                    </Button>
-                                </div>
-                            </div>
-                        </Card>
+                            </Card>
+                        ) : null}
                     </aside>
 
                     <Card className="flex min-h-[680px] flex-col overflow-hidden">
@@ -600,7 +621,7 @@ export default function LeadChatPage() {
                                             ? "Escribe una respuesta..."
                                             : "Toma el chat para responder"
                                     }
-                                    disabled={mode !== "human" || sending}
+                                    disabled={!canChat || mode !== "human" || sending}
                                     onKeyDown={(e) => {
                                         if (e.key === "Enter" && !e.shiftKey) {
                                             e.preventDefault();
@@ -622,7 +643,7 @@ export default function LeadChatPage() {
             </div>
 
             <LeadEditModal
-                open={editOpen}
+                open={editOpen && canEdit}
                 lead={lead}
                 onClose={() => setEditOpen(false)}
                 users={users}

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AppIcon } from "@/components/ui";
+import { usePermissions } from "@/features/auth/usePermissions";
 
 const ACCESS_ITEMS = [
     {
@@ -23,7 +24,15 @@ const ACCESS_ITEMS = [
 
 export function LeadQuickAccessCards() {
     const pathname = usePathname();
-    const items = ACCESS_ITEMS.filter((item) => item.href !== pathname);
+    const permissions = usePermissions();
+    const items = ACCESS_ITEMS.filter((item) => {
+        if (item.href === pathname) return false;
+        if (item.href === "/admin/leads") return permissions.prospectos;
+        if (item.href === "/admin/leads/assignments") return permissions.assignmentsView;
+        return true;
+    });
+
+    if (items.length === 0) return null;
 
     return (
         <section className="mb-4 grid gap-2 md:grid-cols-2 md:gap-3">

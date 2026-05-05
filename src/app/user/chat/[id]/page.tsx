@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { sendManualLeadMessage, subscribeLeadClient, subscribeLeadMessages } from "@/data/leadChatRepo";
 import { dddCity, extractDDD } from "@/data/incompleteClientsRepo";
 import type { LeadMessageDoc, MetaLeadDoc } from "@/types/leads";
+import { buildWhatsAppUrl } from "@/lib/whatsapp";
 
 function formatTime(ts: number | null | undefined) {
     if (!ts) return "";
@@ -98,9 +99,8 @@ export default function UserChatDetailPage() {
 
     function openWhatsApp() {
         if (!lead) return;
-        const phone = lead.phone.replace(/\D/g, "");
-        const br = phone.startsWith("55") ? phone : `55${phone}`;
-        window.open(`https://wa.me/${br}`, "_blank");
+        const url = buildWhatsAppUrl(lead.phone);
+        if (url) window.open(url, "_blank");
     }
 
     function openMaps() {

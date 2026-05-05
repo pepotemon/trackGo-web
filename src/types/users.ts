@@ -22,8 +22,18 @@ export type UserGeoCoverage = {
 export type AdminPermissions = {
     /** Can view Prospectos and Asignaciones screens. */
     prospectos: boolean;
+    /** Can view the assignment audit screen. */
+    assignmentsView: boolean;
     /** Can view Actividad screen. */
     actividad: boolean;
+    /** Can open the client profile from Actividad. */
+    activityClientView: boolean;
+    /** Can open map links from Actividad. */
+    activityMaps: boolean;
+    /** Can open chat from Actividad. */
+    activityChat: boolean;
+    /** Can edit clients/prospectos from Actividad. */
+    activityEdit: boolean;
     /** Can use "Asignar por cobertura" and reassign in modals. */
     leadsAssign: boolean;
     /** Can open WhatsApp links for clients. */
@@ -54,7 +64,12 @@ export type AdminPermissions = {
 export function defaultAdminPermissions(): AdminPermissions {
     return {
         prospectos: false,
+        assignmentsView: false,
         actividad: false,
+        activityClientView: false,
+        activityMaps: false,
+        activityChat: false,
+        activityEdit: false,
         leadsAssign: false,
         leadsWhatsapp: false,
         leadsEdit: false,
@@ -92,7 +107,12 @@ export function fullUserPermissions(): UserPermissions {
 export function fullAdminPermissions(): AdminPermissions {
     return {
         prospectos: true,
+        assignmentsView: true,
         actividad: true,
+        activityClientView: true,
+        activityMaps: true,
+        activityChat: true,
+        activityEdit: true,
         leadsAssign: true,
         leadsWhatsapp: true,
         leadsEdit: true,

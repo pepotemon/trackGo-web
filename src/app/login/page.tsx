@@ -37,8 +37,7 @@ export default function LoginPage() {
 
     return (
         <main
-            className="relative min-h-screen overflow-hidden bg-cover bg-[center_30%] xl:bg-center"
-            style={{ backgroundImage: "url('/brand/backgroundLogin.png')" }}
+            className="relative min-h-screen overflow-hidden bg-[url('/brand/backgroundLoginTelefono.png')] bg-cover bg-center xl:bg-[url('/brand/backgroundLogin.png')] xl:bg-center"
         >
             {/* ── DESKTOP: landing izquierda + card derecha ───────────── */}
             <div className="hidden xl:flex xl:min-h-screen xl:items-center xl:justify-center xl:gap-20 xl:px-20">

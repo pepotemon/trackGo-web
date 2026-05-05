@@ -4,7 +4,8 @@ import { AuthProvider } from "@/features/auth/AuthProvider";
 
 export const metadata: Metadata = {
   title: "TrackGo",
-  description: "Panel administrativo TrackGo",
+  applicationName: "TrackGo",
+  description: "TrackGo",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -13,12 +14,18 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
+      { url: "/icons/favicon-32.png", sizes: "32x32", type: "image/png" },
       { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
       { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: "/icons/trackgo-icon.svg", type: "image/svg+xml" },
     ],
     apple: [
-      { url: "/icons/icon-192.png", sizes: "192x192" },
+      { url: "/icons/apple-touch-icon.png", sizes: "180x180" },
     ],
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
+    "apple-mobile-web-app-title": "TrackGo",
   },
 };
 
