@@ -68,7 +68,7 @@ function pickVerificationStatus(prevStatus, nextStatus, leadQuality, parseStatus
         return "incomplete";
     }
 
-    return next || prev || "pending_review";
+    return next || "pending_review";
 }
 
 function pickBetterBusiness(prevBusiness, nextBusiness) {
@@ -333,14 +333,29 @@ async function resolveEffectiveCoords(locationLat, locationLng, originalMapsUrl)
     };
 }
 
-function buildMarketFields(channel, prev = {}) {
+function inferPanamaMarketFromPhone(phone) {
+    const digits = safeString(phone || "").replace(/\D+/g, "");
+    if (!digits.startsWith("507")) return null;
+
+    return {
+        marketCountry: "PA",
+        language: "es-PA",
+        marketCountryNormalized: "panama",
+        marketCountryLabel: "Panama",
+    };
+}
+
+function buildMarketFields(channel, prev = {}, phone = "") {
+    const inferred = inferPanamaMarketFromPhone(phone);
     const marketCountry =
         safeString(channel?.marketCountry || "") ||
         safeString(prev?.marketCountry || "") ||
+        safeString(inferred?.marketCountry || "") ||
         "BR";
     const language =
         safeString(channel?.language || "") ||
         safeString(prev?.language || "") ||
+        safeString(inferred?.language || "") ||
         "pt-BR";
     const whatsappPhoneNumberId =
         safeString(channel?.phoneNumberId || "") ||
@@ -351,10 +366,12 @@ function buildMarketFields(channel, prev = {}) {
     const marketCountryNormalized =
         safeString(channel?.countryNormalized || "") ||
         safeString(prev?.marketCountryNormalized || "") ||
+        safeString(inferred?.marketCountryNormalized || "") ||
         (marketCountry === "PA" ? "panama" : "brasil");
     const marketCountryLabel =
         safeString(channel?.countryLabel || "") ||
         safeString(prev?.marketCountryLabel || "") ||
+        safeString(inferred?.marketCountryLabel || "") ||
         (marketCountry === "PA" ? "Panama" : "Brasil");
 
     return {
@@ -398,7 +415,7 @@ function createUpsertLeadAsClient({
         channel,
     }) {
         const now = Date.now();
-        const marketFields = buildMarketFields(channel);
+        const marketFields = buildMarketFields(channel, {}, phone);
         const parsed = parseLeadText(rawText, profileName);
 
         const rawLocationLat = roundCoord(locationData?.lat);
@@ -661,7 +678,7 @@ function createUpsertLeadAsClient({
         }
 
         const prev = found.data || {};
-        const mergedMarketFields = buildMarketFields(channel, prev);
+        const mergedMarketFields = buildMarketFields(channel, prev, phone);
 
         const mergedProfileFlags = Array.from(
             new Set([

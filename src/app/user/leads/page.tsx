@@ -91,7 +91,7 @@ export default function UserLeadsPage() {
     const [waSent, setWaSent] = useState<Set<string>>(new Set());
 
     const [actionLead, setActionLead] = useState<MetaLeadDoc | null>(null);
-    const [actionType, setActionType] = useState<"visit" | "reject" | "note" | null>(null);
+    const [actionType, setActionType] = useState<"visit" | "reject" | "note" | "manage" | null>(null);
     const [noteText, setNoteText] = useState("");
     const [rejectStep, setRejectStep] = useState<1 | 2>(1);
     const [rejectReason, setRejectReason] = useState<RejectedReason | null>(null);
@@ -162,9 +162,17 @@ export default function UserLeadsPage() {
     // ── Actions ─────────────────────────────────────────────────────────
 
     function openVisit(lead: MetaLeadDoc) { setActionLead(lead); setActionType("visit"); }
+    function openManage(lead: MetaLeadDoc) { setActionLead(lead); setActionType("manage"); }
     function openReject(lead: MetaLeadDoc) {
         setActionLead(lead); setActionType("reject");
         setRejectStep(1); setRejectReason(null); setRejectText("");
+    }
+    function manageVisit() { setActionType("visit"); }
+    function manageReject() {
+        setActionType("reject");
+        setRejectStep(1);
+        setRejectReason(null);
+        setRejectText("");
     }
     function openNoteAction(lead: MetaLeadDoc) {
         setActionLead(lead);
@@ -317,8 +325,7 @@ export default function UserLeadsPage() {
                                     waSent={waSent.has(lead.id)}
                                     priority={priority >= 0 && priority < 3 ? priority + 1 : null}
                                     canUndo={canUndo(lead)}
-                                    onVisit={() => openVisit(lead)}
-                                    onReject={() => openReject(lead)}
+                                    onManage={() => openManage(lead)}
                                     onUndo={() => handleUndo(lead)}
                                     onWhatsApp={() => openWhatsApp(lead)}
                                     onMaps={() => openMaps(lead)}
@@ -364,8 +371,7 @@ export default function UserLeadsPage() {
                                         waSent={waSent.has(lead.id)}
                                         priority={null}
                                         canUndo={canUndo(lead)}
-                                        onVisit={() => { openVisit(lead); setSearchOpen(false); }}
-                                        onReject={() => { openReject(lead); setSearchOpen(false); }}
+                                        onManage={() => { openManage(lead); setSearchOpen(false); }}
                                         onUndo={() => handleUndo(lead)}
                                         onWhatsApp={() => openWhatsApp(lead)}
                                         onMaps={() => openMaps(lead)}
@@ -376,6 +382,40 @@ export default function UserLeadsPage() {
                         )}
                     </div>
                 </div>
+            ) : null}
+
+            {actionType === "manage" && actionLead ? (
+                <BottomSheet onClose={closeAction}>
+                    <div className="mb-4">
+                        <span className="inline-flex items-center rounded-full bg-[#f3f0ff] px-2.5 py-1 text-[10px] font-black text-[#7C3AED]">GESTIONAR</span>
+                        <p className="mt-2 text-[17px] font-black text-[#101936]">{displayName(actionLead)}</p>
+                        <p className="mt-0.5 text-[12px] font-semibold text-[#66739A]">{actionLead.phone}</p>
+                    </div>
+                    <div className="grid gap-2">
+                        <button
+                            type="button"
+                            onClick={manageVisit}
+                            className="flex items-center justify-between rounded-[16px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-left transition active:bg-emerald-100"
+                        >
+                            <span>
+                                <span className="block text-[14px] font-black text-emerald-700">Visitado</span>
+                                <span className="block text-[11px] font-semibold text-emerald-600/80">Registrar visita del cliente</span>
+                            </span>
+                            <CheckIcon />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={manageReject}
+                            className="flex items-center justify-between rounded-[16px] border border-red-200 bg-red-50 px-4 py-3 text-left transition active:bg-red-100"
+                        >
+                            <span>
+                                <span className="block text-[14px] font-black text-red-600">Rechazado</span>
+                                <span className="block text-[11px] font-semibold text-red-500/80">Cerrar con motivo operativo</span>
+                            </span>
+                            <XIcon />
+                        </button>
+                    </div>
+                </BottomSheet>
             ) : null}
 
             {/* ── VISIT MODAL ─────────────────────────────────────────── */}
@@ -513,8 +553,7 @@ function LeadCard({
     waSent,
     priority,
     canUndo,
-    onVisit,
-    onReject,
+    onManage,
     onUndo,
     onWhatsApp,
     onMaps,
@@ -525,8 +564,7 @@ function LeadCard({
     waSent?: boolean;
     priority: number | null;
     canUndo: boolean;
-    onVisit: () => void;
-    onReject: () => void;
+    onManage: () => void;
     onUndo: () => void;
     onWhatsApp: () => void;
     onMaps: () => void;
@@ -613,22 +651,14 @@ function LeadCard({
 
                     <div className="flex-1" />
 
-                    {/* Status actions */}
                     {isPending ? (
                         <div className="flex gap-1.5">
                             <button
                                 type="button"
-                                onClick={onReject}
-                                className="flex h-8 items-center gap-1.5 rounded-[11px] border border-red-200 bg-red-50 px-2.5 text-[11px] font-black text-red-600 transition active:bg-red-100"
+                                onClick={onManage}
+                                className="flex h-8 items-center gap-1.5 rounded-[11px] border border-[#DDD6FE] bg-[#7C3AED] px-3 text-[11px] font-black text-white shadow-[0_8px_18px_rgba(124,58,237,0.18)] transition active:bg-[#6D28D9]"
                             >
-                                <XIcon /> Rechazar
-                            </button>
-                            <button
-                                type="button"
-                                onClick={onVisit}
-                                className="flex h-8 items-center gap-1.5 rounded-[11px] border border-emerald-200 bg-emerald-50 px-2.5 text-[11px] font-black text-emerald-700 transition active:bg-emerald-100"
-                            >
-                                <CheckIcon /> Visité
+                                Gestionar
                             </button>
                         </div>
                     ) : canUndo ? (

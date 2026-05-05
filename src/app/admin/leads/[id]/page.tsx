@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
     markLeadMessagesSeen,
@@ -81,6 +81,7 @@ function lastInboundAt(lead: MetaLeadDoc | null, messages: LeadMessageDoc[]) {
 export default function LeadChatPage() {
     const params = useParams<{ id: string }>();
     const clientId = String(params.id ?? "").trim();
+    const router = useRouter();
     const canChat = useCan("chatView") || useCan("activityChat");
     const canEdit = useCan("leadsEdit") || useCan("activityEdit");
     const canAssign = useCan("leadsAssign");
@@ -100,6 +101,7 @@ export default function LeadChatPage() {
     const [err, setErr] = useState<string | null>(null);
     const [mobileQueue, setMobileQueue] = useState<string[]>([]);
     const [quickActionsOpen, setQuickActionsOpen] = useState(false);
+    const [touchStartX, setTouchStartX] = useState<number | null>(null);
 
     useEffect(() => {
         try {
@@ -174,6 +176,16 @@ export default function LeadChatPage() {
     const prevId = queueIndex > 0 ? mobileQueue[queueIndex - 1] : null;
     const nextId = queueIndex < mobileQueue.length - 1 ? mobileQueue[queueIndex + 1] : null;
 
+    function finishSwipe(clientX: number) {
+        if (touchStartX === null) return;
+        const delta = clientX - touchStartX;
+        setTouchStartX(null);
+
+        if (Math.abs(delta) < 70) return;
+        if (delta > 0 && prevId) router.push(`/admin/leads/${prevId}`);
+        if (delta < 0 && nextId) router.push(`/admin/leads/${nextId}`);
+    }
+
     const canSend = useMemo(() => {
         return canChat && mode === "human" && !!draft.trim() && !sending;
     }, [canChat, draft, mode, sending]);
@@ -247,13 +259,14 @@ export default function LeadChatPage() {
                 {/* STICKY HEADER — pressable for quick actions */}
                 <div className="shrink-0 border-b border-[#E8E7FB] bg-white">
                     <div className="flex items-center gap-2 px-3 py-2.5">
-                        <Link
-                            href="/admin/leads"
+                        <button
+                            type="button"
+                            onClick={() => router.back()}
                             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] transition active:bg-[#f3f0ff]"
                             aria-label="Volver"
                         >
                             <AppIcon name="arrowLeft" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#101936] ring-0" />
-                        </Link>
+                        </button>
 
                         <button
                             type="button"
@@ -322,6 +335,8 @@ export default function LeadChatPage() {
                 <div
                     className="flex-1 space-y-3 overflow-y-auto bg-[radial-gradient(circle_at_top_left,#f5f3ff_0,#fbfaff_28%,#ffffff_70%)] p-4"
                     onClick={activateHumanMode}
+                    onTouchStart={(event) => setTouchStartX(event.touches[0]?.clientX ?? null)}
+                    onTouchEnd={(event) => finishSwipe(event.changedTouches[0]?.clientX ?? 0)}
                 >
                     {loadingMessages ? (
                         <div className="flex flex-col items-center gap-3 py-10 text-center">

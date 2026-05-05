@@ -881,6 +881,7 @@ function MobileActivityView({
                         icon="assign"
                         color="text-blue-600"
                         href={canAssignmentsView ? "/admin/leads/assignments" : undefined}
+                        featured
                     />
                 </div>
 
@@ -980,6 +981,7 @@ function MobileStatButton({
     onClick,
     disabled,
     href,
+    featured,
 }: {
     label: string;
     value: number;
@@ -988,6 +990,7 @@ function MobileStatButton({
     onClick?: () => void;
     disabled?: boolean;
     href?: string;
+    featured?: boolean;
 }) {
     const content = (
         <>
@@ -999,7 +1002,9 @@ function MobileStatButton({
         </>
     );
 
-    const base = "min-w-0 rounded-[14px] border border-[#E8E7FB] bg-white px-1.5 py-2.5 shadow-[0_4px_16px_rgba(91,33,255,0.07)] transition active:bg-[#f3f0ff]";
+    const base = featured
+        ? "min-w-0 rounded-[14px] border border-blue-200 bg-gradient-to-br from-blue-50 to-violet-50 px-1.5 py-2.5 shadow-[0_8px_22px_rgba(91,33,255,0.12)] transition active:bg-[#f3f0ff]"
+        : "min-w-0 rounded-[14px] border border-[#E8E7FB] bg-white px-1.5 py-2.5 shadow-[0_4px_16px_rgba(91,33,255,0.07)] transition active:bg-[#f3f0ff]";
 
     if (href) {
         return (

@@ -82,6 +82,7 @@ export default function UserIncompleteClientsPage() {
     const [waSent, setWaSent] = useState<Set<string>>(new Set());
     const [search, setSearch] = useState("");
     const [searchOpen, setSearchOpen] = useState(false);
+    const [infoOpen, setInfoOpen] = useState(false);
     const [dddFilter, setDddFilter] = useState("all");
 
     // modals
@@ -216,14 +217,24 @@ export default function UserIncompleteClientsPage() {
                             {phoneCodes.map(dddCity).join(", ")}
                         </p>
                     </div>
-                    <button
-                        type="button"
-                        onClick={() => setSearchOpen(true)}
-                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-white shadow-sm transition active:bg-[#f3f0ff]"
-                        aria-label="Buscar"
-                    >
-                        <SearchIcon />
-                    </button>
+                    <div className="flex shrink-0 gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setInfoOpen(true)}
+                            className="flex h-10 w-10 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-white text-[#7C3AED] shadow-sm transition active:bg-[#f3f0ff]"
+                            aria-label="Informacion"
+                        >
+                            <span className="text-[15px] font-black">i</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setSearchOpen(true)}
+                            className="flex h-10 w-10 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-white shadow-sm transition active:bg-[#f3f0ff]"
+                            aria-label="Buscar"
+                        >
+                            <SearchIcon />
+                        </button>
+                    </div>
                 </div>
 
                 {/* TABS */}
@@ -319,6 +330,30 @@ export default function UserIncompleteClientsPage() {
                         )}
                     </div>
                 </div>
+            ) : null}
+
+            {infoOpen ? (
+                <BottomSheet onClose={() => setInfoOpen(false)}>
+                    <div className="mb-4">
+                        <span className="inline-flex items-center rounded-full bg-[#f3f0ff] px-2.5 py-1 text-[10px] font-black text-[#7C3AED]">AYUDA</span>
+                        <p className="mt-2 text-[17px] font-black text-[#101936]">Clientes incompletos y no aptos</p>
+                    </div>
+                    <div className="space-y-3 text-[12px] font-semibold leading-relaxed text-[#66739A]">
+                        <p>
+                            Aqui aparecen clientes de tu cobertura que no completaron todo el registro o que el bot marco como no aptos.
+                        </p>
+                        <p>
+                            Puedes escribirles por WhatsApp, agregar una nota y tomar los que tengan potencial para pasarlos a tus prospectos.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setInfoOpen(false)}
+                        className="mt-5 w-full rounded-[14px] bg-[#7C3AED] py-3 text-[13px] font-black text-white"
+                    >
+                        Entendido
+                    </button>
+                </BottomSheet>
             ) : null}
 
             {/* ── NOTE MODAL ──────────────────────────────────────────── */}

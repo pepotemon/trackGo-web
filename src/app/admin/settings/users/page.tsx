@@ -1291,8 +1291,8 @@ function EditUserModal({
             setCoverageCity("");
             setApplyToCurrentWeek(false);
             setWeekVisitCount(null);
-            setPermissions(user.permissions ?? defaultAdminPermissions());
-            setUserPermissions(user.userPermissions ?? defaultUserPermissions());
+            setPermissions({ ...defaultAdminPermissions(), ...(user.permissions ?? {}) });
+            setUserPermissions({ ...defaultUserPermissions(), ...(user.userPermissions ?? {}) });
             setPhoneCodes(Array.isArray(user.phoneCodes) ? user.phoneCodes : []);
             setPhoneCodeInput("");
             setSharedWith(Array.isArray(user.sharedWith) ? user.sharedWith : []);
@@ -2110,7 +2110,7 @@ function PermissionToggle({
     onChange,
 }: {
     label: string;
-    value: boolean;
+    value?: boolean;
     onChange: (v: boolean) => void;
 }) {
     return (
@@ -2118,7 +2118,7 @@ function PermissionToggle({
             <span className="text-[12px] font-semibold text-[#52525b]">{label}</span>
             <input
                 type="checkbox"
-                checked={value}
+                checked={!!value}
                 onChange={(e) => onChange(e.target.checked)}
                 className="h-4 w-4 accent-violet-600"
             />

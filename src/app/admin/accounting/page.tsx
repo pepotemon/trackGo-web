@@ -991,7 +991,7 @@ function MobileAccountingPage({
                                     aria-label="Cerrar"
                                     onClick={() => setEventsTooltipOpen(false)}
                                 />
-                                <div className="absolute left-0 top-full z-40 mt-2 w-64 rounded-[14px] border border-[#E8E7FB] bg-white p-3 shadow-[0_8px_30px_rgba(91,33,255,0.12)]">
+                                <div className="absolute right-0 top-full z-40 mt-2 w-[min(16rem,calc(100vw-1.5rem))] rounded-[14px] border border-[#E8E7FB] bg-white p-3 shadow-[0_8px_30px_rgba(91,33,255,0.12)]">
                                     <p className="text-[12px] font-bold text-[#101936]">¿Qué son los eventos?</p>
                                     <p className="mt-1 text-[11px] font-medium leading-relaxed text-[#66739A]">
                                         Conteo de acciones registradas por los usuarios: <span className="font-bold text-emerald-600">Visitado</span>, <span className="font-bold text-red-500">Rechazado</span> y <span className="font-bold text-amber-600">Pendiente</span>. Cada vez que un usuario marca un prospecto con uno de estos estados, se genera un evento.
