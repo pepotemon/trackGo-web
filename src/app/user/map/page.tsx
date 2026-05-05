@@ -1,7 +1,9 @@
 "use client";
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { APIProvider, AdvancedMarker, Map, RenderingType, useMap } from "@vis.gl/react-google-maps";
+import type { FeatureCollection, Point } from "geojson";
+import maplibregl, { type GeoJSONSource } from "maplibre-gl";
+import { useMap } from "@vis.gl/react-google-maps";
 import { useAuth } from "@/features/auth/AuthProvider";
 import {
     markLeadRejected,
@@ -18,14 +20,10 @@ import { buildWhatsAppUrl } from "@/lib/whatsapp";
 import { getWhatsAppSentIds, markWhatsAppSent } from "@/lib/userContactState";
 
 type MapFilter = "all" | "pending" | "visited" | "rejected";
-const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY ?? "";
-const MAP_ID = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || undefined;
-
-declare global {
-    interface Window {
-        gm_authFailure?: () => void;
-    }
-}
+const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY ?? "";
+const MAP_STYLE_URL = MAPTILER_KEY
+    ? `https://api.maptiler.com/maps/streets-v2/style.json?key=${MAPTILER_KEY}`
+    : "";
 
 function todayKey() { return new Date().toISOString().slice(0, 10); }
 
@@ -35,18 +33,33 @@ function displayName(lead: MetaLeadDoc) {
 
 const REJECTION_REASONS = Object.entries(REJECTED_REASON_LABELS) as [RejectedReason, string][];
 
-function readableMapError(error: unknown) {
-    if (error instanceof Error) return error.message;
-    if (typeof error === "string") return error;
-    try {
-        return JSON.stringify(error);
-    } catch {
-        return "Error desconocido al cargar Google Maps.";
-    }
+function leadStatusValue(lead: MetaLeadDoc) {
+    if (lead.status === "visited" || lead.status === "rejected") return lead.status;
+    return "pending";
+}
+
+function buildLeadPointData(leads: MetaLeadDoc[], selectedLeadId: string | null) {
+    return {
+        type: "FeatureCollection",
+        features: leads
+            .filter((lead) => lead.location.lat !== null && lead.location.lng !== null)
+            .map((lead) => ({
+                type: "Feature",
+                geometry: {
+                    type: "Point",
+                    coordinates: [lead.location.lng!, lead.location.lat!],
+                },
+                properties: {
+                    id: lead.id,
+                    status: leadStatusValue(lead),
+                    selected: lead.id === selectedLeadId,
+                },
+            })),
+    } as FeatureCollection<Point>;
 }
 
 export default function UserMapPage() {
-    if (!API_KEY) {
+    if (!MAPTILER_KEY) {
         return (
             <div className="flex h-[calc(100dvh-72px)] items-center justify-center bg-[#f8f7ff] px-5 text-center xl:h-screen">
                 <div className="max-w-sm rounded-[24px] border border-[#e8e7fb] bg-white p-5 shadow-[0_18px_50px_rgba(16,25,54,0.12)]">
@@ -65,36 +78,7 @@ export default function UserMapPage() {
         );
     }
 
-    return <GoogleMapsShell />;
-}
-
-function GoogleMapsShell() {
-    const [apiError, setApiError] = useState<string | null>(null);
-
-    useEffect(() => {
-        const previous = window.gm_authFailure;
-        window.gm_authFailure = () => {
-            setApiError("Google rechazo la API key para este dominio. Revisa restricciones HTTP referrer, billing o Maps JavaScript API.");
-            previous?.();
-        };
-        return () => {
-            window.gm_authFailure = previous;
-        };
-    }, []);
-
-    if (apiError) {
-        return <MapConfigError message={apiError} />;
-    }
-
-    return (
-        <APIProvider
-            apiKey={API_KEY}
-            authReferrerPolicy="origin"
-            onError={(error) => setApiError(readableMapError(error))}
-        >
-            <MapPageInner />
-        </APIProvider>
-    );
+    return <MapPageInner />;
 }
 
 function MapConfigError({ message }: { message: string }) {
@@ -117,7 +101,7 @@ function MapConfigError({ message }: { message: string }) {
                 <div className="mt-3 rounded-xl border border-[#eef1f5] bg-[#fbfaff] px-3 py-2 text-left text-[11px] font-semibold text-[#66739a]">
                     <div><span className="font-black text-[#101936]">Origen:</span> {host}</div>
                     <div><span className="font-black text-[#101936]">Key pública:</span> configurada</div>
-                    <div><span className="font-black text-[#101936]">Map ID:</span> {MAP_ID ? "configurado" : "sin configurar"}</div>
+                    <div><span className="font-black text-[#101936]">Proveedor:</span> MapLibre + MapTiler</div>
                 </div>
             </div>
         </div>
@@ -127,6 +111,12 @@ function MapConfigError({ message }: { message: string }) {
 function MapPageInner() {
     const { firebaseUser } = useAuth();
     const userId = firebaseUser?.uid ?? "";
+    const mapContainerRef = useRef<HTMLDivElement | null>(null);
+    const mapRef = useRef<maplibregl.Map | null>(null);
+    const mapLoadedRef = useRef(false);
+    const centeredRef = useRef(false);
+    const leadsRef = useRef<MetaLeadDoc[]>([]);
+    const selectedLeadIdRef = useRef<string | null>(null);
 
     const [leads, setLeads] = useState<MetaLeadDoc[]>([]);
     const [loadingLeads, setLoadingLeads] = useState(true);
@@ -273,49 +263,239 @@ function MapPageInner() {
     const defaultCenter = leadsWithCoords.length > 0
         ? { lat: leadsWithCoords[0].location.lat!, lng: leadsWithCoords[0].location.lng! }
         : { lat: -23.55, lng: -46.63 };
+    const leadPointData = useMemo(
+        () => buildLeadPointData(filteredLeads, selectedLeadId),
+        [filteredLeads, selectedLeadId]
+    );
+
+    useEffect(() => {
+        leadsRef.current = filteredLeads;
+    }, [filteredLeads]);
+
+    useEffect(() => {
+        selectedLeadIdRef.current = selectedLeadId;
+    }, [selectedLeadId]);
+
+    useEffect(() => {
+        if (!mapContainerRef.current || mapRef.current) return;
+
+        const map = new maplibregl.Map({
+            container: mapContainerRef.current,
+            style: MAP_STYLE_URL,
+            center: [defaultCenter.lng, defaultCenter.lat],
+            zoom: 12,
+            attributionControl: false,
+            pitchWithRotate: false,
+            dragRotate: false,
+            touchPitch: false,
+            maxPitch: 0,
+        });
+
+        mapRef.current = map;
+        map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
+
+        map.on("load", () => {
+            mapLoadedRef.current = true;
+            map.addSource("lead-points", {
+                type: "geojson",
+                data: buildLeadPointData(leadsRef.current, selectedLeadIdRef.current),
+            });
+            map.addLayer({
+                id: "lead-shadow",
+                type: "circle",
+                source: "lead-points",
+                paint: {
+                    "circle-radius": ["case", ["==", ["get", "selected"], true], 14, 10],
+                    "circle-color": "#101936",
+                    "circle-opacity": 0.12,
+                    "circle-blur": 0.8,
+                },
+            });
+            map.addLayer({
+                id: "lead-points",
+                type: "circle",
+                source: "lead-points",
+                paint: {
+                    "circle-radius": ["case", ["==", ["get", "selected"], true], 9, 7],
+                    "circle-color": [
+                        "match",
+                        ["get", "status"],
+                        "visited",
+                        "#059669",
+                        "rejected",
+                        "#DC2626",
+                        "#F59E0B",
+                    ],
+                    "circle-stroke-color": "#FFFFFF",
+                    "circle-stroke-width": ["case", ["==", ["get", "selected"], true], 4, 2.5],
+                },
+            });
+            map.addLayer({
+                id: "lead-hit",
+                type: "circle",
+                source: "lead-points",
+                paint: {
+                    "circle-radius": 22,
+                    "circle-color": "#000000",
+                    "circle-opacity": 0,
+                },
+            });
+            map.addSource("user-location", {
+                type: "geojson",
+                data: {
+                    type: "FeatureCollection",
+                    features: [],
+                } as FeatureCollection<Point>,
+            });
+            map.addLayer({
+                id: "user-location",
+                type: "circle",
+                source: "user-location",
+                paint: {
+                    "circle-radius": 8,
+                    "circle-color": "#3B82F6",
+                    "circle-stroke-color": "#FFFFFF",
+                    "circle-stroke-width": 3,
+                    "circle-opacity": 0.95,
+                },
+            });
+            setMapReady(true);
+        });
+
+        map.on("click", (event) => {
+            const hits = map.queryRenderedFeatures(event.point, { layers: ["lead-hit"] });
+            const leadId = hits[0]?.properties?.id as string | undefined;
+            const lead = leadId ? leadsRef.current.find((item) => item.id === leadId) : null;
+
+            if (lead) {
+                setSelectedLead(lead);
+                map.easeTo({
+                    center: [lead.location.lng!, lead.location.lat!],
+                    duration: 350,
+                    essential: true,
+                });
+                return;
+            }
+
+            clearSelectedLead();
+        });
+
+        map.on("mouseenter", "lead-hit", () => {
+            map.getCanvas().style.cursor = "pointer";
+        });
+        map.on("mouseleave", "lead-hit", () => {
+            map.getCanvas().style.cursor = "";
+        });
+
+        return () => {
+            map.remove();
+            mapRef.current = null;
+            mapLoadedRef.current = false;
+        };
+        // The map instance must be created once. Data updates through source effects below.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    useEffect(() => {
+        if (!mapRef.current || !mapLoadedRef.current) return;
+        const source = mapRef.current.getSource("lead-points") as GeoJSONSource | undefined;
+        source?.setData(leadPointData);
+    }, [leadPointData]);
+
+    useEffect(() => {
+        if (!mapRef.current || !mapLoadedRef.current) return;
+        const source = mapRef.current.getSource("user-location") as GeoJSONSource | undefined;
+        source?.setData({
+            type: "FeatureCollection",
+            features: userLocation
+                ? [{
+                    type: "Feature",
+                    geometry: { type: "Point", coordinates: [userLocation.lng, userLocation.lat] },
+                    properties: {},
+                }]
+                : [],
+        } as FeatureCollection<Point>);
+
+        if (userLocation && !centeredRef.current) {
+            centeredRef.current = true;
+            mapRef.current.easeTo({
+                center: [userLocation.lng, userLocation.lat],
+                zoom: 15,
+                duration: 250,
+                essential: true,
+            });
+        }
+    }, [userLocation]);
+
+    const fitMapBounds = useCallback(() => {
+        const map = mapRef.current;
+        if (!map || filteredLeads.length === 0) return;
+        const bounds = new maplibregl.LngLatBounds();
+        filteredLeads.forEach((lead) => {
+            const lat = lead.location.lat;
+            const lng = lead.location.lng;
+            if (typeof lat === "number" && typeof lng === "number") {
+                bounds.extend([lng, lat]);
+            }
+        });
+        map.fitBounds(bounds, {
+            padding: { top: 70, bottom: 220, left: 24, right: 88 },
+            maxZoom: 15,
+            duration: 500,
+            essential: true,
+        });
+    }, [filteredLeads]);
+
+    const goToUserLocation = useCallback(() => {
+        locate();
+        if (!mapRef.current || !userLocation) return;
+        mapRef.current.easeTo({
+            center: [userLocation.lng, userLocation.lat],
+            zoom: 15,
+            duration: 400,
+            essential: true,
+        });
+    }, [userLocation]);
+
+    const zoomMap = useCallback((delta: number) => {
+        const map = mapRef.current;
+        if (!map) return;
+        map.easeTo({
+            zoom: map.getZoom() + delta,
+            duration: 220,
+            essential: true,
+        });
+    }, []);
 
     return (
         <div className="relative h-[calc(100dvh-72px)] overscroll-none xl:h-screen">
-            <Map
-                id="user-prospect-map"
-                defaultCenter={defaultCenter}
-                defaultZoom={12}
-                mapId={MAP_ID}
-                mapTypeId="roadmap"
-                renderingType={RenderingType.VECTOR}
-                reuseMaps
-                clickableIcons={false}
-                keyboardShortcuts={false}
-                disableDefaultUI
-                gestureHandling="greedy"
-                style={{ width: "100%", height: "100%" }}
-                onClick={clearSelectedLead}
-            >
-                    {filteredLeads.map((lead) => (
-                        <MapLeadMarker
-                            key={lead.id}
-                            lead={lead}
-                            selected={selectedLeadId === lead.id}
-                            onSelect={selectLead}
-                        />
-                    ))}
+            <div ref={mapContainerRef} className="h-full w-full" />
 
-                    {userLocation ? (
-                        <AdvancedMarker position={userLocation}>
-                            <div className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-blue-500 shadow-lg">
-                                <div className="h-2 w-2 rounded-full bg-white" />
-                            </div>
-                        </AdvancedMarker>
-                    ) : null}
+            <div className="pointer-events-none absolute bottom-[200px] left-3 z-10 flex flex-col gap-2">
+                <MapCtrlBtn onClick={fitMapBounds} title="Ver todos">
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3" />
+                    </svg>
+                </MapCtrlBtn>
+                <MapCtrlBtn onClick={goToUserLocation} title="Mi ubicaciÃ³n" loading={locating}>
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 2a7 7 0 0 1 7 7c0 5-7 13-7 13S5 14 5 9a7 7 0 0 1 7-7Z" /><circle cx="12" cy="9" r="2.5" />
+                    </svg>
+                </MapCtrlBtn>
+            </div>
 
-                    <MapControls
-                        leads={filteredLeads}
-                        onLocate={locate}
-                        locating={locating}
-                        userLocation={userLocation}
-                        onFirstCenter={() => setMapReady(true)}
-                    />
-            </Map>
+            <div className="absolute bottom-[200px] right-3 z-10 hidden flex-col gap-1 xl:flex">
+                <MapCtrlBtn onClick={() => zoomMap(1)} title="Acercar">
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round">
+                        <path d="M12 5v14M5 12h14" />
+                    </svg>
+                </MapCtrlBtn>
+                <MapCtrlBtn onClick={() => zoomMap(-1)} title="Alejar">
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round">
+                        <path d="M5 12h14" />
+                    </svg>
+                </MapCtrlBtn>
+            </div>
 
             {/* ── FILTER DOCK ─────────────────────────────────────────── */}
             <div className="pointer-events-none absolute right-3 top-4 z-10 flex flex-col gap-1.5">
@@ -594,34 +774,6 @@ function MapPageInner() {
         </div>
     );
 }
-
-// ── MAP CONTROLS (needs useMap hook, must be inside APIProvider+Map) ─────────
-
-const MapLeadMarker = memo(function MapLeadMarker({
-    lead,
-    selected,
-    onSelect,
-}: {
-    lead: MetaLeadDoc;
-    selected: boolean;
-    onSelect: (lead: MetaLeadDoc) => void;
-}) {
-    const position = useMemo(
-        () => ({ lat: lead.location.lat!, lng: lead.location.lng! }),
-        [lead.location.lat, lead.location.lng]
-    );
-    const handleClick = useCallback(() => onSelect(lead), [lead, onSelect]);
-
-    return (
-        <AdvancedMarker
-            position={position}
-            onClick={handleClick}
-            zIndex={selected ? 20 : lead.status === "rejected" ? 5 : 10}
-        >
-            <PinImage status={lead.status} selected={selected} />
-        </AdvancedMarker>
-    );
-});
 
 function MapControls({
     leads,
