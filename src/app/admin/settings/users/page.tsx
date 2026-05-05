@@ -865,6 +865,7 @@ function UsersTable({
                                                     <div className="mt-0.5 truncate text-[11px] font-medium text-[#98a2b3]">
                                                         {u.email || "Sin correo registrado"}
                                                     </div>
+                                                    <SharedUserPill user={u} className="mt-1" />
                                                 </div>
                                             </div>
                                         </td>
@@ -1017,6 +1018,7 @@ function UserMobileCard({
                     <Badge tone={autoEnabled ? "green" : "gray"}>
                         {autoEnabled ? "Auto ON" : "Auto OFF"}
                     </Badge>
+                    <SharedUserPill user={user} />
                 </div>
 
                 <div className="mt-2.5 flex items-center gap-2 rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 py-2">
@@ -1027,6 +1029,45 @@ function UserMobileCard({
                 </div>
             </div>
         </button>
+    );
+}
+
+function SharedUserPill({
+    user,
+    className = "",
+}: {
+    user: UserDoc;
+    className?: string;
+}) {
+    const shared = user.role === "user" ? (user.sharedWith ?? []).filter((entry) => entry.adminId) : [];
+    if (!shared.length) return null;
+
+    const visibleDots = Math.min(shared.length, 3);
+    const title = shared
+        .map((entry) => `${entry.adminName || entry.adminId}: ${entry.percentage}%`)
+        .join(" · ");
+
+    return (
+        <span
+            title={title}
+            className={[
+                "inline-flex max-w-full items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-2 py-1 text-[10px] font-black uppercase tracking-[0.04em] text-[#6d28d9]",
+                className,
+            ].join(" ")}
+        >
+            <span>Compartida</span>
+            <span className="flex -space-x-1">
+                {Array.from({ length: visibleDots }).map((_, index) => (
+                    <span
+                        key={index}
+                        className="flex h-4 w-4 items-center justify-center rounded-full border border-white bg-gradient-to-br from-[#a855f7] to-[#2563eb] text-[8px] text-white"
+                    >
+                        {index + 1}
+                    </span>
+                ))}
+            </span>
+            {shared.length > 3 ? <span>+{shared.length - 3}</span> : null}
+        </span>
     );
 }
 

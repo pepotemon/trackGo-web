@@ -1,5 +1,6 @@
 ﻿"use client";
 
+import type { CSSProperties } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { weekRangeKeysMonToSun, addDays, money } from "@/lib/date";
 import {
@@ -406,16 +407,16 @@ export default function AccountingPage() {
     const weekStatus = investment?.status ?? "draft";
     const isClosed = weekStatus === "closed";
 
-    async function toggleSubscriptionPayment(row: AccountingSummary["rows"][number]) {
+    async function toggleSubscriptionPayment(user: UserDoc) {
         if (isClosed) {
             setErr("La semana esta cerrada. Reabre la semana para editar pagos.");
             return;
         }
 
-        const user = users.find((item) => item.id === row.userId);
-        if (!user || row.billingMode !== "weekly_subscription") return;
+        if (user.billingMode !== "weekly_subscription") return;
 
-        const nextPaid = row.subscriptionPaid !== true;
+        const currentPaid = user.weeklySubscriptionWeeks?.[week.startKey]?.paid === true;
+        const nextPaid = !currentPaid;
         const amount = user.weeklySubscriptionWeeks?.[week.startKey]?.amount
             ?? user.weeklySubscriptionAmount
             ?? 0;
@@ -427,7 +428,7 @@ export default function AccountingPage() {
 
         try {
             await updateWeeklySubscriptionPayment({
-                userId: row.userId,
+                userId: user.id,
                 weekStartKey: week.startKey,
                 paid: nextPaid,
                 amount,
@@ -437,7 +438,7 @@ export default function AccountingPage() {
 
             setUsers((prev) =>
                 prev.map((item) =>
-                    item.id === row.userId
+                    item.id === user.id
                         ? {
                             ...item,
                             weeklySubscriptionWeeks: {
@@ -547,6 +548,8 @@ export default function AccountingPage() {
                     savingWeek={savingWeek}
                     onInvestmentSaved={setInvestment}
                     onGroupsSaved={setInvestmentGroups}
+                    onToggleSubscriptionPayment={toggleSubscriptionPayment}
+                    onPatchEvents={handlePatchEvents}
                     onError={setErr}
                     miGanancia={miGanancia}
                     isSuperAdmin={isSuperAdmin}
@@ -673,9 +676,6 @@ export default function AccountingPage() {
                                 assignments={assignments}
                                 startDate={week.startDate}
                                 endDate={week.endDate}
-                                isClosed={isClosed}
-                                onToggleSubscriptionPayment={toggleSubscriptionPayment}
-                                onPatchEvents={handlePatchEvents}
                                 miGanancia={miGanancia}
                             />
                         ) : (
@@ -687,6 +687,9 @@ export default function AccountingPage() {
                                 investmentGroups={myInvestmentGroups}
                                 useCatalogDefaults={weekOffset === 0}
                                 isClosed={isClosed || !canInvestmentEdit}
+                                events={events}
+                                onToggleSubscriptionPayment={toggleSubscriptionPayment}
+                                onPatchEvents={handlePatchEvents}
                                 onSaved={(next) => {
                                     setInvestment(next);
                                 }}
@@ -791,6 +794,8 @@ function MobileAccountingPage({
     savingWeek,
     onInvestmentSaved,
     onGroupsSaved,
+    onToggleSubscriptionPayment,
+    onPatchEvents,
     onError,
     miGanancia,
     isSuperAdmin,
@@ -820,6 +825,8 @@ function MobileAccountingPage({
     savingWeek: boolean;
     onInvestmentSaved: (investment: WeeklyInvestmentDoc) => void;
     onGroupsSaved: (groups: InvestmentGroupDoc[]) => void;
+    onToggleSubscriptionPayment: (user: UserDoc) => void;
+    onPatchEvents: (patches: { id: string; rateApplied: number; amount: number }[]) => void;
     onError: (msg: string | null) => void;
     miGanancia?: number | null;
     isSuperAdmin: boolean;
@@ -1030,6 +1037,9 @@ function MobileAccountingPage({
                                 investmentGroups={investmentGroups}
                                 useCatalogDefaults={weekOffset === 0}
                                 isClosed={isClosed || !canInvestmentEdit}
+                                events={events}
+                                onToggleSubscriptionPayment={onToggleSubscriptionPayment}
+                                onPatchEvents={onPatchEvents}
                                 onSaved={onInvestmentSaved}
                                 onGroupsSaved={onGroupsSaved}
                                 onError={onError}
@@ -1466,6 +1476,9 @@ function InvestmentContent({
     investmentGroups,
     useCatalogDefaults,
     isClosed,
+    events,
+    onToggleSubscriptionPayment,
+    onPatchEvents,
     onSaved,
     onGroupsSaved,
     onError,
@@ -1477,6 +1490,9 @@ function InvestmentContent({
     investmentGroups: InvestmentGroupDoc[];
     useCatalogDefaults: boolean;
     isClosed: boolean;
+    events: DailyEventDoc[];
+    onToggleSubscriptionPayment: (user: UserDoc) => void;
+    onPatchEvents: (patches: { id: string; rateApplied: number; amount: number }[]) => void;
     onSaved: (investment: WeeklyInvestmentDoc) => void;
     onGroupsSaved: (groups: InvestmentGroupDoc[]) => void;
     onError: (message: string | null) => void;
@@ -1487,6 +1503,7 @@ function InvestmentContent({
     const [groupOpen, setGroupOpen] = useState(false);
     const [groupDraft, setGroupDraft] = useState<GroupDraft | null>(null);
     const [deleteDraft, setDeleteDraft] = useState<GroupDraft | null>(null);
+    const [editingRatesUserId, setEditingRatesUserId] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
@@ -1531,6 +1548,10 @@ function InvestmentContent({
             ),
         0
     );
+    const perVisitUsersWithVisits = useMemo(() => {
+        const visitedUserIds = new Set(events.filter((event) => event.type === "visited").map((event) => event.userId));
+        return users.filter((user) => user.billingMode !== "weekly_subscription" && visitedUserIds.has(user.id));
+    }, [events, users]);
     const totalInvestment = Math.round((subscriptionInvestment + assigned + manualAdjustment) * 100) / 100;
     const assignedPct = totalInvestment > 0 ? Math.min(100, Math.round((assigned / totalInvestment) * 100)) : 0;
 
@@ -1748,22 +1769,33 @@ function InvestmentContent({
                         <div className="grid gap-2 xl:grid-cols-2">
                             {subscriptionRows.map((user) => {
                                 const paid = user.weeklySubscriptionWeeks?.[weekStartKey]?.paid === true;
+                                const weekAmount = user.weeklySubscriptionWeeks?.[weekStartKey]?.amount ?? subscriptionAmount(user);
+                                const weekCost = user.weeklySubscriptionWeeks?.[weekStartKey]?.cost ?? subscriptionCost(user);
                                 return (
                                     <div
                                         key={user.id}
-                                        className="flex items-center justify-between gap-3 rounded-lg border border-[#e4e7ec] bg-white px-3 py-3"
+                                        className="grid gap-3 rounded-lg border border-[#e4e7ec] bg-white px-3 py-3 sm:grid-cols-[1fr_auto] sm:items-center"
                                     >
                                         <div className="min-w-0">
                                             <div className="truncate text-[12px] font-semibold text-[#172033]">
                                                 {user.name || user.email || user.id}
                                             </div>
                                             <div className="mt-0.5 text-[11px] font-medium text-[#667085]">
-                                                Cuota {money(subscriptionAmount(user))} / costo {money(subscriptionCost(user))}
+                                                Cuota {money(weekAmount)} / costo {money(weekCost)}
                                             </div>
                                         </div>
-                                        <Badge tone={paid ? "green" : "yellow"}>
-                                            {paid ? "Pagada" : "Pendiente"}
-                                        </Badge>
+                                        <div className="flex items-center justify-between gap-2 sm:justify-end">
+                                            <Badge tone={paid ? "green" : "yellow"}>
+                                                {paid ? "Pagada" : "Pendiente"}
+                                            </Badge>
+                                            <IconButton
+                                                icon={paid ? "close" : "check"}
+                                                label={paid ? "Marcar pendiente" : "Marcar pagada"}
+                                                variant={paid ? "secondary" : "primary"}
+                                                onClick={() => onToggleSubscriptionPayment(user)}
+                                                disabled={isClosed}
+                                            />
+                                        </div>
                                     </div>
                                 );
                             })}
@@ -1771,6 +1803,50 @@ function InvestmentContent({
                     ) : (
                         <div className="rounded-lg border border-dashed border-[#d0d5dd] bg-[#f9fafb] px-3 py-6 text-center text-[12px] font-semibold text-[#667085]">
                             No hay usuarios con suscripcion semanal.
+                        </div>
+                    )}
+                </div>
+            </Card>
+
+            <Card className="overflow-hidden">
+                <CardHeader
+                    title="Tarifas por usuarios"
+                    subtitle="Ajusta los valores aplicados a visitas de la semana. La contabilidad solo lee el resultado."
+                />
+
+                <div className="border-t border-[#eef1f5] p-4">
+                    {perVisitUsersWithVisits.length ? (
+                        <div className="grid gap-2 xl:grid-cols-2">
+                            {perVisitUsersWithVisits.map((user) => {
+                                const visited = events.filter((event) => event.userId === user.id && event.type === "visited");
+                                const total = visited.reduce((sum, event) => sum + eventMoneyValue(event), 0);
+                                return (
+                                    <div
+                                        key={user.id}
+                                        className="grid gap-3 rounded-lg border border-[#e4e7ec] bg-white px-3 py-3 sm:grid-cols-[1fr_auto] sm:items-center"
+                                    >
+                                        <div className="min-w-0">
+                                            <div className="truncate text-[12px] font-semibold text-[#172033]">
+                                                {user.name || user.email || user.id}
+                                            </div>
+                                            <div className="mt-0.5 text-[11px] font-medium text-[#667085]">
+                                                {visited.length} visitas / {money(total)}
+                                            </div>
+                                        </div>
+                                        <IconButton
+                                            icon="edit"
+                                            label="Editar tarifas"
+                                            variant="primary"
+                                            onClick={() => setEditingRatesUserId(user.id)}
+                                            disabled={isClosed}
+                                        />
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ) : (
+                        <div className="rounded-lg border border-dashed border-[#d0d5dd] bg-[#f9fafb] px-3 py-6 text-center text-[12px] font-semibold text-[#667085]">
+                            No hay visitas por tarifa para ajustar esta semana.
                         </div>
                     )}
                 </div>
@@ -1895,6 +1971,19 @@ function InvestmentContent({
                     </div>
                 </div>
             </Modal>
+
+            {editingRatesUserId ? (
+                <UserEventsModal
+                    userId={editingRatesUserId}
+                    userName={users.find((user) => user.id === editingRatesUserId)?.name ?? editingRatesUserId}
+                    events={events}
+                    onClose={() => setEditingRatesUserId(null)}
+                    onSaved={(patches) => {
+                        onPatchEvents(patches);
+                        setEditingRatesUserId(null);
+                    }}
+                />
+            ) : null}
 
             <Modal
                 open={groupOpen}
@@ -2192,10 +2281,24 @@ function InvestmentGroupManageCard({
     onToggleActive: () => void;
 }) {
     const [open, setOpen] = useState(false);
+    const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
     const ref = useRef<HTMLDivElement>(null);
+    const buttonRef = useRef<HTMLButtonElement>(null);
 
     useEffect(() => {
         if (!open) return;
+        const rect = buttonRef.current?.getBoundingClientRect();
+        if (rect) {
+            const width = 176;
+            const height = 148;
+            const spaceBelow = window.innerHeight - rect.bottom;
+            const top = spaceBelow < height + 24
+                ? Math.max(12, rect.top - height - 8)
+                : rect.bottom + 8;
+            const left = Math.min(window.innerWidth - width - 12, Math.max(12, rect.right - width));
+            setMenuStyle({ left, top, width });
+        }
+
         function close(e: Event) {
             if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
         }
@@ -2226,6 +2329,7 @@ function InvestmentGroupManageCard({
                 </div>
 
                 <button
+                    ref={buttonRef}
                     type="button"
                     aria-label="Opciones del grupo"
                     title="Opciones del grupo"
@@ -2237,7 +2341,10 @@ function InvestmentGroupManageCard({
             </div>
 
             {open ? (
-                <div className="absolute right-3 top-12 z-20 w-40 overflow-hidden rounded-xl border border-[#e4e7ec] bg-white shadow-[0_18px_45px_rgba(16,25,54,0.18)]">
+                <div
+                    className="fixed z-[90] overflow-hidden rounded-xl border border-[#e4e7ec] bg-white shadow-[0_18px_45px_rgba(16,25,54,0.18)]"
+                    style={menuStyle}
+                >
                     <button
                         type="button"
                         onClick={() => { setOpen(false); onEdit(); }}
@@ -2527,9 +2634,6 @@ function DashboardContent({
     assignments,
     startDate,
     endDate,
-    isClosed,
-    onToggleSubscriptionPayment,
-    onPatchEvents,
     miGanancia,
 }: {
     summary: AccountingSummary;
@@ -2537,15 +2641,11 @@ function DashboardContent({
     assignments: AccountingAssignmentDoc[];
     startDate: Date;
     endDate: Date;
-    isClosed: boolean;
-    onToggleSubscriptionPayment: (row: AccountingSummary["rows"][number]) => void;
-    onPatchEvents: (patches: { id: string; rateApplied: number; amount: number }[]) => void;
     miGanancia?: number | null;
 }) {
     const [rankingMetric, setRankingMetric] = useState<AccountingMetric>("real");
     const [chartMetric, setChartMetric] = useState<AccountingMetric>("real");
     const [chartMode, setChartMode] = useState<ChartMode>("trend");
-    const [editingUserId, setEditingUserId] = useState<string | null>(null);
     const activeRows = useMemo(() => {
         return summary.rows.filter((row) => {
             return row.assigned > 0
@@ -2726,8 +2826,6 @@ function DashboardContent({
                             <AccountingUserMobileCard
                                 key={row.userId}
                                 row={row}
-                                isClosed={isClosed}
-                                onToggleSubscriptionPayment={onToggleSubscriptionPayment}
                             />
                         ))}
                     </div>
@@ -2742,7 +2840,6 @@ function DashboardContent({
                                     <th className="px-3 py-2.5 text-right">Bruta</th>
                                     <th className="px-3 py-2.5 text-right">Costo</th>
                                     <th className="px-3 py-2.5 text-right">Real</th>
-                                    <th className="px-3 py-2.5 text-right">Pago</th>
                                 </tr>
                             </thead>
 
@@ -2771,28 +2868,6 @@ function DashboardContent({
                                         <td className={row.real >= 0 ? "px-3 py-2.5 text-right text-[12px] font-semibold text-emerald-600" : "px-3 py-2.5 text-right text-[12px] font-semibold text-red-500"}>
                                             {money(row.real)}
                                         </td>
-                                        <td className="px-3 py-2.5 text-right">
-                                            {row.billingMode === "weekly_subscription" ? (
-                                                <Button
-                                                    onClick={() => onToggleSubscriptionPayment(row)}
-                                                    disabled={isClosed}
-                                                    className={
-                                                        row.subscriptionPaid
-                                                            ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                                                            : ""
-                                                    }
-                                                >
-                                                    {row.subscriptionPaid ? "Pagada" : "Marcar pago"}
-                                                </Button>
-                                            ) : (
-                                                <Button
-                                                    onClick={() => setEditingUserId(row.userId)}
-                                                    disabled={isClosed}
-                                                >
-                                                    Tarifas
-                                                </Button>
-                                            )}
-                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -2800,19 +2875,6 @@ function DashboardContent({
                     </div>
                 </div>
             </Card>
-
-            {editingUserId ? (
-                <UserEventsModal
-                    userId={editingUserId}
-                    userName={activeRows.find((r) => r.userId === editingUserId)?.name ?? editingUserId}
-                    events={events}
-                    onClose={() => setEditingUserId(null)}
-                    onSaved={(patches) => {
-                        onPatchEvents(patches);
-                        setEditingUserId(null);
-                    }}
-                />
-            ) : null}
         </div>
     );
 }
@@ -3195,12 +3257,8 @@ function Metric({
 
 function AccountingUserMobileCard({
     row,
-    isClosed,
-    onToggleSubscriptionPayment,
 }: {
     row: AccountingSummary["rows"][number];
-    isClosed: boolean;
-    onToggleSubscriptionPayment: (row: AccountingSummary["rows"][number]) => void;
 }) {
     return (
         <div className="px-3 py-3 sm:px-4">
@@ -3251,20 +3309,6 @@ function AccountingUserMobileCard({
                     </div>
                 </div>
             </div>
-
-            {row.billingMode === "weekly_subscription" ? (
-                <Button
-                    onClick={() => onToggleSubscriptionPayment(row)}
-                    disabled={isClosed}
-                    className={
-                        row.subscriptionPaid
-                            ? "mt-3 w-full border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                            : "mt-3 w-full"
-                    }
-                >
-                    {row.subscriptionPaid ? "Pagada" : "Marcar pago"}
-                </Button>
-            ) : null}
         </div>
     );
 }

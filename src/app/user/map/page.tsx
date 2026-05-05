@@ -29,6 +29,25 @@ function displayName(lead: MetaLeadDoc) {
 const REJECTION_REASONS = Object.entries(REJECTED_REASON_LABELS) as [RejectedReason, string][];
 
 export default function UserMapPage() {
+    if (!API_KEY) {
+        return (
+            <div className="flex h-[calc(100dvh-72px)] items-center justify-center bg-[#f8f7ff] px-5 text-center xl:h-screen">
+                <div className="max-w-sm rounded-[24px] border border-[#e8e7fb] bg-white p-5 shadow-[0_18px_50px_rgba(16,25,54,0.12)]">
+                    <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-[18px] bg-violet-50 text-[#7c3aed]">
+                        <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M9 18 3 21V6l6-3 6 3 6-3v15l-6 3-6-3Z" />
+                            <path d="M9 3v15M15 6v15" />
+                        </svg>
+                    </div>
+                    <h1 className="text-[16px] font-black text-[#101936]">Mapa sin configurar</h1>
+                    <p className="mt-2 text-[12px] font-semibold leading-relaxed text-[#66739a]">
+                        Falta la variable pública de Google Maps en este entorno.
+                    </p>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <APIProvider apiKey={API_KEY}>
             <MapPageInner />
