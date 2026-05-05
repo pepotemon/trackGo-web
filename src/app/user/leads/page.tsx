@@ -635,6 +635,10 @@ function LeadCard({
     const isVisited = lead.status === "visited";
     const isRejected = lead.status === "rejected";
     const needsData = lead.verificationStatus === "pending_review" && (!lead.location?.lat || !lead.location?.mapsUrl || !lead.name);
+    const canChat = isPending && Boolean(lead.takenFromIncompleteAt);
+    const userSeenAt = Math.max(lead.userChatLastSeenMessageAt ?? 0, lead.userChatSeenAt ?? 0);
+    const hasUnreadChat = canChat && Boolean((lead.lastInboundMessageAt ?? 0) > userSeenAt);
+    const unreadChatCount = hasUnreadChat ? Math.max(1, lead.userUnreadMessageCount ?? 0) : 0;
 
     return (
         <div className={[
@@ -732,13 +736,20 @@ function LeadCard({
 
                     {isPending ? (
                         <div className="flex gap-1.5">
-                            {needsData ? (
-                                <Link
-                                    href={`/user/chat/${lead.id}`}
-                                    className="flex h-7 items-center rounded-[10px] border border-violet-200 bg-violet-50 px-2.5 text-[10px] font-black text-[#7C3AED] shadow-sm transition active:bg-violet-100"
-                                >
-                                    Chatear
-                                </Link>
+                            {canChat ? (
+                                <div className="relative">
+                                    <Link
+                                        href={`/user/chat/${lead.id}`}
+                                        className="flex h-7 items-center rounded-[10px] border border-violet-200 bg-violet-50 px-2.5 text-[10px] font-black text-[#7C3AED] shadow-sm transition active:bg-violet-100"
+                                    >
+                                        Chatear
+                                    </Link>
+                                    {unreadChatCount > 0 ? (
+                                        <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full border border-white bg-[#EF4444] px-1 text-[9px] font-black leading-none text-white shadow-[0_4px_12px_rgba(239,68,68,0.28)]">
+                                            {unreadChatCount > 9 ? "9+" : unreadChatCount}
+                                        </span>
+                                    ) : null}
+                                </div>
                             ) : null}
                             <button
                                 type="button"

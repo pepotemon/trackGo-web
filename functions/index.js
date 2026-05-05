@@ -234,9 +234,16 @@ async function assertCanSendManualMessage({ uid, user, clientId }) {
 
     const client = clientSnap.data() || {};
     const assignedTo = String(client.assignedTo || "").trim();
+    const takenFromIncompleteAt = Number(client.takenFromIncompleteAt || 0);
 
     if (assignedTo !== uid) {
         const err = new Error("client_not_assigned_to_user");
+        err.statusCode = 403;
+        throw err;
+    }
+
+    if (!Number.isFinite(takenFromIncompleteAt) || takenFromIncompleteAt <= 0) {
+        const err = new Error("client_chat_not_enabled");
         err.statusCode = 403;
         throw err;
     }

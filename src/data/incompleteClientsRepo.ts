@@ -290,6 +290,7 @@ export async function takeIncompleteClient(clientId: string, userId: string): Pr
             verificationStatus: "pending_review",
             leadQuality: "review",
             verificationStatusChangedAt: now,
+            takenFromIncompleteAt: now,
             updatedAt: now,
         });
     });

@@ -186,3 +186,13 @@ export async function markLeadMessagesSeen(clientId: string, lastInboundAt: numb
     });
 }
 
+export async function markUserLeadMessagesSeen(clientId: string, lastInboundAt: number) {
+    if (!clientId || !lastInboundAt) return;
+
+    await updateDoc(doc(db, "clients", clientId), {
+        userChatLastSeenMessageAt: lastInboundAt,
+        userChatSeenAt: Date.now(),
+        userUnreadMessageCount: 0,
+        updatedAt: Date.now(),
+    });
+}

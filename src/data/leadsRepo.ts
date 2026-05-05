@@ -245,10 +245,14 @@ export function normalizeLeadDoc(id: string, data: UnknownRecord): MetaLeadDoc {
             text(data.leadHistoryBucket) === "not_suitable"
                 ? (text(data.leadHistoryBucket) as LeadHistoryBucket)
                 : null,
+        takenFromIncompleteAt: toMs(data.takenFromIncompleteAt),
         lastInboundMessageAt: toMs(data.lastInboundMessageAt),
         lastInboundText: text(data.lastInboundText) || null,
         adminQueueLastSeenMessageAt: toMs(data.adminQueueLastSeenMessageAt),
         adminQueueSeenAt: toMs(data.adminQueueSeenAt),
+        userChatLastSeenMessageAt: toMs(data.userChatLastSeenMessageAt),
+        userChatSeenAt: toMs(data.userChatSeenAt),
+        userUnreadMessageCount: typeof data.userUnreadMessageCount === "number" ? data.userUnreadMessageCount : null,
         createdAt: toMs(data.createdAt),
         updatedAt: toMs(data.updatedAt),
         location: {

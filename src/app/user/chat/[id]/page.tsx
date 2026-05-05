@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { sendManualLeadMessage, subscribeLeadClient, subscribeLeadMessages } from "@/data/leadChatRepo";
+import { markUserLeadMessagesSeen, sendManualLeadMessage, subscribeLeadClient, subscribeLeadMessages } from "@/data/leadChatRepo";
 import { dddCity, extractDDD } from "@/data/incompleteClientsRepo";
 import type { LeadMessageDoc, MetaLeadDoc } from "@/types/leads";
 import { buildWhatsAppUrl } from "@/lib/whatsapp";
@@ -39,6 +39,15 @@ function groupByDay(messages: LeadMessageDoc[]) {
         seen.get(label)!.push(msg);
     }
     return groups;
+}
+
+function lastInboundAt(lead: MetaLeadDoc | null, messages: LeadMessageDoc[]) {
+    const fromMessages = messages.reduce((max, msg) => {
+        if (msg.direction !== "inbound") return max;
+        return Math.max(max, msg.createdAt ?? 0);
+    }, 0);
+
+    return Math.max(fromMessages, lead?.lastInboundMessageAt ?? 0);
 }
 
 export default function UserChatDetailPage() {
@@ -80,6 +89,17 @@ export default function UserChatDetailPage() {
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
+
+    useEffect(() => {
+        if (!clientId || loadingLead || loadingMessages || !lead) return;
+        const inboundAt = lastInboundAt(lead, messages);
+        const seenAt = Math.max(lead.userChatLastSeenMessageAt ?? 0, lead.userChatSeenAt ?? 0);
+        if (!inboundAt || inboundAt <= seenAt) return;
+
+        void markUserLeadMessagesSeen(clientId, inboundAt).catch((err) => {
+            console.error("[markUserLeadMessagesSeen]", err);
+        });
+    }, [clientId, lead, loadingLead, loadingMessages, messages]);
 
     async function handleSend() {
         const msg = text.trim();

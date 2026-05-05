@@ -1,4 +1,4 @@
-const { db } = require("../core/firebase");
+const { admin, db } = require("../core/firebase");
 const {
     cleanupExtractedText,
     safeString,
@@ -587,6 +587,7 @@ function createUpsertLeadAsClient({
                 autoCapturedAt: now,
                 lastInboundMessageAt: now,
                 lastInboundText: rawText || "",
+                userUnreadMessageCount: 0,
                 lastInboundIntent: inboundIntent,
                 waId: contactWaId || phone,
                 lastMessageId: messageId || "",
@@ -831,6 +832,9 @@ function createUpsertLeadAsClient({
             updatedAt: now,
             lastInboundMessageAt: now,
             lastInboundText: rawText || "",
+            ...(safeString(prev.assignedTo || "")
+                ? { userUnreadMessageCount: admin.firestore.FieldValue.increment(1) }
+                : {}),
             lastInboundIntent: inboundIntent,
             lastMessageId: messageId || "",
 

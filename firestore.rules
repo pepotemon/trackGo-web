@@ -377,7 +377,7 @@ service cloud.firestore {
           "rejectedReason", "rejectedReasonText", "note",
           "leadHistoryArchivedAt", "leadHistoryBucket",
           "verificationStatus", "leadQuality", "verificationStatusChangedAt",
-          "updatedAt"
+          "takenFromIncompleteAt", "updatedAt"
         ])
         && request.resource.data.assignedTo == request.auth.uid
         && request.resource.data.status == "pending"
@@ -386,6 +386,7 @@ service cloud.firestore {
         && request.resource.data.assignedAt is int
         && request.resource.data.assignedDayKey is string
         && request.resource.data.verificationStatusChangedAt is int
+        && request.resource.data.takenFromIncompleteAt is int
         && request.resource.data.updatedAt is int;
 
       // Vendor can take a not_suitable client from their coverage and move it into Prospectos.
@@ -404,6 +405,18 @@ service cloud.firestore {
         && request.resource.data.assignedAt is int
         && request.resource.data.assignedDayKey is string
         && request.resource.data.verificationStatusChangedAt is int
+        && request.resource.data.updatedAt is int;
+
+      // Vendor can mark assigned chat messages as seen.
+      allow update: if signedIn()
+        && resource.data.assignedTo == request.auth.uid
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          "userChatLastSeenMessageAt", "userChatSeenAt", "userUnreadMessageCount", "updatedAt"
+        ])
+        && request.resource.data.userChatLastSeenMessageAt is int
+        && request.resource.data.userChatSeenAt is int
+        && request.resource.data.userUnreadMessageCount is int
+        && request.resource.data.userUnreadMessageCount == 0
         && request.resource.data.updatedAt is int;
 
       allow update: if signedIn()

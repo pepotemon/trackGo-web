@@ -58,10 +58,14 @@ export type MetaLeadDoc = {
     verificationStatusChangedAt?: number | null;
     leadHistoryArchivedAt?: number | null;
     leadHistoryBucket?: LeadHistoryBucket | null;
+    takenFromIncompleteAt?: number | null;
     lastInboundMessageAt?: number | null;
     lastInboundText?: string | null;
     adminQueueLastSeenMessageAt?: number | null;
     adminQueueSeenAt?: number | null;
+    userChatLastSeenMessageAt?: number | null;
+    userChatSeenAt?: number | null;
+    userUnreadMessageCount?: number | null;
     createdAt?: number | null;
     updatedAt?: number | null;
     location: LeadLocation;
