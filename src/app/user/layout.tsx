@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { TrackGoLogo } from "@/components/brand/TrackGoLogo";
+import { PullToRefresh } from "@/components/mobile/PullToRefresh";
 
 type NavIconName = "leads" | "map" | "history" | "chat" | "logOut";
 
@@ -67,6 +68,7 @@ export default function UserLayout({ children }: { children: ReactNode }) {
 
     return (
         <div className="min-h-screen bg-[#fbfaff] text-[#172033]">
+            <PullToRefresh disabled={pathname.startsWith("/user/map")} />
             {/* ── DESKTOP SIDEBAR ─────────────────────────────────────── */}
             <aside className="fixed left-0 top-0 hidden h-screen w-[220px] flex-col border-r border-[#d9d2ff] bg-[linear-gradient(180deg,#f4f0ff_0%,#e9e4ff_48%,#fbfaff_100%)] px-3 py-4 shadow-[18px_0_55px_rgba(82,63,169,0.13)] xl:flex">
                 <div className="mb-5 flex justify-center border-b border-[#d9d2ff] px-2 pb-4">

@@ -359,7 +359,9 @@ function MapPageInner() {
                     "circle-opacity": 0.95,
                 },
             });
-            setMapReady(true);
+            if (leadsRef.current.length > 0) {
+                setMapReady(true);
+            }
         });
 
         map.on("click", (event) => {
@@ -418,12 +420,11 @@ function MapPageInner() {
 
         if (userLocation && !centeredRef.current) {
             centeredRef.current = true;
-            mapRef.current.easeTo({
+            mapRef.current.jumpTo({
                 center: [userLocation.lng, userLocation.lat],
                 zoom: 15,
-                duration: 250,
-                essential: true,
             });
+            setMapReady(true);
         }
     }, [userLocation]);
 
@@ -445,6 +446,12 @@ function MapPageInner() {
             essential: true,
         });
     }, [filteredLeads]);
+
+    useEffect(() => {
+        if (!mapRef.current || !mapLoadedRef.current || mapReady || filteredLeads.length === 0) return;
+        fitMapBounds();
+        setMapReady(true);
+    }, [filteredLeads.length, fitMapBounds, mapReady]);
 
     const goToUserLocation = useCallback(() => {
         locate();

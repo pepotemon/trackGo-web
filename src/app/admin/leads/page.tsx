@@ -14,6 +14,7 @@ import { useAdminLeadQueue } from "@/features/leads/useAdminLeadQueue";
 import { deleteLead } from "@/data/leadsRepo";
 import { useCan } from "@/features/auth/usePermissions";
 import { useAuth } from "@/features/auth/AuthProvider";
+import { phoneMatchesCoverageCodes } from "@/lib/phoneCoverage";
 import type { LeadFilters, LeadReviewStatus, MetaLeadDoc } from "@/types/leads";
 import type { UserDoc } from "@/types/users";
 import {
@@ -166,10 +167,23 @@ export default function AdminLeadsPage() {
         );
     }, [users, isSuperAdmin, profile]);
 
+    const myPhoneCodes = useMemo(() => {
+        if (isSuperAdmin || !profile) return null;
+        const codes = new Set<string>();
+        for (const user of users) {
+            if (!user.sharedWith?.some((s) => s.adminId === profile.id)) continue;
+            for (const code of user.phoneCodes ?? []) codes.add(code);
+        }
+        return codes;
+    }, [users, isSuperAdmin, profile]);
+
     const myFilteredLeads = useMemo(() => {
         if (!myUserIds) return filteredLeads;
-        return filteredLeads.filter((lead) => !lead.assignedTo || myUserIds.has(lead.assignedTo));
-    }, [filteredLeads, myUserIds]);
+        return filteredLeads.filter((lead) => {
+            if (lead.assignedTo) return myUserIds.has(lead.assignedTo);
+            return !!myPhoneCodes?.size && phoneMatchesCoverageCodes(lead.phone, myPhoneCodes);
+        });
+    }, [filteredLeads, myPhoneCodes, myUserIds]);
 
     const myUsers = useMemo(() => {
         if (!myUserIds) return users;

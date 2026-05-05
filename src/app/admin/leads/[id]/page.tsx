@@ -14,7 +14,9 @@ import { assignLeadToUser, updateLeadStatus } from "@/data/leadsRepo";
 import { LeadEditModal } from "@/features/leads/LeadEditModal";
 import { listAdminUsers } from "@/data/usersRepo";
 import { useCan } from "@/features/auth/usePermissions";
+import { useAuth } from "@/features/auth/AuthProvider";
 import { buildWhatsAppUrl } from "@/lib/whatsapp";
+import { phoneMatchesCoverageCodes } from "@/lib/phoneCoverage";
 import type { LeadChatMode, LeadMessageDoc, LeadReviewStatus, MetaLeadDoc } from "@/types/leads";
 import type { UserDoc } from "@/types/users";
 import { AppIcon, Badge, Button, Card, CardHeader, IconButton, Input, PageHeader } from "@/components/ui";
@@ -82,6 +84,7 @@ export default function LeadChatPage() {
     const params = useParams<{ id: string }>();
     const clientId = String(params.id ?? "").trim();
     const router = useRouter();
+    const { profile, isSuperAdmin } = useAuth();
     const canChat = useCan("chatView") || useCan("activityChat");
     const canEdit = useCan("leadsEdit") || useCan("activityEdit");
     const canAssign = useCan("leadsAssign");
@@ -176,6 +179,24 @@ export default function LeadChatPage() {
     const prevId = queueIndex > 0 ? mobileQueue[queueIndex - 1] : null;
     const nextId = queueIndex < mobileQueue.length - 1 ? mobileQueue[queueIndex + 1] : null;
 
+    const canOpenThisLead = useMemo(() => {
+        if (!lead || isSuperAdmin || !profile || profile.role !== "admin") return true;
+
+        const myUsers = users.filter((user) =>
+            user.sharedWith?.some((entry) => entry.adminId === profile.id)
+        );
+        const myUserIds = new Set(myUsers.map((user) => user.id));
+
+        if (lead.assignedTo) return myUserIds.has(lead.assignedTo);
+
+        const phoneCodes = new Set<string>();
+        for (const user of myUsers) {
+            for (const code of user.phoneCodes ?? []) phoneCodes.add(code);
+        }
+
+        return phoneCodes.size > 0 && phoneMatchesCoverageCodes(lead.phone, phoneCodes);
+    }, [isSuperAdmin, lead, profile, users]);
+
     function finishSwipe(clientX: number) {
         if (touchStartX === null) return;
         const delta = clientX - touchStartX;
@@ -189,6 +210,21 @@ export default function LeadChatPage() {
     const canSend = useMemo(() => {
         return canChat && mode === "human" && !!draft.trim() && !sending;
     }, [canChat, draft, mode, sending]);
+
+    if (!loadingLead && !canOpenThisLead) {
+        return (
+            <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#fef2f2]">
+                    <AppIcon name="alert" tone="red" size="lg" />
+                </div>
+                <p className="text-[16px] font-black text-[#101936]">Sin permiso</p>
+                <p className="max-w-xs text-[13px] font-semibold text-[#66739A]">
+                    Este chat no pertenece a los indicativos o vendedores asignados a tu administracion.
+                </p>
+                <Button onClick={() => router.back()}>Volver</Button>
+            </div>
+        );
+    }
 
     async function changeMode(nextMode: Exclude<LeadChatMode, "hybrid">) {
         if (!canChat) return;

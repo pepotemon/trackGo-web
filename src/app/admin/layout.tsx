@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { usePermissions } from "@/features/auth/usePermissions";
 import { TrackGoLogo } from "@/components/brand/TrackGoLogo";
+import { PullToRefresh } from "@/components/mobile/PullToRefresh";
 import type { AdminPermissions } from "@/types/users";
 
 type NavIconName =
@@ -148,6 +149,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             </aside>
 
             <div className="xl:pl-[228px]">
+                <PullToRefresh />
                 <MobileDrawer
                     open={mobileMenuOpen}
                     onClose={() => setMobileMenuOpen(false)}
