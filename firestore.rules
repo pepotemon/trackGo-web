@@ -39,6 +39,17 @@ service cloud.firestore {
         && clientDoc(clientId).data.assignedTo == request.auth.uid;
     }
 
+    function canPreviewUnassignedClient(clientId) {
+      return isUser()
+        && exists(/databases/$(database)/documents/clients/$(clientId))
+        && clientDoc(clientId).data.verificationStatus in ["pending_review", "incomplete", "not_suitable"]
+        && (
+          !("assignedTo" in clientDoc(clientId).data)
+          || clientDoc(clientId).data.assignedTo == null
+          || clientDoc(clientId).data.assignedTo == ""
+        );
+    }
+
     // -------------------------
     // Generic helpers
     // -------------------------
@@ -364,11 +375,17 @@ service cloud.firestore {
           "assignedTo", "assignedAt", "assignedDayKey",
           "status", "statusBy", "statusAt",
           "rejectedReason", "rejectedReasonText", "note",
-          "leadHistoryArchivedAt", "leadHistoryBucket", "updatedAt"
+          "leadHistoryArchivedAt", "leadHistoryBucket",
+          "verificationStatus", "leadQuality", "verificationStatusChangedAt",
+          "updatedAt"
         ])
         && request.resource.data.assignedTo == request.auth.uid
         && request.resource.data.status == "pending"
+        && request.resource.data.verificationStatus == "pending_review"
+        && request.resource.data.leadQuality == "review"
         && request.resource.data.assignedAt is int
+        && request.resource.data.assignedDayKey is string
+        && request.resource.data.verificationStatusChangedAt is int
         && request.resource.data.updatedAt is int;
 
       // Vendor can take a not_suitable client from their coverage and move it into Prospectos.
@@ -457,7 +474,9 @@ service cloud.firestore {
       // CLIENT MESSAGES
       // -------------------------
       match /messages/{messageId} {
-        allow read: if isAdmin() || isAssignedToClient(clientId);
+        allow read: if isAdmin()
+          || isAssignedToClient(clientId)
+          || canPreviewUnassignedClient(clientId);
 
         allow create, update: if isAdmin()
           && validClientMessageDoc(request.resource.data, clientId, messageId);
