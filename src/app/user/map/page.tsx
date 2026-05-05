@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { APIProvider, AdvancedMarker, Map, useMap } from "@vis.gl/react-google-maps";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { APIProvider, AdvancedMarker, Map, RenderingType, useMap } from "@vis.gl/react-google-maps";
 import { useAuth } from "@/features/auth/AuthProvider";
 import {
     markLeadRejected,
@@ -154,25 +154,32 @@ function MapPageInner() {
         return unsub;
     }, [userId]);
 
-    const leadsWithCoords = useMemo(() =>
-        leads.filter((l) => l.location.lat !== null && l.location.lng !== null),
-        [leads]
-    );
+    const { leadsWithCoords, counts } = useMemo(() => {
+        const withCoords: MetaLeadDoc[] = [];
+        const nextCounts: Record<MapFilter, number> = { all: 0, pending: 0, visited: 0, rejected: 0 };
+
+        for (const lead of leads) {
+            if (lead.location.lat === null || lead.location.lng === null) continue;
+            withCoords.push(lead);
+            nextCounts.all += 1;
+            if (!lead.status || lead.status === "pending") nextCounts.pending += 1;
+            if (lead.status === "visited") nextCounts.visited += 1;
+            if (lead.status === "rejected") nextCounts.rejected += 1;
+        }
+
+        return { leadsWithCoords: withCoords, counts: nextCounts };
+    }, [leads]);
 
     const filteredLeads = useMemo(() => {
         if (mapFilter === "all") return leadsWithCoords;
-        return leadsWithCoords.filter((l) => {
-            if (mapFilter === "pending") return !l.status || l.status === "pending";
-            return l.status === mapFilter;
-        });
+        return leadsWithCoords.filter((lead) =>
+            mapFilter === "pending" ? !lead.status || lead.status === "pending" : lead.status === mapFilter
+        );
     }, [leadsWithCoords, mapFilter]);
 
-    const counts = useMemo(() => ({
-        all: leadsWithCoords.length,
-        pending: leadsWithCoords.filter((l) => !l.status || l.status === "pending").length,
-        visited: leadsWithCoords.filter((l) => l.status === "visited").length,
-        rejected: leadsWithCoords.filter((l) => l.status === "rejected").length,
-    }), [leadsWithCoords]);
+    const selectedLeadId = selectedLead?.id ?? null;
+    const selectLead = useCallback((lead: MetaLeadDoc) => setSelectedLead(lead), []);
+    const clearSelectedLead = useCallback(() => setSelectedLead(null), []);
 
     function locate() {
         if (!navigator.geolocation) return;
@@ -270,26 +277,27 @@ function MapPageInner() {
     return (
         <div className="relative h-[calc(100dvh-72px)] overscroll-none xl:h-screen">
             <Map
+                id="user-prospect-map"
                 defaultCenter={defaultCenter}
                 defaultZoom={12}
                 mapId={MAP_ID}
                 mapTypeId="roadmap"
+                renderingType={RenderingType.VECTOR}
+                reuseMaps
+                clickableIcons={false}
+                keyboardShortcuts={false}
                 disableDefaultUI
                 gestureHandling="greedy"
                 style={{ width: "100%", height: "100%" }}
-                onClick={() => setSelectedLead(null)}
+                onClick={clearSelectedLead}
             >
                     {filteredLeads.map((lead) => (
-                        <AdvancedMarker
+                        <MapLeadMarker
                             key={lead.id}
-                            position={{ lat: lead.location.lat!, lng: lead.location.lng! }}
-                            onClick={() => setSelectedLead(lead)}
-                        >
-                            <PinImage
-                                status={lead.status}
-                                selected={selectedLead?.id === lead.id}
-                            />
-                        </AdvancedMarker>
+                            lead={lead}
+                            selected={selectedLeadId === lead.id}
+                            onSelect={selectLead}
+                        />
                     ))}
 
                     {userLocation ? (
@@ -310,7 +318,7 @@ function MapPageInner() {
             </Map>
 
             {/* ── FILTER DOCK ─────────────────────────────────────────── */}
-            <div className="absolute right-3 top-4 z-10 flex flex-col gap-1.5">
+            <div className="pointer-events-none absolute right-3 top-4 z-10 flex flex-col gap-1.5">
                 {(["all", "pending", "visited", "rejected"] as MapFilter[]).map((f) => {
                     const labels: Record<MapFilter, string> = { all: "Todos", pending: "Pend.", visited: "Visit.", rejected: "Rech." };
                     const dots: Record<MapFilter, string> = { all: "#7C3AED", pending: "#F59E0B", visited: "#059669", rejected: "#DC2626" };
@@ -321,7 +329,7 @@ function MapPageInner() {
                             type="button"
                             onClick={() => setMapFilter(f)}
                             className={[
-                                "flex items-center gap-1.5 rounded-[12px] border px-3 py-2 text-[11px] font-black shadow-lg backdrop-blur-md transition",
+                                "pointer-events-auto flex touch-manipulation items-center gap-1.5 rounded-[12px] border px-3 py-2 text-[11px] font-black shadow-lg backdrop-blur-md transition will-change-transform active:scale-[0.98]",
                                 active
                                     ? "border-[#7C3AED] bg-[#7C3AED] text-white"
                                     : "border-white/60 bg-white/90 text-[#344054] hover:border-[#7C3AED]/40",
@@ -589,6 +597,32 @@ function MapPageInner() {
 
 // ── MAP CONTROLS (needs useMap hook, must be inside APIProvider+Map) ─────────
 
+const MapLeadMarker = memo(function MapLeadMarker({
+    lead,
+    selected,
+    onSelect,
+}: {
+    lead: MetaLeadDoc;
+    selected: boolean;
+    onSelect: (lead: MetaLeadDoc) => void;
+}) {
+    const position = useMemo(
+        () => ({ lat: lead.location.lat!, lng: lead.location.lng! }),
+        [lead.location.lat, lead.location.lng]
+    );
+    const handleClick = useCallback(() => onSelect(lead), [lead, onSelect]);
+
+    return (
+        <AdvancedMarker
+            position={position}
+            onClick={handleClick}
+            zIndex={selected ? 20 : lead.status === "rejected" ? 5 : 10}
+        >
+            <PinImage status={lead.status} selected={selected} />
+        </AdvancedMarker>
+    );
+});
+
 function MapControls({
     leads,
     onLocate,
@@ -658,7 +692,7 @@ function MapControls({
     return (
         <>
             {/* Fit + locate — both platforms */}
-            <div className="absolute bottom-[200px] left-3 z-10 flex flex-col gap-2">
+            <div className="pointer-events-none absolute bottom-[200px] left-3 z-10 flex flex-col gap-2">
                 <MapCtrlBtn onClick={fitBounds} title="Ver todos">
                     <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                         <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3" />
@@ -695,7 +729,7 @@ function MapCtrlBtn({ onClick, title, loading, children }: { onClick: () => void
             onClick={onClick}
             title={title}
             disabled={loading}
-            className="flex h-10 w-10 items-center justify-center rounded-[14px] border border-white/60 bg-white/90 text-[#344054] shadow-lg backdrop-blur-md transition hover:bg-white active:bg-[#f3f0ff] disabled:opacity-60"
+            className="pointer-events-auto flex h-10 w-10 touch-manipulation items-center justify-center rounded-[14px] border border-white/60 bg-white/90 text-[#344054] shadow-lg backdrop-blur-md transition will-change-transform hover:bg-white active:scale-[0.96] active:bg-[#f3f0ff] disabled:opacity-60"
         >
             {loading ? (
                 <svg className="tg-spin h-4 w-4 text-[#7C3AED]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round">
@@ -708,7 +742,7 @@ function MapCtrlBtn({ onClick, title, loading, children }: { onClick: () => void
 
 // ── PIN IMAGE ────────────────────────────────────────────────────────────────
 
-function PinImage({ status, selected }: { status?: string; selected: boolean }) {
+const PinImage = memo(function PinImage({ status, selected }: { status?: string; selected: boolean }) {
     const base = status === "visited"
         ? "/pins/visited-pin"
         : status === "rejected"
@@ -716,7 +750,7 @@ function PinImage({ status, selected }: { status?: string; selected: boolean }) 
         : "/pins/pending-pin";
 
     return (
-        <div className={["transition-transform", selected ? "scale-150" : "scale-100"].join(" ")}>
+        <div className={["will-change-transform transition-transform duration-150", selected ? "scale-150" : "scale-100"].join(" ")}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
                 src={`${base}.png`}
@@ -724,12 +758,12 @@ function PinImage({ status, selected }: { status?: string; selected: boolean }) 
                 width={16}
                 height={16}
                 alt={status ?? "pending"}
-                className="drop-shadow-md"
+                className="pointer-events-none select-none drop-shadow-md"
                 style={{ imageRendering: "crisp-edges" }}
             />
         </div>
     );
-}
+});
 
 // ── LEAD STATUS BADGE ────────────────────────────────────────────────────────
 
