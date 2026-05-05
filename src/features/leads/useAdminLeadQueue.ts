@@ -325,7 +325,11 @@ export function useAdminLeadQueue() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filters.status, filters.city, filters.startKey, filters.endKey, filters.assignment, deferredSearch]);
 
-    async function setLeadStatus(lead: MetaLeadDoc, status: LeadReviewStatus) {
+    async function setLeadStatus(
+        lead: MetaLeadDoc,
+        status: LeadReviewStatus,
+        options?: { notSuitableReason?: string | null }
+    ) {
         setSavingId(lead.id);
         setErr(null);
 
@@ -341,7 +345,9 @@ export function useAdminLeadQueue() {
                                 ? "review"
                                 : "unknown",
                 notSuitableReason:
-                    status === "not_suitable" ? lead.notSuitableReason || "Perfil no apto" : "",
+                    status === "not_suitable"
+                        ? options?.notSuitableReason || lead.notSuitableReason || "Perfil no apto"
+                        : "",
                 verifiedAt: status === "verified" ? Date.now() : null,
             });
             setLeads((prev) => {
@@ -353,7 +359,7 @@ export function useAdminLeadQueue() {
                             verificationStatus: status,
                             notSuitableReason:
                                 status === "not_suitable"
-                                    ? item.notSuitableReason || "Perfil no apto"
+                                    ? options?.notSuitableReason || item.notSuitableReason || "Perfil no apto"
                                     : null,
                         }
                         : item

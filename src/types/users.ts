@@ -40,6 +40,8 @@ export type AdminPermissions = {
     leadsWhatsapp: boolean;
     /** Can edit a prospecto. */
     leadsEdit: boolean;
+    /** Can change queue/review status from quick actions. */
+    leadsStatusManage: boolean;
     /** Can delete a prospecto. */
     leadsDelete: boolean;
     /** Can view their own accounting (filtered to assigned users). */
@@ -73,6 +75,7 @@ export function defaultAdminPermissions(): AdminPermissions {
         leadsAssign: false,
         leadsWhatsapp: false,
         leadsEdit: false,
+        leadsStatusManage: false,
         leadsDelete: false,
         accountingView: false,
         accountingClose: false,
@@ -116,6 +119,7 @@ export function fullAdminPermissions(): AdminPermissions {
         leadsAssign: true,
         leadsWhatsapp: true,
         leadsEdit: true,
+        leadsStatusManage: true,
         leadsDelete: true,
         accountingView: true,
         accountingClose: true,

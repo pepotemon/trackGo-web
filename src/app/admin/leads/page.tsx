@@ -136,11 +136,13 @@ export default function AdminLeadsPage() {
     const canEdit = useCan("leadsEdit");
     const canDelete = useCan("leadsDelete");
     const canWhatsapp = useCan("leadsWhatsapp");
+    const canStatusManage = useCan("leadsStatusManage");
     const { profile, isSuperAdmin } = useAuth();
 
     const [coverageOpen, setCoverageOpen] = useState(false);
     const [editingLead, setEditingLead] = useState<MetaLeadDoc | null>(null);
     const [quickLead, setQuickLead] = useState<MetaLeadDoc | null>(null);
+    const [statusLead, setStatusLead] = useState<MetaLeadDoc | null>(null);
     const [viewMode, setViewMode] = useState<"day" | "week">("week");
     const [assigningLead, setAssigningLead] = useState<MetaLeadDoc | null>(null);
 
@@ -160,6 +162,7 @@ export default function AdminLeadsPage() {
         reloadUsers,
         reloadLeads,
         loadMore,
+        setLeadStatus,
         assignLead,
     } = useAdminLeadQueue();
 
@@ -486,7 +489,21 @@ export default function AdminLeadsPage() {
                     setQuickLead(null);
                     setEditingLead(lead);
                 }}
+                onManageStatus={canStatusManage ? (lead) => {
+                    setQuickLead(null);
+                    setStatusLead(lead);
+                } : undefined}
                 onDelete={handleDeleteLead}
+            />
+
+            <LeadStatusModal
+                lead={statusLead}
+                saving={statusLead ? savingId === statusLead.id : false}
+                onClose={() => setStatusLead(null)}
+                onSave={async (lead, status, notSuitableReason) => {
+                    await setLeadStatus(lead, status, { notSuitableReason });
+                    setStatusLead(null);
+                }}
             />
 
             <AssignUserModal
@@ -497,6 +514,102 @@ export default function AdminLeadsPage() {
                 saving={!!savingId}
             />
         </div>
+    );
+}
+
+function LeadStatusModal({
+    lead,
+    saving,
+    onClose,
+    onSave,
+}: {
+    lead: MetaLeadDoc | null;
+    saving: boolean;
+    onClose: () => void;
+    onSave: (lead: MetaLeadDoc, status: LeadReviewStatus, notSuitableReason?: string | null) => Promise<void>;
+}) {
+    const [status, setStatus] = useState<LeadReviewStatus>("pending_review");
+    const [reason, setReason] = useState("");
+
+    useEffect(() => {
+        if (!lead) return;
+        setStatus(lead.verificationStatus);
+        setReason(lead.notSuitableReason || "");
+    }, [lead]);
+
+    if (!lead) return null;
+
+    const needsReason = status === "not_suitable";
+
+    return (
+        <Modal
+            open={!!lead}
+            onClose={onClose}
+            title="Cambiar estado"
+            subtitle={displayName(lead)}
+            size="sm"
+        >
+            <div className="space-y-4">
+                <div className="rounded-2xl border border-[#eef0f6] bg-[#fbfcff] p-3">
+                    <div className="text-[11px] font-bold uppercase tracking-[0.06em] text-[#98a2b3]">Estado actual</div>
+                    <div className="mt-2 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                            <div className="truncate text-[13px] font-black text-[#101936]">{displayName(lead)}</div>
+                            <div className="truncate text-[12px] font-semibold text-[#66739a]">{lead.business || lead.phone}</div>
+                        </div>
+                        <Badge tone={statusTone[lead.verificationStatus]}>{statusLabel[lead.verificationStatus]}</Badge>
+                    </div>
+                </div>
+
+                <div className="grid gap-2">
+                    {STATUS_OPTIONS.map((option) => {
+                        const active = status === option.value;
+                        return (
+                            <button
+                                key={option.value}
+                                type="button"
+                                onClick={() => setStatus(option.value)}
+                                className={[
+                                    "flex items-center justify-between rounded-2xl border px-3 py-3 text-left transition",
+                                    active
+                                        ? "border-violet-200 bg-[#f5f1ff] text-[#6d28d9]"
+                                        : "border-[#e8eaf3] bg-white text-[#172033] hover:border-violet-100 hover:bg-[#fbfaff]",
+                                ].join(" ")}
+                            >
+                                <span className="text-[13px] font-black">{option.label}</span>
+                                {active ? <AppIcon name="check" tone="purple" size="sm" /> : null}
+                            </button>
+                        );
+                    })}
+                </div>
+
+                {needsReason ? (
+                    <label className="block">
+                        <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.06em] text-[#98a2b3]">Motivo</span>
+                        <textarea
+                            value={reason}
+                            onChange={(event) => setReason(event.target.value)}
+                            rows={3}
+                            placeholder="Ej: fuera de perfil, asalariado, motorista..."
+                            className="w-full resize-none rounded-2xl border border-[#e8eaf3] bg-white px-3 py-2.5 text-[13px] font-semibold text-[#172033] outline-none transition placeholder:text-[#98a2b3] focus:border-violet-300 focus:ring-4 focus:ring-violet-50"
+                        />
+                    </label>
+                ) : null}
+
+                <div className="flex justify-end gap-2 pt-1">
+                    <Button variant="ghost" onClick={onClose} disabled={saving}>
+                        Cancelar
+                    </Button>
+                    <Button
+                        variant="primary"
+                        onClick={() => onSave(lead, status, needsReason ? reason.trim() || null : null)}
+                        disabled={saving || (status === lead.verificationStatus && (!needsReason || reason.trim() === (lead.notSuitableReason || "")))}
+                    >
+                        {saving ? "Guardando..." : "Guardar"}
+                    </Button>
+                </div>
+            </div>
+        </Modal>
     );
 }
 
@@ -1405,11 +1518,13 @@ function LeadQuickActionsModal({
     lead,
     onClose,
     onEdit,
+    onManageStatus,
     onDelete,
 }: {
     lead: MetaLeadDoc | null;
     onClose: () => void;
     onEdit: (lead: MetaLeadDoc) => void;
+    onManageStatus?: (lead: MetaLeadDoc) => void;
     onDelete: (lead: MetaLeadDoc) => void;
 }) {
     const canEdit = useCan("leadsEdit");
@@ -1457,6 +1572,14 @@ function LeadQuickActionsModal({
                         icon="edit"
                         label="Editar"
                         tone="orange"
+                    />
+                ) : null}
+                {onManageStatus ? (
+                    <ActionTileButton
+                        onClick={() => onManageStatus(lead)}
+                        icon="settings"
+                        label="Estado"
+                        tone="blue"
                     />
                 ) : null}
                 {canDelete ? (

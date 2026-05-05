@@ -1745,6 +1745,7 @@ function EditUserModal({
                                         { key: "leadsAssign", label: "Asignar por cobertura y reasignar" },
                                         { key: "leadsWhatsapp", label: "Abrir WhatsApp de clientes" },
                                         { key: "leadsEdit", label: "Editar prospectos" },
+                                        { key: "leadsStatusManage", label: "Cambiar estado del prospecto" },
                                         { key: "leadsDelete", label: "Eliminar prospectos" },
                                     ] as { key: keyof AdminPermissions; label: string }[]).map(({ key, label }) => (
                                         <PermissionToggle

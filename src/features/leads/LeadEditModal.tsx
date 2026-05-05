@@ -2,16 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { updateLeadDetails } from "@/data/leadsRepo";
-import type { LeadDetailsPatch, LeadParseStatus, LeadReviewStatus, MetaLeadDoc } from "@/types/leads";
+import type { LeadDetailsPatch, LeadParseStatus, MetaLeadDoc } from "@/types/leads";
 import type { UserDoc } from "@/types/users";
 import { Button, Field, Input, Modal } from "@/components/ui";
-
-const STATUS_OPTIONS: { value: LeadReviewStatus; label: string }[] = [
-    { value: "pending_review", label: "Por revisar" },
-    { value: "incomplete", label: "Incompleto" },
-    { value: "not_suitable", label: "No apto" },
-    { value: "verified", label: "Verificado" },
-];
 
 function text(value: unknown) {
     return typeof value === "string" ? value.trim() : "";
@@ -65,13 +58,6 @@ function nextParseStatus({
     return "empty";
 }
 
-function leadQualityForStatus(status: LeadReviewStatus): MetaLeadDoc["leadQuality"] {
-    if (status === "verified") return "valid";
-    if (status === "not_suitable") return "not_suitable";
-    if (status === "pending_review") return "review";
-    return "unknown";
-}
-
 export function LeadEditModal({
     lead,
     open,
@@ -93,9 +79,7 @@ export function LeadEditModal({
     const [phone, setPhone] = useState("");
     const [mapsUrl, setMapsUrl] = useState("");
     const [address, setAddress] = useState("");
-    const [status, setStatus] = useState<LeadReviewStatus>("pending_review");
     const [assignedUserId, setAssignedUserId] = useState("");
-    const [notSuitableReason, setNotSuitableReason] = useState("");
     const [saving, setSaving] = useState(false);
     const [err, setErr] = useState<string | null>(null);
 
@@ -109,9 +93,7 @@ export function LeadEditModal({
             setPhone(lead.phone ?? "");
             setMapsUrl(lead.location.mapsUrl ?? "");
             setAddress(lead.location.address ?? "");
-            setStatus(lead.verificationStatus);
             setAssignedUserId(lead.assignedTo ?? "");
-            setNotSuitableReason(lead.notSuitableReason ?? "");
             setErr(null);
         });
     }, [lead]);
@@ -132,11 +114,6 @@ export function LeadEditModal({
             return;
         }
 
-        if (status === "not_suitable" && !notSuitableReason.trim()) {
-            setErr("Debes indicar el motivo de no apto.");
-            return;
-        }
-
         setSaving(true);
         setErr(null);
 
@@ -152,11 +129,6 @@ export function LeadEditModal({
             lng: mapsPreview.lng,
             currentLeadMapsConfirmedAt: cleanMapsUrl ? Date.now() : null,
             parseStatus: nextParseStatus({ business: cleanBusiness, mapsUrl: cleanMapsUrl }),
-            verificationStatus: status,
-            leadQuality: leadQualityForStatus(status),
-            notSuitableReason:
-                status === "not_suitable" ? notSuitableReason.trim() : "",
-            verifiedAt: status === "verified" ? Date.now() : null,
         };
 
         try {
@@ -225,37 +197,21 @@ export function LeadEditModal({
                     <Input value={address} onChange={(e) => setAddress(e.target.value)} />
                 </Field>
 
-                <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="Estado">
-                        <select
-                            value={status}
-                            onChange={(e) => setStatus(e.target.value as LeadReviewStatus)}
-                            className="h-9 w-full rounded-lg border border-[#e5e7eb] bg-white px-3 text-[12px] font-semibold text-[#52525b] outline-none"
-                        >
-                            {STATUS_OPTIONS.map((item) => (
-                                <option key={item.value} value={item.value}>
-                                    {item.label}
-                                </option>
-                            ))}
-                        </select>
-                    </Field>
-
-                    <Field label="Asignar usuario">
-                        <select
-                            value={assignedUserId}
-                            onChange={(e) => setAssignedUserId(e.target.value)}
-                            disabled={!users.length}
-                            className="h-9 w-full rounded-lg border border-[#e5e7eb] bg-white px-3 text-[12px] font-semibold text-[#52525b] outline-none disabled:bg-[#f7f7f8] disabled:text-[#9ca3af]"
-                        >
-                            <option value="">Sin asignar</option>
-                            {users.map((user) => (
-                                <option key={user.id} value={user.id}>
-                                    {user.name || user.email || "Usuario sin nombre"}
-                                </option>
-                            ))}
-                        </select>
-                    </Field>
-                </div>
+                <Field label="Asignar usuario">
+                    <select
+                        value={assignedUserId}
+                        onChange={(e) => setAssignedUserId(e.target.value)}
+                        disabled={!users.length}
+                        className="h-9 w-full rounded-lg border border-[#e5e7eb] bg-white px-3 text-[12px] font-semibold text-[#52525b] outline-none disabled:bg-[#f7f7f8] disabled:text-[#9ca3af]"
+                    >
+                        <option value="">Sin asignar</option>
+                        {users.map((user) => (
+                            <option key={user.id} value={user.id}>
+                                {user.name || user.email || "Usuario sin nombre"}
+                            </option>
+                        ))}
+                    </select>
+                </Field>
 
                 <Field label="Coordenadas">
                     <Input
@@ -268,15 +224,6 @@ export function LeadEditModal({
                         placeholder="Sin coordenadas detectadas"
                     />
                 </Field>
-
-                {status === "not_suitable" ? (
-                    <Field label="Motivo no apto">
-                        <Input
-                            value={notSuitableReason}
-                            onChange={(e) => setNotSuitableReason(e.target.value)}
-                        />
-                    </Field>
-                ) : null}
 
                 <div className="flex justify-end gap-2 border-t border-[#f0f1f2] pt-4">
                     <Button onClick={onClose} disabled={saving}>Cancelar</Button>

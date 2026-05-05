@@ -23,14 +23,8 @@ export function AssignUserModal({
     const [selectedId, setSelectedId] = useState("");
 
     useEffect(() => {
-        if (!open) {
-            setSelectedId("");
-            return;
-        }
-        const handler = () => onClose();
-        window.addEventListener("scroll", handler, { passive: true });
-        return () => window.removeEventListener("scroll", handler);
-    }, [open, onClose]);
+        if (!open) setSelectedId("");
+    }, [open]);
 
     if (!open) return null;
 
