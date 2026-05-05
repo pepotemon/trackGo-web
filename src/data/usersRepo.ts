@@ -226,26 +226,33 @@ export async function updateUserProfile(userId: string, patch: Partial<UserDoc>)
 
 export async function updateManagedUserCredentials({
     userId,
+    profileId,
     email,
+    currentEmail,
     password,
 }: {
     userId: string;
+    profileId?: string;
     email?: string;
+    currentEmail?: string;
     password?: string;
 }) {
     const updateManagedUserAuth = httpsCallable<
-        { uid: string; email?: string; password?: string },
-        { ok?: boolean; changed?: boolean; email?: string | null }
+        { uid: string; profileId?: string; email?: string; currentEmail?: string; password?: string },
+        { ok?: boolean; changed?: boolean; email?: string | null; authUid?: string | null }
     >(functions, "updateManagedUserAuth");
 
     const cleanEmail = cleanText(email).toLowerCase();
+    const cleanCurrentEmail = cleanText(currentEmail).toLowerCase();
     const cleanPassword = cleanText(password);
 
     if (!cleanEmail && !cleanPassword) return { changed: false };
 
     const result = await updateManagedUserAuth({
         uid: userId,
+        profileId: profileId || userId,
         ...(cleanEmail ? { email: cleanEmail } : {}),
+        ...(cleanCurrentEmail ? { currentEmail: cleanCurrentEmail } : {}),
         ...(cleanPassword ? { password: cleanPassword } : {}),
     });
 

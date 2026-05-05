@@ -12,6 +12,7 @@ import {
 } from "@/data/incompleteClientsRepo";
 import { assignLeadToUser } from "@/data/leadsRepo";
 import type { MetaLeadDoc } from "@/types/leads";
+import { getWhatsAppSentIds, markWhatsAppSent } from "@/lib/userContactState";
 
 type Tab = "incomplete" | "not_suitable";
 
@@ -98,12 +99,14 @@ export default function UserIncompleteClientsPage() {
             const noteMap: Record<string, string> = {};
             data.forEach((l) => { const n = getNote(l.id); if (n) noteMap[l.id] = n; });
             setNotes((prev) => ({ ...prev, ...noteMap }));
+            setWaSent((prev) => new Set([...prev, ...getWhatsAppSentIds(data.map((lead) => lead.id))]));
             setLoadingIncomplete(false);
         });
 
         setLoadingNotSuitable(true);
         const unsubNS = subscribeNotSuitableClients(phoneCodes, (data) => {
             setNotSuitable(data);
+            setWaSent((prev) => new Set([...prev, ...getWhatsAppSentIds(data.map((lead) => lead.id))]));
             setLoadingNotSuitable(false);
         });
 
@@ -181,6 +184,7 @@ export default function UserIncompleteClientsPage() {
             ? `¡Hola! Somos de Crédito Comercial. Anteriormente nos contactaste sobre la liberación de crédito para tu negocio activo. Solo queremos confirmar si todavía tienes interés. ¡Gracias y disculpa la molestia! 🙏`
             : `Olá! Somos da Crédito Comercial. Você nos contatou anteriormente sobre a liberação de crédito para o seu comércio. Gostaríamos de saber se ainda tem interesse. Obrigado e desculpe o incômodo! 🙏`;
         window.open(buildWALink(lead.phone, msg), "_blank");
+        markWhatsAppSent(lead.id);
         setWaSent((prev) => new Set(prev).add(lead.id));
     }
 

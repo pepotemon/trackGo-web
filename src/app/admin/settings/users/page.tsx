@@ -1338,8 +1338,10 @@ function EditUserModal({
         try {
             if (canManageCredentials && ((emailChanged && cleanEmail) || cleanPassword)) {
                 await updateManagedUserCredentials({
-                    userId: user.id,
+                    userId: user.authUid || user.id,
+                    profileId: user.id,
                     email: emailChanged ? cleanEmail : undefined,
+                    currentEmail: user.email,
                     password: cleanPassword || undefined,
                 });
                 if (emailChanged) patch.email = cleanEmail;

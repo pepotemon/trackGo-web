@@ -15,6 +15,7 @@ import {
     type RejectedReason,
 } from "@/types/userLeads";
 import { buildWhatsAppUrl } from "@/lib/whatsapp";
+import { getWhatsAppSentIds, markWhatsAppSent } from "@/lib/userContactState";
 
 type MapFilter = "all" | "pending" | "visited" | "rejected";
 const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY ?? "";
@@ -63,6 +64,7 @@ function MapPageInner() {
     const [loadingLeads, setLoadingLeads] = useState(true);
     const [mapFilter, setMapFilter] = useState<MapFilter>("pending");
     const [selectedLead, setSelectedLead] = useState<MetaLeadDoc | null>(null);
+    const [waSent, setWaSent] = useState<Set<string>>(new Set());
     const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
     const [locating, setLocating] = useState(false);
     const [mapReady, setMapReady] = useState(false);
@@ -78,6 +80,7 @@ function MapPageInner() {
         setLoadingLeads(true);
         const unsub = subscribeUserLeads(userId, (data) => {
             setLeads(data);
+            setWaSent((prev) => new Set([...prev, ...getWhatsAppSentIds(data.map((lead) => lead.id))]));
             setLoadingLeads(false);
         });
         return unsub;
@@ -175,12 +178,16 @@ function MapPageInner() {
         const fixedUrl = buildWhatsAppUrl(lead.phone, `Olá, ${lead.name || "tudo bem"}! Estou entrando em contato sobre seu interesse.`);
         if (fixedUrl) {
             window.open(fixedUrl, "_blank");
+            markWhatsAppSent(lead.id);
+            setWaSent((prev) => new Set(prev).add(lead.id));
             return;
         }
         const phone = lead.phone.replace(/\D/g, "");
         const br = phone.startsWith("55") ? phone : `55${phone}`;
         const msg = encodeURIComponent(`Olá, ${lead.name || "tudo bem"}! Estou entrando em contato sobre seu interesse.`);
         window.open(`https://wa.me/${br}?text=${msg}`, "_blank");
+        markWhatsAppSent(lead.id);
+        setWaSent((prev) => new Set(prev).add(lead.id));
     }
 
     function openMaps(lead: MetaLeadDoc) {
@@ -348,10 +355,14 @@ function MapPageInner() {
                                 <button
                                     type="button"
                                     onClick={() => openWhatsApp(selectedLead)}
-                                    className="flex h-9 w-9 items-center justify-center rounded-[12px] border border-emerald-200 bg-emerald-50 text-emerald-700 transition active:bg-emerald-100"
-                                    title="WhatsApp"
+                                    className={
+                                        waSent.has(selectedLead.id)
+                                            ? "flex h-9 w-9 items-center justify-center rounded-[12px] border border-emerald-300 bg-emerald-100 text-emerald-700 transition active:bg-emerald-200"
+                                            : "flex h-9 w-9 items-center justify-center rounded-[12px] border border-emerald-200 bg-emerald-50 text-emerald-700 transition active:bg-emerald-100"
+                                    }
+                                    title={waSent.has(selectedLead.id) ? "Enviado" : "WhatsApp"}
                                 >
-                                    <WAIcon />
+                                    {waSent.has(selectedLead.id) ? <WACheckIcon /> : <WAIcon />}
                                 </button>
                                 <button
                                     type="button"
@@ -690,6 +701,16 @@ function WAIcon() {
         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
             <path d="M17.47 14.38c-.28-.14-1.65-.82-1.9-.91-.26-.09-.44-.14-.63.14-.19.28-.73.91-.9 1.1-.16.18-.33.2-.61.07-.28-.14-1.18-.44-2.25-1.39-.83-.74-1.39-1.66-1.55-1.93-.16-.28-.02-.43.12-.57.12-.12.28-.32.42-.48.14-.16.18-.28.28-.46.09-.18.05-.34-.02-.48-.07-.14-.63-1.52-.86-2.08-.23-.55-.46-.47-.63-.48-.16-.01-.35-.01-.53-.01-.18 0-.48.07-.73.34-.25.27-.97.95-.97 2.31 0 1.36.99 2.67 1.13 2.86.14.18 1.96 2.99 4.75 4.2.66.28 1.18.45 1.58.58.66.21 1.27.18 1.74.11.53-.08 1.65-.68 1.88-1.33.24-.65.24-1.2.17-1.33-.07-.12-.25-.19-.53-.33Z" />
             <path d="M12.05 2.01C6.49 2.01 2 6.5 2 12.07c0 1.87.51 3.63 1.4 5.14L2 22l4.93-1.36A10.04 10.04 0 0 0 12.05 22C17.61 22 22 17.5 22 11.93 22 6.5 17.61 2.01 12.05 2.01Zm0 18.37a8.34 8.34 0 0 1-4.23-1.15l-.3-.18-3.13.86.86-3.17-.2-.32a8.35 8.35 0 0 1-1.27-4.41c0-4.61 3.72-8.36 8.3-8.36 4.57 0 8.29 3.75 8.29 8.36-.01 4.61-3.72 8.37-8.32 8.37Z" />
+        </svg>
+    );
+}
+
+function WACheckIcon() {
+    return (
+        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+            <path d="M17.47 14.38c-.28-.14-1.65-.82-1.9-.91-.26-.09-.44-.14-.63.14-.19.28-.73.91-.9 1.1-.16.18-.33.2-.61.07-.28-.14-1.18-.44-2.25-1.39-.83-.74-1.39-1.66-1.55-1.93-.16-.28-.02-.43.12-.57.12-.12.28-.32.42-.48.14-.16.18-.28.28-.46.09-.18.05-.34-.02-.48-.07-.14-.63-1.52-.86-2.08-.23-.55-.46-.47-.63-.48-.16-.01-.35-.01-.53-.01-.18 0-.48.07-.73.34-.25.27-.97.95-.97 2.31 0 1.36.99 2.67 1.13 2.86.14.18 1.96 2.99 4.75 4.2.66.28 1.18.45 1.58.58.66.21 1.27.18 1.74.11.53-.08 1.65-.68 1.88-1.33.24-.65.24-1.2.17-1.33-.07-.12-.25-.19-.53-.33Z" />
+            <path d="M12.05 2.01C6.49 2.01 2 6.5 2 12.07c0 1.87.51 3.63 1.4 5.14L2 22l4.93-1.36A10.04 10.04 0 0 0 12.05 22C17.61 22 22 17.5 22 11.93 22 6.5 17.61 2.01 12.05 2.01Zm0 18.37a8.34 8.34 0 0 1-4.23-1.15l-.3-.18-3.13.86.86-3.17-.2-.32a8.35 8.35 0 0 1-1.27-4.41c0-4.61 3.72-8.36 8.3-8.36 4.57 0 8.29 3.75 8.29 8.36-.01 4.61-3.72 8.37-8.32 8.37Z" />
+            <path d="m14.5 9-4.5 4.5-2-2" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
     );
 }

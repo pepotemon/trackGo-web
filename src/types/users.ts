@@ -141,6 +141,7 @@ export type UserSharedAdmin = {
 
 export type UserDoc = {
     id: string;
+    authUid?: string;
     name?: string;
     email?: string;
 

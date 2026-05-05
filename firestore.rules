@@ -371,6 +371,24 @@ service cloud.firestore {
         && request.resource.data.assignedAt is int
         && request.resource.data.updatedAt is int;
 
+      // Vendor can take a not_suitable client from their coverage and move it into Prospectos.
+      allow update: if isUser()
+        && resource.data.verificationStatus == "not_suitable"
+        && (resource.data.assignedTo == null || resource.data.assignedTo == "")
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          "assignedTo", "assignedAt", "assignedDayKey",
+          "status", "statusBy", "statusAt",
+          "verificationStatus", "leadQuality", "verificationStatusChangedAt", "updatedAt"
+        ])
+        && request.resource.data.assignedTo == request.auth.uid
+        && request.resource.data.status == "pending"
+        && request.resource.data.verificationStatus == "pending_review"
+        && request.resource.data.leadQuality == "review"
+        && request.resource.data.assignedAt is int
+        && request.resource.data.assignedDayKey is string
+        && request.resource.data.verificationStatusChangedAt is int
+        && request.resource.data.updatedAt is int;
+
       allow update: if signedIn()
         && resource.data.assignedTo == request.auth.uid
 

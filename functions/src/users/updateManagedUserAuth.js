@@ -27,7 +27,9 @@ exports.updateManagedUserAuth = onCall(
 
         const data = request.data || {};
         const uid = cleanString(data.uid);
+        const profileId = cleanString(data.profileId) || uid;
         const email = cleanString(data.email).toLowerCase();
+        const currentEmail = cleanString(data.currentEmail).toLowerCase();
         const password = cleanString(data.password);
 
         if (!uid) {
@@ -52,9 +54,21 @@ exports.updateManagedUserAuth = onCall(
             return { ok: true, changed: false };
         }
 
-        const authUser = await admin.auth().updateUser(uid, patch);
+        let authUid = uid;
+        try {
+            await admin.auth().getUser(authUid);
+        } catch (error) {
+            if (!currentEmail) {
+                throw error;
+            }
+            const foundUser = await admin.auth().getUserByEmail(currentEmail);
+            authUid = foundUser.uid;
+        }
+
+        const authUser = await admin.auth().updateUser(authUid, patch);
 
         const profilePatch = {
+            authUid,
             updatedAt: Date.now(),
         };
 
@@ -62,12 +76,13 @@ exports.updateManagedUserAuth = onCall(
             profilePatch.email = authUser.email || email;
         }
 
-        await db.doc(`users/${uid}`).set(profilePatch, { merge: true });
+        await db.doc(`users/${profileId}`).set(profilePatch, { merge: true });
 
         return {
             ok: true,
             changed: true,
             uid,
+            authUid,
             email: authUser.email || email || null,
         };
     }

@@ -16,6 +16,7 @@ import {
     type RejectedReason,
     type UserLeadStats,
 } from "@/types/userLeads";
+import { getWhatsAppSentIds, markWhatsAppSent } from "@/lib/userContactState";
 
 type StatusFilter = "pending" | "visited" | "rejected" | "all";
 
@@ -108,6 +109,7 @@ export default function UserLeadsPage() {
             const noteMap: Record<string, string> = {};
             data.forEach((l) => { const n = getNote(l.id); if (n) noteMap[l.id] = n; });
             setNotes((prev) => ({ ...prev, ...noteMap }));
+            setWaSent((prev) => new Set([...prev, ...getWhatsAppSentIds(data.map((lead) => lead.id))]));
             setLoading(false);
         });
         return unsub;
@@ -213,6 +215,7 @@ export default function UserLeadsPage() {
             ? `¡Buenas tardes! Somos de Crédito Comercial. Nos comunicamos para continuar con la liberación del crédito y el registro de tu negocio. ¡Quedamos atentos! 😊`
             : `Boa tarde! Somos da Crédito Comercial. Estamos entrando em contato para dar continuidade à liberação do crédito e realização do cadastro. Aguardamos seu retorno! 😊`;
         window.open(buildWALink(lead.phone, msg), "_blank");
+        markWhatsAppSent(lead.id);
         setWaSent((prev) => new Set(prev).add(lead.id));
     }
 

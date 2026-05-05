@@ -46,12 +46,17 @@ export function dddCity(ddd: string): string {
 
 export function extractDDD(phone: string): string | null {
     const digits = phone.replace(/\D/g, "");
-    // Brazil with country code: +55 XX NNNN-NNNN (≥12 digits)
-    if (digits.startsWith("55") && digits.length >= 12) return digits.slice(2, 4);
-    // Non-Brazil 3-digit country codes (Central/South America)
+    if (digits.startsWith("55")) {
+        const stripped = digits.slice(2);
+        for (const cc of INTL_COUNTRY_CODES) {
+            if (stripped.startsWith(cc)) return cc;
+        }
+    }
     for (const cc of INTL_COUNTRY_CODES) {
         if (digits.startsWith(cc)) return cc;
     }
+    // Brazil with country code: +55 XX NNNN-NNNN (≥12 digits)
+    if (digits.startsWith("55") && digits.length >= 12) return digits.slice(2, 4);
     // Brazil local format: XX NNNN-NNNN
     if (digits.length >= 10 && digits.length <= 11) return digits.slice(0, 2);
     return null;
@@ -149,9 +154,11 @@ export async function markClientNotSuitable(clientId: string): Promise<void> {
 /** Assign a not_suitable client to a vendor and reset it to pending_review so it appears in their prospectos. */
 export async function takeNotSuitableClient(clientId: string, userId: string): Promise<void> {
     const now = Date.now();
+    const dayKey = new Date(now).toISOString().slice(0, 10);
     await updateDoc(doc(db, "clients", clientId), {
         assignedTo: userId,
         assignedAt: now,
+        assignedDayKey: dayKey,
         status: "pending",
         statusBy: null,
         statusAt: null,
