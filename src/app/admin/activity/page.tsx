@@ -1262,7 +1262,7 @@ function ActivityActionSheet({
 
                             {(canActivityChat || canActivityEdit) ? (
                                 <Link
-                                    href={`/admin/leads/${row.clientId}`}
+                                    href={`/admin/leads/${row.clientId}?from=activity`}
                                     className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#f3f0ff] px-4 text-[14px] font-bold text-[#101936] transition active:bg-violet-200"
                                 >
                                     <AppIcon name={canActivityChat ? "chat" : "edit"} tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#7C3AED] ring-0" />
@@ -1454,7 +1454,7 @@ function ActivityQuickActionsModal({
                     <ActionTile href={row.mapsUrl} label="Abrir Maps" icon="map" tone="green" external />
                 ) : null}
                 {(canChat || canEdit) ? (
-                    <ActionTile href={`/admin/leads/${row.clientId}`} label={canChat && canEdit ? "Chat / Editar" : canChat ? "Chat" : "Editar"} icon={canChat ? "chat" : "edit"} tone="orange" />
+                    <ActionTile href={`/admin/leads/${row.clientId}?from=activity`} label={canChat && canEdit ? "Chat / Editar" : canChat ? "Chat" : "Editar"} icon={canChat ? "chat" : "edit"} tone="orange" />
                 ) : null}
                 {!canClientView && !canMaps && !canChat && !canEdit ? (
                     <div className="rounded-xl border border-[#e5e7eb] bg-[#fafafa] p-4 text-center text-[12px] font-semibold text-[#667085]">

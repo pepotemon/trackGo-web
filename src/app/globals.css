@@ -184,6 +184,22 @@ button {
   animation: tg-chart-fade-up 0.45s ease-out forwards;
 }
 
+@keyframes tg-chat-thread-in {
+  from {
+    opacity: 0;
+    transform: translateX(14px) scale(0.992);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.tg-chat-thread {
+  animation: tg-chat-thread-in 0.22s ease-out both;
+}
+
 @media (prefers-reduced-motion: reduce) {
 
   .tg-chart-line,
@@ -191,7 +207,8 @@ button {
   .tg-chart-point,
   .tg-chart-bar,
   .tg-chart-row,
-  .tg-chart-hbar {
+  .tg-chart-hbar,
+  .tg-chat-thread {
     animation: none;
     opacity: 1;
     stroke-dashoffset: 0;

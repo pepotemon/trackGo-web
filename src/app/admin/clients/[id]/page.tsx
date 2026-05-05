@@ -468,7 +468,7 @@ export default function ClientDetailPage() {
                             <div className="grid grid-cols-4 gap-3">
                                 {canChat ? (
                                 <Link
-                                    href={`/admin/leads/${clientId}`}
+                                    href={`/admin/leads/${clientId}?from=client`}
                                     className="flex flex-col items-center gap-2 rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] py-4 transition active:bg-[#f3f0ff]"
                                     onClick={() => setQuickActionsOpen(false)}
                                 >
@@ -528,7 +528,7 @@ export default function ClientDetailPage() {
                     actions={
                         <>
                             {canActivity ? <QuickLink href="/admin/activity" icon="activity" label="Actividad" /> : null}
-                            {canChat ? <QuickLink href={`/admin/leads/${clientId}`} icon="chat" label="Chat" /> : null}
+                            {canChat ? <QuickLink href={`/admin/leads/${clientId}?from=client`} icon="chat" label="Chat" /> : null}
                             {client?.location?.mapsUrl && canMaps ? (
                                 <QuickLink href={client.location.mapsUrl} icon="map" label="Maps" external />
                             ) : null}
@@ -624,7 +624,7 @@ export default function ClientDetailPage() {
                                         </div>
 
                                         <div className="grid grid-cols-2 gap-2 pt-1">
-                                            {canChat ? <SmallAction href={`/admin/leads/${clientId}`} icon="chat" label="Chat" /> : null}
+                                            {canChat ? <SmallAction href={`/admin/leads/${clientId}?from=client`} icon="chat" label="Chat" /> : null}
                                             {canEdit ? (
                                                 <button
                                                     type="button"

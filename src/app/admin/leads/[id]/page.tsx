@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
     markLeadMessagesSeen,
@@ -82,6 +82,7 @@ function lastInboundAt(lead: MetaLeadDoc | null, messages: LeadMessageDoc[]) {
 
 export default function LeadChatPage() {
     const params = useParams<{ id: string }>();
+    const searchParams = useSearchParams();
     const clientId = String(params.id ?? "").trim();
     const router = useRouter();
     const { profile, isSuperAdmin } = useAuth();
@@ -178,6 +179,13 @@ export default function LeadChatPage() {
     const queueIndex = mobileQueue.indexOf(clientId);
     const prevId = queueIndex > 0 ? mobileQueue[queueIndex - 1] : null;
     const nextId = queueIndex < mobileQueue.length - 1 ? mobileQueue[queueIndex + 1] : null;
+    const returnTo = useMemo(() => {
+        const from = searchParams.get("from");
+        if (from === "activity") return "/admin/activity";
+        if (from === "assignments") return "/admin/leads/assignments";
+        if (from === "client") return `/admin/clients/${clientId}`;
+        return "/admin/leads";
+    }, [clientId, searchParams]);
 
     const canOpenThisLead = useMemo(() => {
         if (!lead || isSuperAdmin || !profile || profile.role !== "admin") return true;
@@ -203,8 +211,8 @@ export default function LeadChatPage() {
         setTouchStartX(null);
 
         if (Math.abs(delta) < 70) return;
-        if (delta > 0 && prevId) router.push(`/admin/leads/${prevId}`);
-        if (delta < 0 && nextId) router.push(`/admin/leads/${nextId}`);
+        if (delta > 0 && prevId) router.push(`/admin/leads/${prevId}?from=${searchParams.get("from") ?? "leads"}`);
+        if (delta < 0 && nextId) router.push(`/admin/leads/${nextId}?from=${searchParams.get("from") ?? "leads"}`);
     }
 
     const canSend = useMemo(() => {
@@ -297,7 +305,7 @@ export default function LeadChatPage() {
                     <div className="flex items-center gap-2 px-3 py-2.5">
                         <button
                             type="button"
-                            onClick={() => router.back()}
+                            onClick={() => router.replace(returnTo)}
                             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] transition active:bg-[#f3f0ff]"
                             aria-label="Volver"
                         >
@@ -333,7 +341,7 @@ export default function LeadChatPage() {
 
                         {prevId ? (
                             <Link
-                                href={`/admin/leads/${prevId}`}
+                                href={`/admin/leads/${prevId}?from=${searchParams.get("from") ?? "leads"}`}
                                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] transition active:bg-[#f3f0ff]"
                                 aria-label="Lead anterior"
                             >
@@ -347,7 +355,7 @@ export default function LeadChatPage() {
 
                         {nextId ? (
                             <Link
-                                href={`/admin/leads/${nextId}`}
+                                href={`/admin/leads/${nextId}?from=${searchParams.get("from") ?? "leads"}`}
                                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] transition active:bg-[#f3f0ff]"
                                 aria-label="Lead siguiente"
                             >
@@ -369,7 +377,8 @@ export default function LeadChatPage() {
 
                 {/* MESSAGES AREA — scrollable */}
                 <div
-                    className="flex-1 space-y-3 overflow-y-auto bg-[radial-gradient(circle_at_top_left,#f5f3ff_0,#fbfaff_28%,#ffffff_70%)] p-4"
+                    key={clientId}
+                    className="tg-chat-thread flex-1 space-y-3 overflow-y-auto bg-[radial-gradient(circle_at_top_left,#f5f3ff_0,#fbfaff_28%,#ffffff_70%)] p-4"
                     onClick={activateHumanMode}
                     onTouchStart={(event) => setTouchStartX(event.touches[0]?.clientX ?? null)}
                     onTouchEnd={(event) => finishSwipe(event.changedTouches[0]?.clientX ?? 0)}

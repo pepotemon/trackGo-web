@@ -656,7 +656,7 @@ function LeadCard({
                             <button
                                 type="button"
                                 onClick={onManage}
-                                className="flex h-8 items-center gap-1.5 rounded-[11px] border border-[#DDD6FE] bg-[#7C3AED] px-3 text-[11px] font-black text-white shadow-[0_8px_18px_rgba(124,58,237,0.18)] transition active:bg-[#6D28D9]"
+                                className="flex h-7 items-center rounded-[10px] border border-[#E8E7FB] bg-white px-2.5 text-[10px] font-black text-[#7C3AED] shadow-sm transition active:bg-[#f3f0ff]"
                             >
                                 Gestionar
                             </button>

@@ -361,7 +361,7 @@ function EmptyRow({ text }: { text: string }) {
 
 function RecentLeadRow({ lead, compact = false }: { lead: MetaLeadDoc; compact?: boolean }) {
     return (
-        <Link href={`/admin/leads/${lead.id}`} className={compact ? "block px-4 py-2.5 transition hover:bg-[#fafafa]" : "block px-4 py-3 transition hover:bg-[#fafafa]"}>
+        <Link href={`/admin/leads/${lead.id}?from=leads`} className={compact ? "block px-4 py-2.5 transition hover:bg-[#fafafa]" : "block px-4 py-3 transition hover:bg-[#fafafa]"}>
             <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                     <div className="truncate text-[12px] font-semibold text-[#171717]">
@@ -389,7 +389,7 @@ function RecentAssignmentRow({ log }: { log: AutoAssignLogDoc }) {
 
     return (
         <Link
-            href={log.leadId ? `/admin/leads/${log.leadId}` : "/admin/leads/assignments"}
+            href={log.leadId ? `/admin/leads/${log.leadId}?from=assignments` : "/admin/leads/assignments"}
             className="block px-4 py-3 transition hover:bg-[#fafafa]"
         >
             <div className="flex items-center justify-between gap-3">

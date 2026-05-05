@@ -737,7 +737,7 @@ function AssignmentActionSheet({
                             Ver cliente
                         </Link>
                         <Link
-                            href={`/admin/leads/${log.leadId}`}
+                            href={`/admin/leads/${log.leadId}?from=assignments`}
                             onClick={onClose}
                             className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#f3f0ff] px-4 text-[14px] font-bold text-[#101936] transition active:bg-violet-200"
                         >
@@ -906,7 +906,7 @@ function AssignmentQuickActionsModal({
             {log.leadId ? (
                 <div className="grid gap-2">
                                 <ActionTile href={`/admin/clients/${log.leadId}`} icon="users" label="Ver cliente" tone="blue" />
-                    <ActionTile href={`/admin/leads/${log.leadId}`} icon="chat" label="Chat / Editar" tone="purple" />
+                    <ActionTile href={`/admin/leads/${log.leadId}?from=assignments`} icon="chat" label="Chat / Editar" tone="purple" />
                 </div>
             ) : (
                 <div className="rounded-2xl border border-dashed border-[#d0d5dd] bg-[#f9fafb] px-4 py-6 text-center text-[12px] font-semibold text-[#667085]">

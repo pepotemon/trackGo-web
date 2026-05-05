@@ -1,17 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type PullToRefreshProps = {
     disabled?: boolean;
     onRefresh?: () => void;
 };
 
-const THRESHOLD = 82;
+const THRESHOLD = 74;
+const MAX_PULL = 116;
 
 export function PullToRefresh({ disabled = false, onRefresh }: PullToRefreshProps) {
     const [distance, setDistance] = useState(0);
     const [refreshing, setRefreshing] = useState(false);
+    const distanceRef = useRef(0);
 
     useEffect(() => {
         if (disabled) return;
@@ -19,6 +21,7 @@ export function PullToRefresh({ disabled = false, onRefresh }: PullToRefreshProp
         let startY = 0;
         let startX = 0;
         let pulling = false;
+        let startedAtTop = false;
 
         function isMobile() {
             return window.matchMedia("(max-width: 1279px)").matches;
@@ -44,10 +47,11 @@ export function PullToRefresh({ disabled = false, onRefresh }: PullToRefreshProp
             startY = touch.clientY;
             startX = touch.clientX;
             pulling = false;
+            startedAtTop = true;
         }
 
         function onTouchMove(event: TouchEvent) {
-            if (!isMobile() || window.scrollY > 0 || refreshing) return;
+            if (!isMobile() || !startedAtTop || window.scrollY > 2 || refreshing) return;
             const touch = event.touches[0];
             if (!touch) return;
 
@@ -57,20 +61,25 @@ export function PullToRefresh({ disabled = false, onRefresh }: PullToRefreshProp
 
             pulling = true;
             event.preventDefault();
-            setDistance(Math.min(THRESHOLD + 24, dy * 0.55));
+            const nextDistance = Math.min(MAX_PULL, Math.pow(dy, 0.86) * 0.82);
+            distanceRef.current = nextDistance;
+            setDistance(nextDistance);
         }
 
         function onTouchEnd() {
+            startedAtTop = false;
             if (!pulling || refreshing) {
+                distanceRef.current = 0;
                 setDistance(0);
                 return;
             }
 
-            if (distance >= THRESHOLD) {
+            if (distanceRef.current >= THRESHOLD) {
                 refresh();
                 return;
             }
 
+            distanceRef.current = 0;
             setDistance(0);
         }
 
@@ -83,23 +92,41 @@ export function PullToRefresh({ disabled = false, onRefresh }: PullToRefreshProp
             window.removeEventListener("touchmove", onTouchMove);
             window.removeEventListener("touchend", onTouchEnd);
         };
-    }, [disabled, distance, onRefresh, refreshing]);
+    }, [disabled, onRefresh, refreshing]);
 
     if (disabled || (distance <= 0 && !refreshing)) return null;
 
+    const progress = Math.min(1, distance / THRESHOLD);
+    const translate = refreshing ? 18 : distance - 58;
+    const scale = 0.72 + progress * 0.28;
+
     return (
         <div
-            className="pointer-events-none fixed left-0 right-0 top-3 z-[80] flex justify-center xl:hidden"
-            style={{ transform: `translateY(${Math.max(0, distance - 40)}px)` }}
+            className="pointer-events-none fixed left-0 right-0 top-0 z-[80] flex justify-center xl:hidden"
+            style={{
+                transform: `translateY(${translate}px)`,
+                opacity: refreshing ? 1 : Math.max(0.18, progress),
+                transition: refreshing ? "transform 180ms ease, opacity 180ms ease" : "none",
+            }}
         >
-            <div className="flex h-10 items-center gap-2 rounded-full border border-[#e8e7fb] bg-white/95 px-4 text-[11px] font-black text-[#7C3AED] shadow-[0_14px_36px_rgba(91,33,255,0.18)] backdrop-blur-md">
-                <svg className={refreshing || distance >= THRESHOLD ? "h-4 w-4 animate-spin" : "h-4 w-4"} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <div
+                className="flex h-11 w-11 items-center justify-center rounded-full border border-[#e8e7fb] bg-white/95 text-[#7C3AED] shadow-[0_14px_36px_rgba(91,33,255,0.18)] backdrop-blur-md"
+                style={{ transform: `scale(${scale})` }}
+            >
+                <svg
+                    className={refreshing || distance >= THRESHOLD ? "h-5 w-5 animate-spin" : "h-5 w-5"}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{ transform: refreshing ? undefined : `rotate(${progress * 210}deg)` }}
+                >
                     <path d="M21 12a9 9 0 1 1-3.1-6.8" />
                     <path d="M21 3v6h-6" />
                 </svg>
-                {refreshing ? "Actualizando" : distance >= THRESHOLD ? "Suelta para actualizar" : "Desliza para actualizar"}
             </div>
         </div>
     );
 }
-

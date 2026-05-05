@@ -926,7 +926,7 @@ function LeadActionSheet({
 
                 <div className="grid gap-2">
                     <Link
-                        href={`/admin/leads/${lead.id}`}
+                        href={`/admin/leads/${lead.id}?from=leads`}
                         onClick={onClose}
                         className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#f3f0ff] px-4 text-[14px] font-bold text-[#101936] transition active:bg-violet-200"
                     >
@@ -1420,7 +1420,7 @@ function LeadQuickActionsModal({
         >
             <div className="grid gap-2">
                 <ActionTile
-                    href={`/admin/leads/${lead.id}`}
+                    href={`/admin/leads/${lead.id}?from=leads`}
                     icon="chat"
                     label="Chat"
                     tone="purple"
