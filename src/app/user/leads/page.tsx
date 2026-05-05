@@ -90,6 +90,15 @@ function leadInRange(lead: MetaLeadDoc, startKey: string, endKey: string) {
     return key >= startKey && key <= endKey;
 }
 
+function isPendingLead(lead: MetaLeadDoc) {
+    return !lead.status || lead.status === "pending";
+}
+
+function leadVisibleInWorkRange(lead: MetaLeadDoc, startKey: string, endKey: string) {
+    if (isPendingLead(lead)) return true;
+    return leadInRange(lead, startKey, endKey);
+}
+
 function getNote(leadId: string): string {
     return localStorage.getItem(`lead_note_${leadId}`) ?? "";
 }
@@ -163,15 +172,15 @@ export default function UserLeadsPage() {
     }, [events]);
 
     const counts = useMemo(() => ({
-        pending: leads.filter((l) => (!l.status || l.status === "pending") && leadInRange(l, activeWeek.startKey, activeWeek.endKey)).length,
+        pending: leads.filter(isPendingLead).length,
         visited: leads.filter((l) => l.status === "visited" && leadInRange(l, activeWeek.startKey, activeWeek.endKey)).length,
         rejected: leads.filter((l) => l.status === "rejected" && leadInRange(l, activeWeek.startKey, activeWeek.endKey)).length,
-        all: leads.filter((l) => leadInRange(l, activeWeek.startKey, activeWeek.endKey)).length,
+        all: leads.filter((l) => leadVisibleInWorkRange(l, activeWeek.startKey, activeWeek.endKey)).length,
     }), [activeWeek, leads]);
 
     const visibleLeads = useMemo(() => {
-        let list = leads.filter((lead) => leadInRange(lead, activeWeek.startKey, activeWeek.endKey));
-        if (filter === "pending") list = list.filter((l) => !l.status || l.status === "pending");
+        let list = leads.filter((lead) => leadVisibleInWorkRange(lead, activeWeek.startKey, activeWeek.endKey));
+        if (filter === "pending") list = list.filter(isPendingLead);
         else if (filter === "visited") list = list.filter((l) => l.status === "visited");
         else if (filter === "rejected") list = list.filter((l) => l.status === "rejected");
 
