@@ -2,7 +2,6 @@ import {
     collection,
     doc,
     endAt,
-    limit,
     onSnapshot,
     orderBy,
     query,
@@ -115,8 +114,7 @@ function subscribeCoverageByPhonePrefixes(
                 : where("verificationStatus", "in", [...statuses]),
             orderBy("phone"),
             startAt(prefix),
-            endAt(`${prefix}\uf8ff`),
-            limit(300)
+            endAt(`${prefix}\uf8ff`)
         );
 
         const unsub = onSnapshot(
@@ -153,39 +151,12 @@ export function subscribeIncompleteClients(
         return () => {};
     }
 
-    if (phoneCodes.some((code) => INTL_COUNTRY_CODES.includes(code))) {
-        return subscribeCoverageByPhonePrefixes(
-            phoneCodes,
-            INCOMPLETE_STATUSES,
-            callback,
-            (lead) => !!lead.business && !lead.assignedTo,
-            (lead) => lead.lastInboundMessageAt ?? 0
-        );
-    }
-
-    const q = query(
-        collection(db, "clients"),
-        where("verificationStatus", "in", INCOMPLETE_STATUSES),
-        limit(300)
-    );
-
-    return onSnapshot(
-        q,
-        (snap) => {
-            const filtered = snap.docs
-                .map((d) => normalizeLeadDoc(d.id, d.data() as Record<string, unknown>))
-                .filter((lead) =>
-                    matchesCoverage(lead, phoneCodes) &&
-                    !!lead.business &&           // must have business field
-                    !lead.assignedTo             // must not be assigned to anyone
-                )
-                .sort((a, b) => (b.lastInboundMessageAt ?? 0) - (a.lastInboundMessageAt ?? 0));
-            callback(filtered);
-        },
-        (err) => {
-            console.error("[subscribeIncompleteClients]", err.message);
-            callback([]);
-        }
+    return subscribeCoverageByPhonePrefixes(
+        phoneCodes,
+        INCOMPLETE_STATUSES,
+        callback,
+        (lead) => !!lead.business && !lead.assignedTo,
+        (lead) => lead.lastInboundMessageAt ?? lead.verificationStatusChangedAt ?? lead.updatedAt ?? lead.createdAt ?? 0
     );
 }
 
@@ -202,35 +173,12 @@ export function subscribeNotSuitableClients(
         return () => {};
     }
 
-    if (phoneCodes.some((code) => INTL_COUNTRY_CODES.includes(code))) {
-        return subscribeCoverageByPhonePrefixes(
-            phoneCodes,
-            ["not_suitable"],
-            callback,
-            () => true,
-            (lead) => lead.verificationStatusChangedAt ?? lead.lastInboundMessageAt ?? 0
-        );
-    }
-
-    const q = query(
-        collection(db, "clients"),
-        where("verificationStatus", "==", "not_suitable"),
-        limit(300)
-    );
-
-    return onSnapshot(
-        q,
-        (snap) => {
-            const filtered = snap.docs
-                .map((d) => normalizeLeadDoc(d.id, d.data() as Record<string, unknown>))
-                .filter((lead) => matchesCoverage(lead, phoneCodes))
-                .sort((a, b) => (b.verificationStatusChangedAt ?? b.lastInboundMessageAt ?? 0) - (a.verificationStatusChangedAt ?? a.lastInboundMessageAt ?? 0));
-            callback(filtered);
-        },
-        (err) => {
-            console.error("[subscribeNotSuitableClients]", err.message);
-            callback([]);
-        }
+    return subscribeCoverageByPhonePrefixes(
+        phoneCodes,
+        ["not_suitable"],
+        callback,
+        () => true,
+        (lead) => lead.verificationStatusChangedAt ?? lead.lastInboundMessageAt ?? lead.updatedAt ?? lead.createdAt ?? 0
     );
 }
 

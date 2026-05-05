@@ -17,6 +17,7 @@ import { getWhatsAppSentIds, markWhatsAppSent } from "@/lib/userContactState";
 import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
 
 type Tab = "incomplete" | "not_suitable";
+type RangePreset = "all" | "today" | "week" | "month" | "custom";
 
 const SPANISH_3DIGIT_CC = ["507","502","503","504","505","506","509","593","591","595","598"];
 const SPANISH_PHONE_PREFIXES = [...SPANISH_3DIGIT_CC, "52","54","56","57","51","58"];
@@ -74,6 +75,57 @@ function formatMessageTime(ts: number | null | undefined): string {
     return new Intl.DateTimeFormat("es", { hour: "2-digit", minute: "2-digit" }).format(new Date(ts));
 }
 
+function dateKey(date: Date) {
+    return date.toISOString().slice(0, 10);
+}
+
+function rangeFromPreset(preset: RangePreset, customStart: string, customEnd: string) {
+    const now = new Date();
+    if (preset === "all") return { startKey: "", endKey: "" };
+    if (preset === "today") {
+        const key = dateKey(now);
+        return { startKey: key, endKey: key };
+    }
+    if (preset === "week") {
+        const day = now.getDay();
+        const diff = day === 0 ? -6 : 1 - day;
+        const start = new Date(now);
+        start.setDate(now.getDate() + diff);
+        const end = new Date(start);
+        end.setDate(start.getDate() + 6);
+        return { startKey: dateKey(start), endKey: dateKey(end) };
+    }
+    if (preset === "month") {
+        const start = new Date(now.getFullYear(), now.getMonth(), 1);
+        const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        return { startKey: dateKey(start), endKey: dateKey(end) };
+    }
+    return { startKey: customStart, endKey: customEnd };
+}
+
+function leadActivityMs(lead: MetaLeadDoc) {
+    return lead.lastInboundMessageAt ?? lead.verificationStatusChangedAt ?? lead.updatedAt ?? lead.createdAt ?? null;
+}
+
+function leadInDateRange(lead: MetaLeadDoc, startKey: string, endKey: string) {
+    if (!startKey && !endKey) return true;
+    const ms = leadActivityMs(lead);
+    if (!ms) return false;
+    const key = dateKey(new Date(ms));
+    if (startKey && key < startKey) return false;
+    if (endKey && key > endKey) return false;
+    return true;
+}
+
+function rangeLabel(preset: RangePreset, startKey: string, endKey: string) {
+    if (preset === "all") return "Todo";
+    if (preset === "today") return "Hoy";
+    if (preset === "week") return "Semana";
+    if (preset === "month") return "Mes";
+    if (startKey && endKey) return `${startKey.slice(5)} - ${endKey.slice(5)}`;
+    return "Rango";
+}
+
 function reviewClientName(lead: MetaLeadDoc) {
     return lead.name || "Cliente sin nombre";
 }
@@ -110,7 +162,11 @@ export default function UserIncompleteClientsPage() {
     const [search, setSearch] = useState("");
     const [searchOpen, setSearchOpen] = useState(false);
     const [infoOpen, setInfoOpen] = useState(false);
+    const [filtersOpen, setFiltersOpen] = useState(false);
     const [dddFilter, setDddFilter] = useState("all");
+    const [rangePreset, setRangePreset] = useState<RangePreset>("all");
+    const [customStart, setCustomStart] = useState("");
+    const [customEnd, setCustomEnd] = useState("");
     const [toast, setToast] = useState("");
 
     // modals
@@ -172,18 +228,29 @@ export default function UserIncompleteClientsPage() {
 
     const activeList = tab === "incomplete" ? incomplete : notSuitable;
     const loading = tab === "incomplete" ? loadingIncomplete : loadingNotSuitable;
+    const { startKey, endKey } = useMemo(
+        () => rangeFromPreset(rangePreset, customStart, customEnd),
+        [customEnd, customStart, rangePreset]
+    );
 
     const activeDdds = useMemo(() => {
         const seen = new Set<string>();
-        activeList.forEach((l) => { const d = extractDDD(l.phone); if (d) seen.add(d); });
+        activeList
+            .filter((lead) => leadInDateRange(lead, startKey, endKey))
+            .forEach((l) => { const d = extractDDD(l.phone); if (d) seen.add(d); });
         return [...seen].sort();
-    }, [activeList]);
+    }, [activeList, endKey, startKey]);
 
     // reset ddd filter when switching tabs
     useEffect(() => { setDddFilter("all"); }, [tab]);
+    useEffect(() => {
+        if (dddFilter !== "all" && !activeDdds.includes(dddFilter)) {
+            setDddFilter("all");
+        }
+    }, [activeDdds, dddFilter]);
 
     const visible = useMemo(() => {
-        let list = activeList;
+        let list = activeList.filter((lead) => leadInDateRange(lead, startKey, endKey));
         if (dddFilter !== "all") list = list.filter((l) => extractDDD(l.phone) === dddFilter);
         if (search.trim()) {
             const q = norm(search.trim());
@@ -193,7 +260,7 @@ export default function UserIncompleteClientsPage() {
             );
         }
         return list;
-    }, [activeList, dddFilter, search]);
+    }, [activeList, dddFilter, endKey, search, startKey]);
 
     // ── actions ───────────────────────────────────────────────────────────────
 
@@ -222,6 +289,7 @@ export default function UserIncompleteClientsPage() {
     }
     useBackButtonDismiss(searchOpen, () => setSearchOpen(false));
     useBackButtonDismiss(infoOpen, () => setInfoOpen(false));
+    useBackButtonDismiss(filtersOpen, () => setFiltersOpen(false));
     useBackButtonDismiss(Boolean(actionType), closeAction);
 
     async function confirmNotSuitable() {
@@ -304,6 +372,17 @@ export default function UserIncompleteClientsPage() {
                         </button>
                         <button
                             type="button"
+                            onClick={() => setFiltersOpen(true)}
+                            className="relative flex h-10 w-10 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-white text-[#7C3AED] shadow-sm transition active:bg-[#f3f0ff]"
+                            aria-label="Filtros"
+                        >
+                            <FilterIcon />
+                            {rangePreset !== "all" || dddFilter !== "all" ? (
+                                <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[#7C3AED]" />
+                            ) : null}
+                        </button>
+                        <button
+                            type="button"
                             onClick={() => setSearchOpen(true)}
                             className="flex h-10 w-10 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-white shadow-sm transition active:bg-[#f3f0ff]"
                             aria-label="Buscar"
@@ -329,10 +408,10 @@ export default function UserIncompleteClientsPage() {
                 {activeDdds.length > 1 ? (
                     <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                         <FilterChip active={dddFilter === "all"} onClick={() => setDddFilter("all")}>
-                            Todos <CountPill active={dddFilter === "all"}>{activeList.length}</CountPill>
+                            Todos <CountPill active={dddFilter === "all"}>{activeList.filter((lead) => leadInDateRange(lead, startKey, endKey)).length}</CountPill>
                         </FilterChip>
                         {activeDdds.map((ddd) => {
-                            const cnt = activeList.filter((l) => extractDDD(l.phone) === ddd).length;
+                            const cnt = activeList.filter((l) => leadInDateRange(l, startKey, endKey) && extractDDD(l.phone) === ddd).length;
                             return (
                                 <FilterChip key={ddd} active={dddFilter === ddd} onClick={() => setDddFilter(ddd)}>
                                     {dddCity(ddd)} <CountPill active={dddFilter === ddd}>{cnt}</CountPill>
@@ -341,6 +420,20 @@ export default function UserIncompleteClientsPage() {
                         })}
                     </div>
                 ) : null}
+
+                <div className="mt-2 flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    <FilterChip active={rangePreset === "all"} onClick={() => setRangePreset("all")}>Todo</FilterChip>
+                    <FilterChip active={rangePreset === "today"} onClick={() => setRangePreset("today")}>Hoy</FilterChip>
+                    <FilterChip active={rangePreset === "week"} onClick={() => setRangePreset("week")}>Semana</FilterChip>
+                    <FilterChip active={rangePreset === "month"} onClick={() => setRangePreset("month")}>Mes</FilterChip>
+                    <button
+                        type="button"
+                        onClick={() => setFiltersOpen(true)}
+                        className="shrink-0 rounded-full border border-[#E8E7FB] bg-white px-3 py-1.5 text-[11px] font-black text-[#66739A] shadow-sm"
+                    >
+                        {rangeLabel(rangePreset, startKey, endKey)}
+                    </button>
+                </div>
             </div>
 
             {/* ── LIST ────────────────────────────────────────────────── */}
@@ -441,6 +534,93 @@ export default function UserIncompleteClientsPage() {
             ) : null}
 
             {/* ── NOTE MODAL ──────────────────────────────────────────── */}
+            {filtersOpen ? (
+                <BottomSheet onClose={() => setFiltersOpen(false)}>
+                    <div className="mb-4">
+                        <span className="inline-flex items-center rounded-full bg-[#f3f0ff] px-2.5 py-1 text-[10px] font-black text-[#7C3AED]">FILTROS</span>
+                        <p className="mt-2 text-[17px] font-black text-[#101936]">Filtrar incompletos</p>
+                        <p className="mt-1 text-[12px] font-semibold text-[#66739A]">
+                            Por defecto se muestran todos los clientes incompletos con negocio.
+                        </p>
+                    </div>
+
+                    <div className="space-y-4">
+                        <div>
+                            <p className="mb-2 text-[10px] font-black uppercase tracking-[0.08em] text-[#98A2B3]">Fecha</p>
+                            <div className="grid grid-cols-2 gap-2">
+                                {([
+                                    { key: "all", label: "Todo" },
+                                    { key: "today", label: "Hoy" },
+                                    { key: "week", label: "Semana" },
+                                    { key: "month", label: "Mes" },
+                                ] as { key: RangePreset; label: string }[]).map((item) => (
+                                    <button
+                                        key={item.key}
+                                        type="button"
+                                        onClick={() => setRangePreset(item.key)}
+                                        className={[
+                                            "rounded-[14px] border px-3 py-3 text-[12px] font-black transition",
+                                            rangePreset === item.key
+                                                ? "border-[#7C3AED] bg-[#7C3AED] text-white"
+                                                : "border-[#E8E7FB] bg-white text-[#66739A]",
+                                        ].join(" ")}
+                                    >
+                                        {item.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] p-3">
+                            <button
+                                type="button"
+                                onClick={() => setRangePreset("custom")}
+                                className="mb-3 text-[11px] font-black text-[#7C3AED]"
+                            >
+                                Rango personalizado
+                            </button>
+                            <div className="grid grid-cols-2 gap-2">
+                                <label className="block">
+                                    <span className="mb-1 block text-[10px] font-black uppercase tracking-[0.06em] text-[#98A2B3]">Desde</span>
+                                    <input
+                                        type="date"
+                                        value={customStart}
+                                        onChange={(e) => { setCustomStart(e.target.value); setRangePreset("custom"); }}
+                                        className="h-10 w-full rounded-[12px] border border-[#E8E7FB] bg-white px-2 text-[12px] font-bold text-[#101936] outline-none"
+                                    />
+                                </label>
+                                <label className="block">
+                                    <span className="mb-1 block text-[10px] font-black uppercase tracking-[0.06em] text-[#98A2B3]">Hasta</span>
+                                    <input
+                                        type="date"
+                                        value={customEnd}
+                                        onChange={(e) => { setCustomEnd(e.target.value); setRangePreset("custom"); }}
+                                        className="h-10 w-full rounded-[12px] border border-[#E8E7FB] bg-white px-2 text-[12px] font-bold text-[#101936] outline-none"
+                                    />
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="mt-5 flex gap-2">
+                        <button
+                            type="button"
+                            onClick={() => { setRangePreset("all"); setCustomStart(""); setCustomEnd(""); setDddFilter("all"); }}
+                            className="flex-1 rounded-[14px] border border-[#E8E7FB] py-3 text-[13px] font-black text-[#66739A]"
+                        >
+                            Limpiar
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setFiltersOpen(false)}
+                            className="flex-1 rounded-[14px] bg-[#7C3AED] py-3 text-[13px] font-black text-white"
+                        >
+                            Ver {visible.length}
+                        </button>
+                    </div>
+                </BottomSheet>
+            ) : null}
+
             {actionType === "note" && actionLead ? (
                 <BottomSheet onClose={closeAction}>
                     <p className="mb-3 text-[15px] font-black text-[#101936]">Nota · {displayName(actionLead)}</p>
@@ -797,6 +977,7 @@ function EmptyState({ tab, hasSearch, hasPhoneCodes }: { tab: Tab; hasSearch: bo
 
 const ic = { fill: "none", stroke: "currentColor", strokeLinecap: "round" as const, strokeLinejoin: "round" as const, strokeWidth: 1.8 };
 function SearchIcon() { return <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#7C3AED]" {...ic}><path d="m21 21-4.3-4.3M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16Z" /></svg>; }
+function FilterIcon() { return <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#7C3AED]" {...ic}><path d="M4 6h16M7 12h10M10 18h4" /></svg>; }
 function PhoneIcon() { return <svg viewBox="0 0 24 24" className="h-3 w-3 shrink-0" {...ic}><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.1-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.8.4 1.6.7 2.4a2 2 0 0 1-.5 2.1L8.1 9.4a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.8.3 1.6.5 2.4.7a2 2 0 0 1 1.7 2Z" /></svg>; }
 function PinIcon() { return <svg viewBox="0 0 24 24" className="h-3 w-3 shrink-0" {...ic}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1 1 18 0Z" /><circle cx="12" cy="10" r="3" {...ic} /></svg>; }
 function CheckIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M20 6 9 17l-5-5" /></svg>; }
