@@ -1788,13 +1788,14 @@ function InvestmentContent({
                                             <Badge tone={paid ? "green" : "yellow"}>
                                                 {paid ? "Pagada" : "Pendiente"}
                                             </Badge>
-                                            <IconButton
-                                                icon={paid ? "close" : "check"}
-                                                label={paid ? "Marcar pendiente" : "Marcar pagada"}
-                                                variant={paid ? "secondary" : "primary"}
+                                            <button
+                                                type="button"
                                                 onClick={() => onToggleSubscriptionPayment(user)}
                                                 disabled={isClosed}
-                                            />
+                                                className="rounded-full border border-[#e8e7fb] bg-white px-2.5 py-1 text-[10px] font-black text-[#7c3aed] transition hover:bg-[#f8f7ff] disabled:cursor-not-allowed disabled:opacity-50"
+                                            >
+                                                {paid ? "No pago" : "Pagar"}
+                                            </button>
                                         </div>
                                     </div>
                                 );
@@ -1821,26 +1822,26 @@ function InvestmentContent({
                                 const visited = events.filter((event) => event.userId === user.id && event.type === "visited");
                                 const total = visited.reduce((sum, event) => sum + eventMoneyValue(event), 0);
                                 return (
-                                    <div
+                                    <button
                                         key={user.id}
-                                        className="grid gap-3 rounded-lg border border-[#e4e7ec] bg-white px-3 py-3 sm:grid-cols-[1fr_auto] sm:items-center"
+                                        type="button"
+                                        onClick={() => setEditingRatesUserId(user.id)}
+                                        disabled={isClosed}
+                                        className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-2 rounded-lg border border-[#e4e7ec] bg-white px-3 py-2.5 text-left transition hover:bg-[#fbfaff] disabled:cursor-not-allowed disabled:opacity-60"
                                     >
-                                        <div className="min-w-0">
-                                            <div className="truncate text-[12px] font-semibold text-[#172033]">
-                                                {user.name || user.email || user.id}
-                                            </div>
-                                            <div className="mt-0.5 text-[11px] font-medium text-[#667085]">
-                                                {visited.length} visitas / {money(total)}
-                                            </div>
-                                        </div>
-                                        <IconButton
-                                            icon="edit"
-                                            label="Editar tarifas"
-                                            variant="primary"
-                                            onClick={() => setEditingRatesUserId(user.id)}
-                                            disabled={isClosed}
-                                        />
-                                    </div>
+                                        <span className="truncate text-[12px] font-semibold text-[#172033]">
+                                            {user.name || user.email || user.id}
+                                        </span>
+                                        <span className="whitespace-nowrap text-[11px] font-bold text-[#667085]">
+                                            {visited.length} visitas
+                                        </span>
+                                        <span className="whitespace-nowrap text-[11px] font-black text-[#101936]">
+                                            {money(total)}
+                                        </span>
+                                        <span className="whitespace-nowrap text-[11px] font-black text-[#7c3aed]">
+                                            Editar
+                                        </span>
+                                    </button>
                                 );
                             })}
                         </div>
@@ -2968,16 +2969,15 @@ function UserEventsModal({
                     </div>
                 ) : null}
 
-                <div className="flex flex-col-reverse gap-2 border-t border-[#eef1f5] pt-3 sm:flex-row sm:justify-end">
-                    <IconButton icon="close" label="Cancelar" onClick={onClose} disabled={saving} />
+                <div className="flex justify-end border-t border-[#eef1f5] pt-3">
                     {userEvents.length > 0 ? (
-                        <IconButton
-                            icon="check"
-                            label={saving ? "Guardando..." : "Guardar"}
+                        <Button
                             variant="primary"
                             onClick={handleSave}
                             disabled={saving}
-                        />
+                        >
+                            {saving ? "Guardando..." : "Guardar"}
+                        </Button>
                     ) : null}
                 </div>
             </div>
