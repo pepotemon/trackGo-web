@@ -16,6 +16,7 @@ import { useCan } from "@/features/auth/usePermissions";
 import { auth } from "@/lib/firebase";
 import { buildWhatsAppUrl } from "@/lib/whatsapp";
 import { money } from "@/lib/date";
+import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
 import type { DailyEventDoc } from "@/types/accounting";
 import type { LeadMessageDoc, MetaLeadDoc } from "@/types/leads";
 import type { UserDoc } from "@/types/users";
@@ -92,8 +93,12 @@ export default function ClientDetailPage() {
     const clientId = String(params.id ?? "").trim();
     const router = useRouter();
     const canActivity = useCan("actividad");
-    const canChat = useCan("chatView") || useCan("activityChat");
-    const canEdit = useCan("leadsEdit") || useCan("activityEdit");
+    const canChatView = useCan("chatView");
+    const canActivityChat = useCan("activityChat");
+    const canLeadsEdit = useCan("leadsEdit");
+    const canActivityEdit = useCan("activityEdit");
+    const canChat = canChatView || canActivityChat;
+    const canEdit = canLeadsEdit || canActivityEdit;
     const canMaps = useCan("activityMaps");
     const canWhatsapp = useCan("leadsWhatsapp");
 
@@ -111,6 +116,7 @@ export default function ClientDetailPage() {
     const [rejectText, setRejectText] = useState("");
     const [err, setErr] = useState<string | null>(null);
     const [quickActionsOpen, setQuickActionsOpen] = useState(false);
+    useBackButtonDismiss(quickActionsOpen, () => setQuickActionsOpen(false));
 
     async function refreshEvents() {
         const nextEvents = await listClientDailyEvents(clientId);

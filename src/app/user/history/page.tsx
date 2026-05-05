@@ -13,6 +13,7 @@ import {
     REJECTED_REASON_LABELS,
     type RejectedReason,
 } from "@/types/userLeads";
+import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
 
 type HistoryFilter = "all" | "visited" | "rejected";
 
@@ -220,6 +221,8 @@ export default function UserHistoryPage() {
         setRejectStep(1); setRejectReason(null); setRejectText("");
     }
     function closeAction() { setActionLead(null); setActionType(null); setSaving(false); }
+    useBackButtonDismiss(filterModalOpen, () => setFilterModalOpen(false));
+    useBackButtonDismiss(Boolean(actionType), closeAction);
 
     async function confirmVisit() {
         if (!actionLead || !userId) return;

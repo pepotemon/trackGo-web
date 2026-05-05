@@ -18,6 +18,7 @@ import {
 } from "@/types/userLeads";
 import { buildWhatsAppUrl } from "@/lib/whatsapp";
 import { getWhatsAppSentIds, markWhatsAppSent } from "@/lib/userContactState";
+import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
 
 type MapFilter = "all" | "pending" | "visited" | "rejected";
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY ?? "";
@@ -219,6 +220,7 @@ function MapPageInner() {
         setRejectText("");
     }
     function closeAction() { setActionType(null); setSaving(false); }
+    useBackButtonDismiss(Boolean(actionType), closeAction);
 
     async function confirmVisit() {
         if (!selectedLead || !userId) return;

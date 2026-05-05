@@ -17,6 +17,7 @@ import { useCan } from "@/features/auth/usePermissions";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { buildWhatsAppUrl } from "@/lib/whatsapp";
 import { phoneMatchesCoverageCodes } from "@/lib/phoneCoverage";
+import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
 import type { LeadChatMode, LeadMessageDoc, LeadReviewStatus, MetaLeadDoc } from "@/types/leads";
 import type { UserDoc } from "@/types/users";
 import { AppIcon, Badge, Button, Card, CardHeader, IconButton, Input, PageHeader } from "@/components/ui";
@@ -86,8 +87,12 @@ export default function LeadChatPage() {
     const clientId = String(params.id ?? "").trim();
     const router = useRouter();
     const { profile, isSuperAdmin } = useAuth();
-    const canChat = useCan("chatView") || useCan("activityChat");
-    const canEdit = useCan("leadsEdit") || useCan("activityEdit");
+    const canChatView = useCan("chatView");
+    const canActivityChat = useCan("activityChat");
+    const canLeadsEdit = useCan("leadsEdit");
+    const canActivityEdit = useCan("activityEdit");
+    const canChat = canChatView || canActivityChat;
+    const canEdit = canLeadsEdit || canActivityEdit;
     const canAssign = useCan("leadsAssign");
     const canMaps = useCan("activityMaps");
     const canWhatsapp = useCan("leadsWhatsapp");
@@ -105,6 +110,7 @@ export default function LeadChatPage() {
     const [err, setErr] = useState<string | null>(null);
     const [mobileQueue, setMobileQueue] = useState<string[]>([]);
     const [quickActionsOpen, setQuickActionsOpen] = useState(false);
+    useBackButtonDismiss(quickActionsOpen, () => setQuickActionsOpen(false));
     const [touchStartX, setTouchStartX] = useState<number | null>(null);
 
     useEffect(() => {

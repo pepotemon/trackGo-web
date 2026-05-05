@@ -15,6 +15,7 @@ import { deleteLead } from "@/data/leadsRepo";
 import { useCan } from "@/features/auth/usePermissions";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { phoneMatchesCoverageCodes } from "@/lib/phoneCoverage";
+import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
 import type { LeadFilters, LeadReviewStatus, MetaLeadDoc } from "@/types/leads";
 import type { UserDoc } from "@/types/users";
 import {
@@ -902,6 +903,7 @@ function LeadActionSheet({
         window.addEventListener("scroll", handler, { passive: true });
         return () => window.removeEventListener("scroll", handler);
     }, [open, onClose]);
+    useBackButtonDismiss(open, onClose);
 
     if (!open) return null;
 
@@ -1030,6 +1032,8 @@ function MobileFiltersModal({
     onResetFilters: () => void;
     activeFiltersCount: number;
 }) {
+    useBackButtonDismiss(open, onClose);
+
     if (!open) return null;
 
     return (

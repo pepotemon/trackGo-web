@@ -14,6 +14,7 @@ import { listAllAutoAssignLogsForRange, writeManualAssignLog } from "@/data/auto
 import { AssignUserModal } from "@/features/leads/AssignUserModal";
 import { dayKeyFromDate, weekRangeKeysMonToSun } from "@/lib/date";
 import { buildWhatsAppUrl } from "@/lib/whatsapp";
+import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
 import type {
     ActivityEventRow,
     ActivityEventType,
@@ -1191,6 +1192,7 @@ function ActivityActionSheet({
         window.addEventListener("scroll", handler, { passive: true });
         return () => window.removeEventListener("scroll", handler);
     }, [open, onClose]);
+    useBackButtonDismiss(open, onClose);
 
     if (!open || !row) return null;
 
@@ -1665,6 +1667,8 @@ function MobileActivityFiltersModal({
     onResetFilters: () => void;
     onApply: () => void;
 }) {
+    useBackButtonDismiss(open, onClose);
+
     if (!open) return null;
 
     return (

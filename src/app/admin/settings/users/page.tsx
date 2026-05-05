@@ -19,6 +19,7 @@ import {
 } from "@/data/usersRepo";
 import { batchUpdateWeekEventRates, countWeekVisitedEvents } from "@/data/accountingRepo";
 import { weekRangeKeysMonToSun } from "@/lib/date";
+import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
 import {
     defaultAdminPermissions,
     defaultUserPermissions,
@@ -615,6 +616,8 @@ function MobileUsersView({
     onAutoFilter: (value: AutoFilter) => void;
     onBillingFilter: (value: BillingFilter) => void;
 }) {
+    useBackButtonDismiss(filtersOpen, onToggleFilters);
+
     return (
         <div className="-mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] max-w-[100vw] bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.10),transparent_36%),linear-gradient(180deg,#fbfaff_0%,#f6f3ff_52%,#f8fafc_100%)] pb-6 text-[#101936]">
 

@@ -14,6 +14,7 @@ import {
 import { subscribeLeadMessages } from "@/data/leadChatRepo";
 import type { LeadMessageDoc, MetaLeadDoc } from "@/types/leads";
 import { getWhatsAppSentIds, markWhatsAppSent } from "@/lib/userContactState";
+import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
 
 type Tab = "incomplete" | "not_suitable";
 
@@ -219,6 +220,9 @@ export default function UserIncompleteClientsPage() {
         setPreviewError("");
         setPreviewLoading(false);
     }
+    useBackButtonDismiss(searchOpen, () => setSearchOpen(false));
+    useBackButtonDismiss(infoOpen, () => setInfoOpen(false));
+    useBackButtonDismiss(Boolean(actionType), closeAction);
 
     async function confirmNotSuitable() {
         if (!actionLead) return;

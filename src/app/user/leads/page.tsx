@@ -18,6 +18,7 @@ import {
     type UserLeadStats,
 } from "@/types/userLeads";
 import { getWhatsAppSentIds, markWhatsAppSent } from "@/lib/userContactState";
+import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
 
 type StatusFilter = "pending" | "visited" | "rejected" | "all";
 
@@ -208,6 +209,8 @@ export default function UserLeadsPage() {
         setActionType("note");
     }
     function closeAction() { setActionLead(null); setActionType(null); setSaving(false); }
+    useBackButtonDismiss(searchOpen, () => setSearchOpen(false));
+    useBackButtonDismiss(Boolean(actionType), closeAction);
 
     function saveLeadNote() {
         if (!actionLead) return;

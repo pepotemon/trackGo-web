@@ -1,4 +1,5 @@
-import { useEffect, type ReactNode } from "react";
+import { type ReactNode } from "react";
+import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
 
 export function Modal({
     open,
@@ -15,15 +16,7 @@ export function Modal({
     children: ReactNode;
     onClose: () => void;
 }) {
-    useEffect(() => {
-        if (!open) return;
-        window.history.pushState({ modal: true }, "");
-        const handlePop = () => onClose();
-        window.addEventListener("popstate", handlePop);
-        return () => {
-            window.removeEventListener("popstate", handlePop);
-        };
-    }, [open, onClose]);
+    useBackButtonDismiss(open, onClose);
 
     if (!open) return null;
 

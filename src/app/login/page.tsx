@@ -108,19 +108,20 @@ function LoginCard({
     variant?: "desktop" | "mobile";
 }) {
     const [showPass, setShowPass] = useState(false);
+    const [helpOpen, setHelpOpen] = useState(false);
     const isMobile = variant === "mobile";
 
     return (
         <div className={[
-            "w-full shrink-0 border border-[#e8e7fb] bg-white/95 shadow-[0_24px_70px_rgba(91,33,255,0.13)] backdrop-blur",
+            "w-full shrink-0 border border-[#eeeaff] bg-white/92 shadow-[0_22px_62px_rgba(91,33,255,0.10)] backdrop-blur",
             isMobile ? "max-w-[310px] rounded-[24px] px-5 pb-5 pt-6" : "max-w-[310px] rounded-2xl p-6",
         ].join(" ")}>
 
             {/* Logo centrado */}
             {isMobile ? (
                 <div className="mb-5 text-center">
-                    <h1 className="text-[20px] font-black tracking-[-0.03em] text-[#08122f]">Bienvenido de nuevo</h1>
-                    <p className="mt-2 text-[12px] font-semibold text-[#98a2b3]">Inicia sesion para continuar</p>
+                    <h1 className="text-[20px] font-black tracking-[-0.03em] text-[#172033]">Bienvenido de nuevo</h1>
+                    <p className="mt-2 text-[12px] font-semibold text-[#a0a8b8]">Inicia sesion para continuar</p>
                 </div>
             ) : (
                 <div className="mb-6 flex justify-center">
@@ -133,7 +134,7 @@ function LoginCard({
                 {/* Email */}
                 <label className="block">
                     <span className={isMobile
-                        ? "mb-1.5 block text-[12px] font-black text-[#08122f]"
+                        ? "mb-1.5 block text-[12px] font-black text-[#172033]"
                         : "mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.07em] text-[#667085]"
                     }>
                         {isMobile ? "Correo electronico" : "Email"}
@@ -153,7 +154,7 @@ function LoginCard({
                             required
                             placeholder="admin@trackgo.com"
                             className={isMobile
-                                ? "h-11 w-full rounded-[12px] border border-[#d9b8ff] bg-white/80 pl-11 pr-3 text-[14px] font-semibold text-[#172033] outline-none transition placeholder:text-[#98A2B3] focus:border-[#8b2cff] focus:ring-4 focus:ring-violet-100"
+                                ? "h-11 w-full rounded-[12px] border border-[#e3d4ff] bg-white/78 pl-11 pr-3 text-[14px] font-semibold text-[#172033] outline-none transition placeholder:text-[#a0a8b8] focus:border-[#a47cff] focus:ring-4 focus:ring-violet-50"
                                 : "h-9 w-full rounded-lg border border-[#d8ddea] bg-white pl-9 pr-3 text-[12px] font-medium text-[#172033] outline-none transition focus:border-[#7c3aed] focus:ring-2 focus:ring-violet-100"
                             }
                         />
@@ -163,7 +164,7 @@ function LoginCard({
                 {/* Contraseña */}
                 <label className="block">
                     <span className={isMobile
-                        ? "mb-1.5 block text-[12px] font-black text-[#08122f]"
+                        ? "mb-1.5 block text-[12px] font-black text-[#172033]"
                         : "mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.07em] text-[#667085]"
                     }>
                         Contraseña
@@ -183,7 +184,7 @@ function LoginCard({
                             required
                             placeholder="Tu contraseña"
                             className={isMobile
-                                ? "h-11 w-full rounded-[12px] border border-[#d9b8ff] bg-white/80 pl-11 pr-10 text-[14px] font-semibold text-[#172033] outline-none transition placeholder:text-[#98A2B3] focus:border-[#8b2cff] focus:ring-4 focus:ring-violet-100"
+                                ? "h-11 w-full rounded-[12px] border border-[#e3d4ff] bg-white/78 pl-11 pr-10 text-[14px] font-semibold text-[#172033] outline-none transition placeholder:text-[#a0a8b8] focus:border-[#a47cff] focus:ring-4 focus:ring-violet-50"
                                 : "h-9 w-full rounded-lg border border-[#d8ddea] bg-white pl-9 pr-9 text-[12px] font-medium text-[#172033] outline-none transition focus:border-[#7c3aed] focus:ring-2 focus:ring-violet-100"
                             }
                         />
@@ -204,13 +205,19 @@ function LoginCard({
 
                 {isMobile ? (
                     <div className="flex items-center justify-between gap-3">
-                        <label className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#66739a]">
-                            <input type="checkbox" defaultChecked className="h-3.5 w-3.5 rounded border-[#d9b8ff] accent-[#7c3aed]" />
+                        <label className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#7b8499]">
+                            <input type="checkbox" defaultChecked className="h-3.5 w-3.5 rounded border-[#e3d4ff] accent-[#8b5cf6]" />
                             Recordarme
                         </label>
-                        <button type="button" className="text-[11px] font-black text-[#7c3aed]">
+                        <button type="button" onClick={() => setHelpOpen(true)} className="text-[11px] font-black text-[#8b5cf6]">
                             Olvidaste tu contraseña?
                         </button>
+                    </div>
+                ) : null}
+
+                {helpOpen ? (
+                    <div className="rounded-[12px] border border-violet-100 bg-violet-50/75 px-3 py-2 text-[11px] font-bold leading-snug text-[#6d54c8]">
+                        Contacta con el administrador para recuperar o cambiar tu contraseÃ±a.
                     </div>
                 ) : null}
 
@@ -227,7 +234,7 @@ function LoginCard({
                     type="submit"
                     disabled={saving || loading || verifying}
                     className={isMobile
-                        ? "group mt-1 inline-flex h-11 w-full items-center justify-center gap-2 rounded-[12px] border border-[#6d28d9] bg-gradient-to-br from-[#8b2cff] via-[#7c3aed] to-[#5b21ff] text-[15px] font-black text-white shadow-[0_14px_26px_rgba(91,33,255,0.22)] transition active:scale-[0.99] disabled:opacity-60"
+                        ? "group mt-1 inline-flex h-11 w-full items-center justify-center gap-2 rounded-[12px] border border-[#7c3aed] bg-gradient-to-br from-[#9a63ff] via-[#8b5cf6] to-[#6d28d9] text-[15px] font-black text-white shadow-[0_13px_24px_rgba(91,33,255,0.18)] transition active:scale-[0.99] disabled:opacity-60"
                         : "group mt-1 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-[#6d28d9] bg-gradient-to-br from-[#7c3aed] to-[#4f46e5] text-[12px] font-semibold text-white shadow-[0_12px_28px_rgba(91,33,255,0.22)] transition hover:from-[#6d28d9] hover:to-[#4338ca] disabled:opacity-60"
                     }
                 >

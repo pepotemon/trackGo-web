@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAutoAssignLogs, type AssignViewMode } from "@/features/leads/useAutoAssignLogs";
 import { listAssignedClientsByRange } from "@/data/autoAssignLogsRepo";
 import { useAuth } from "@/features/auth/AuthProvider";
+import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
 import type {
     AutoAssignLogDoc,
     AutoAssignLogFilters,
@@ -624,6 +625,8 @@ function AssignMobileFiltersModal({
     onPatchFilters: (patch: Partial<AutoAssignLogFilters>) => void;
     onResetFilters: () => void;
 }) {
+    useBackButtonDismiss(open, onClose);
+
     if (!open) return null;
 
     return (
