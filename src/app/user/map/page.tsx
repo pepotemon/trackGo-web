@@ -21,6 +21,12 @@ type MapFilter = "all" | "pending" | "visited" | "rejected";
 const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY ?? "";
 const MAP_ID = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || undefined;
 
+declare global {
+    interface Window {
+        gm_authFailure?: () => void;
+    }
+}
+
 function todayKey() { return new Date().toISOString().slice(0, 10); }
 
 function displayName(lead: MetaLeadDoc) {
@@ -28,6 +34,16 @@ function displayName(lead: MetaLeadDoc) {
 }
 
 const REJECTION_REASONS = Object.entries(REJECTED_REASON_LABELS) as [RejectedReason, string][];
+
+function readableMapError(error: unknown) {
+    if (error instanceof Error) return error.message;
+    if (typeof error === "string") return error;
+    try {
+        return JSON.stringify(error);
+    } catch {
+        return "Error desconocido al cargar Google Maps.";
+    }
+}
 
 export default function UserMapPage() {
     if (!API_KEY) {
@@ -49,10 +65,62 @@ export default function UserMapPage() {
         );
     }
 
+    return <GoogleMapsShell />;
+}
+
+function GoogleMapsShell() {
+    const [apiError, setApiError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const previous = window.gm_authFailure;
+        window.gm_authFailure = () => {
+            setApiError("Google rechazo la API key para este dominio. Revisa restricciones HTTP referrer, billing o Maps JavaScript API.");
+            previous?.();
+        };
+        return () => {
+            window.gm_authFailure = previous;
+        };
+    }, []);
+
+    if (apiError) {
+        return <MapConfigError message={apiError} />;
+    }
+
     return (
-        <APIProvider apiKey={API_KEY}>
+        <APIProvider
+            apiKey={API_KEY}
+            authReferrerPolicy="origin"
+            onError={(error) => setApiError(readableMapError(error))}
+        >
             <MapPageInner />
         </APIProvider>
+    );
+}
+
+function MapConfigError({ message }: { message: string }) {
+    const host = typeof window !== "undefined" ? window.location.origin : "trackgo.co";
+
+    return (
+        <div className="flex h-[calc(100dvh-72px)] items-center justify-center bg-[#f8f7ff] px-5 text-center xl:h-screen">
+            <div className="max-w-sm rounded-[24px] border border-[#e8e7fb] bg-white p-5 shadow-[0_18px_50px_rgba(16,25,54,0.12)]">
+                <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-[18px] bg-red-50 text-red-500">
+                    <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 18 3 21V6l6-3 6 3 6-3v15l-6 3-6-3Z" />
+                        <path d="M9 3v15M15 6v15" />
+                        <path d="M12 8v4M12 16h.01" />
+                    </svg>
+                </div>
+                <h1 className="text-[16px] font-black text-[#101936]">No se pudo cargar el mapa</h1>
+                <p className="mt-2 text-[12px] font-semibold leading-relaxed text-[#66739a]">
+                    {message}
+                </p>
+                <div className="mt-3 rounded-xl border border-[#eef1f5] bg-[#fbfaff] px-3 py-2 text-left text-[11px] font-semibold text-[#66739a]">
+                    <div><span className="font-black text-[#101936]">Origen:</span> {host}</div>
+                    <div><span className="font-black text-[#101936]">Key pública:</span> configurada</div>
+                    <div><span className="font-black text-[#101936]">Map ID:</span> {MAP_ID ? "configurado" : "sin configurar"}</div>
+                </div>
+            </div>
+        </div>
     );
 }
 
