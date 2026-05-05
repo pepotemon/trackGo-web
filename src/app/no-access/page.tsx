@@ -22,7 +22,7 @@ export default function NoAccessPage() {
                     Sin acceso
                 </h1>
                 <p className="mt-2 text-[13px] font-medium leading-6 text-[#667085]">
-                    Tu usuario no tiene permisos de administrador activo para entrar al panel.
+                    Tu usuario no tiene un perfil activo o permisos suficientes para entrar a esta zona.
                 </p>
 
                 {profile?.email ? (

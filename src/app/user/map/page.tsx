@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { APIProvider, Map, Marker, RenderingType, useMap } from "@vis.gl/react-google-maps";
+import { APIProvider, AdvancedMarker, Map, RenderingType, useMap } from "@vis.gl/react-google-maps";
 import { useAuth } from "@/features/auth/AuthProvider";
 import {
     markLeadRejected,
@@ -34,15 +34,6 @@ function displayName(lead: MetaLeadDoc) {
 }
 
 const REJECTION_REASONS = Object.entries(REJECTED_REASON_LABELS) as [RejectedReason, string][];
-const USER_DOT_ICON =
-    "data:image/svg+xml;charset=UTF-8," +
-    encodeURIComponent(
-        `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
-            <circle cx="14" cy="14" r="10" fill="#3B82F6" fill-opacity="0.22"/>
-            <circle cx="14" cy="14" r="7" fill="#3B82F6" stroke="#FFFFFF" stroke-width="3"/>
-            <circle cx="14" cy="14" r="2.5" fill="#FFFFFF"/>
-        </svg>`
-    );
 
 function readableMapError(error: unknown) {
     if (error instanceof Error) return error.message;
@@ -309,7 +300,13 @@ function MapPageInner() {
                         />
                     ))}
 
-                    {userLocation ? <UserLocationMarker position={userLocation} /> : null}
+                    {userLocation ? (
+                        <AdvancedMarker position={userLocation}>
+                            <div className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-blue-500 shadow-lg">
+                                <div className="h-2 w-2 rounded-full bg-white" />
+                            </div>
+                        </AdvancedMarker>
+                    ) : null}
 
                     <MapControls
                         leads={filteredLeads}
@@ -614,53 +611,17 @@ const MapLeadMarker = memo(function MapLeadMarker({
         [lead.location.lat, lead.location.lng]
     );
     const handleClick = useCallback(() => onSelect(lead), [lead, onSelect]);
-    const icon = useMemo(
-        () => getLeadMarkerIcon(lead.status, selected),
-        [lead.status, selected]
-    );
 
     return (
-        <Marker
+        <AdvancedMarker
             position={position}
             onClick={handleClick}
             zIndex={selected ? 20 : lead.status === "rejected" ? 5 : 10}
-            icon={icon}
-            optimized
-            clickable
-        />
+        >
+            <PinImage status={lead.status} selected={selected} />
+        </AdvancedMarker>
     );
 });
-
-const UserLocationMarker = memo(function UserLocationMarker({ position }: { position: { lat: number; lng: number } }) {
-    const icon = useMemo(() => {
-        if (typeof google === "undefined" || !google.maps) return undefined;
-        return {
-            url: USER_DOT_ICON,
-            scaledSize: new google.maps.Size(28, 28),
-            anchor: new google.maps.Point(14, 14),
-        };
-    }, []);
-
-    return <Marker position={position} icon={icon} zIndex={30} optimized clickable={false} />;
-});
-
-function leadPinBase(status?: string) {
-    if (status === "visited") return "/pins/visited-pin";
-    if (status === "rejected") return "/pins/rejected-pin";
-    return "/pins/pending-pin";
-}
-
-function getLeadMarkerIcon(status: string | undefined, selected: boolean): google.maps.Icon | undefined {
-    if (typeof google === "undefined" || !google.maps) return undefined;
-    const size = selected ? 24 : 18;
-    const base = leadPinBase(status);
-
-    return {
-        url: `${base}@3x.png`,
-        scaledSize: new google.maps.Size(size, size),
-        anchor: new google.maps.Point(size / 2, size / 2),
-    };
-}
 
 function MapControls({
     leads,
@@ -691,18 +652,11 @@ function MapControls({
     useEffect(() => {
         if (!map) return;
         const container = map.getDiv();
-        let raf = 0;
         const observer = new ResizeObserver(() => {
-            cancelAnimationFrame(raf);
-            raf = requestAnimationFrame(() => {
-                google.maps.event.trigger(map, "resize");
-            });
+            google.maps.event.trigger(map, "resize");
         });
         observer.observe(container);
-        return () => {
-            cancelAnimationFrame(raf);
-            observer.disconnect();
-        };
+        return () => observer.disconnect();
     }, [map]);
 
     const fitBounds = useCallback(() => {
@@ -785,6 +739,31 @@ function MapCtrlBtn({ onClick, title, loading, children }: { onClick: () => void
         </button>
     );
 }
+
+// ── PIN IMAGE ────────────────────────────────────────────────────────────────
+
+const PinImage = memo(function PinImage({ status, selected }: { status?: string; selected: boolean }) {
+    const base = status === "visited"
+        ? "/pins/visited-pin"
+        : status === "rejected"
+        ? "/pins/rejected-pin"
+        : "/pins/pending-pin";
+
+    return (
+        <div className={["will-change-transform transition-transform duration-150", selected ? "scale-150" : "scale-100"].join(" ")}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+                src={`${base}.png`}
+                srcSet={`${base}.png 1x, ${base}@2x.png 2x, ${base}@3x.png 3x`}
+                width={16}
+                height={16}
+                alt={status ?? "pending"}
+                className="pointer-events-none select-none drop-shadow-md"
+                style={{ imageRendering: "crisp-edges" }}
+            />
+        </div>
+    );
+});
 
 // ── LEAD STATUS BADGE ────────────────────────────────────────────────────────
 
