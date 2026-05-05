@@ -292,6 +292,7 @@ export default function AdminLeadsPage() {
                     onOpenEdit={setEditingLead}
                     onDelete={handleDeleteLead}
                     onOpenAssign={setAssigningLead}
+                    onManageStatus={canStatusManage ? setStatusLead : undefined}
                     viewMode={viewMode}
                     onChangeViewMode={changeViewMode}
                 />
@@ -631,6 +632,7 @@ function MobileLeadQueue({
     onOpenEdit,
     onDelete,
     onOpenAssign,
+    onManageStatus,
     viewMode,
     onChangeViewMode,
 }: {
@@ -651,6 +653,7 @@ function MobileLeadQueue({
     onOpenEdit: (lead: MetaLeadDoc) => void;
     onDelete: (lead: MetaLeadDoc) => void;
     onOpenAssign: (lead: MetaLeadDoc) => void;
+    onManageStatus?: (lead: MetaLeadDoc) => void;
     viewMode: "day" | "week";
     onChangeViewMode: (mode: "day" | "week") => void;
 }) {
@@ -805,6 +808,7 @@ function MobileLeadQueue({
                             onOpenEdit={onOpenEdit}
                             onDelete={onDelete}
                             onOpenAssign={onOpenAssign}
+                            onManageStatus={onManageStatus}
                         />
                     ))
                 )}
@@ -893,12 +897,14 @@ function MobileLeadCard({
     onOpenEdit,
     onDelete,
     onOpenAssign,
+    onManageStatus,
 }: {
     lead: MetaLeadDoc;
     saving: boolean;
     onOpenEdit: (lead: MetaLeadDoc) => void;
     onDelete: (lead: MetaLeadDoc) => void;
     onOpenAssign: (lead: MetaLeadDoc) => void;
+    onManageStatus?: (lead: MetaLeadDoc) => void;
 }) {
     const [sheetOpen, setSheetOpen] = useState(false);
     const city = mobileCityName(lead);
@@ -985,6 +991,7 @@ function MobileLeadCard({
                 onOpenEdit={onOpenEdit}
                 onDelete={onDelete}
                 onOpenAssign={onOpenAssign}
+                onManageStatus={onManageStatus}
             />
         </>
     );
@@ -997,6 +1004,7 @@ function LeadActionSheet({
     onOpenEdit,
     onDelete,
     onOpenAssign,
+    onManageStatus,
 }: {
     lead: MetaLeadDoc;
     open: boolean;
@@ -1004,18 +1012,12 @@ function LeadActionSheet({
     onOpenEdit: (lead: MetaLeadDoc) => void;
     onDelete: (lead: MetaLeadDoc) => void;
     onOpenAssign: (lead: MetaLeadDoc) => void;
+    onManageStatus?: (lead: MetaLeadDoc) => void;
 }) {
     const canAssign = useCan("leadsAssign");
     const canEdit = useCan("leadsEdit");
     const canDelete = useCan("leadsDelete");
     const canWhatsapp = useCan("leadsWhatsapp");
-
-    useEffect(() => {
-        if (!open) return;
-        const handler = () => onClose();
-        window.addEventListener("scroll", handler, { passive: true });
-        return () => window.removeEventListener("scroll", handler);
-    }, [open, onClose]);
     useBackButtonDismiss(open, onClose);
 
     if (!open) return null;
@@ -1072,6 +1074,17 @@ function LeadActionSheet({
                         >
                             <AppIcon name="assign" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#7C3AED] ring-0" />
                             Asignar a usuario
+                        </button>
+                    ) : null}
+
+                    {onManageStatus ? (
+                        <button
+                            type="button"
+                            onClick={() => { onClose(); onManageStatus(lead); }}
+                            className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-blue-50 px-4 text-[14px] font-bold text-[#101936] transition active:bg-blue-100"
+                        >
+                            <AppIcon name="settings" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-blue-600 ring-0" />
+                            Estado
                         </button>
                     ) : null}
 
