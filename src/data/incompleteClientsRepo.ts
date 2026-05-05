@@ -6,6 +6,7 @@ import {
     onSnapshot,
     orderBy,
     query,
+    runTransaction,
     startAt,
     updateDoc,
     where,
@@ -258,5 +259,38 @@ export async function takeNotSuitableClient(clientId: string, userId: string): P
         leadQuality: "review",
         verificationStatusChangedAt: now,
         updatedAt: now,
+    });
+}
+
+export async function takeIncompleteClient(clientId: string, userId: string): Promise<void> {
+    const now = Date.now();
+    const dayKey = new Date(now).toISOString().slice(0, 10);
+    const ref = doc(db, "clients", clientId);
+
+    await runTransaction(db, async (transaction) => {
+        const snap = await transaction.get(ref);
+        if (!snap.exists()) throw new Error("client_not_found");
+
+        const data = snap.data() as Record<string, unknown>;
+        const assignedTo = typeof data.assignedTo === "string" ? data.assignedTo.trim() : "";
+        const verificationStatus = typeof data.verificationStatus === "string" ? data.verificationStatus : "";
+
+        if (assignedTo) throw new Error("client_already_taken");
+        if (!INCOMPLETE_STATUSES.includes(verificationStatus as (typeof INCOMPLETE_STATUSES)[number])) {
+            throw new Error("client_not_available");
+        }
+
+        transaction.update(ref, {
+            assignedTo: userId,
+            assignedAt: now,
+            assignedDayKey: dayKey,
+            status: "pending",
+            statusBy: null,
+            statusAt: null,
+            verificationStatus: "pending_review",
+            leadQuality: "review",
+            verificationStatusChangedAt: now,
+            updatedAt: now,
+        });
     });
 }

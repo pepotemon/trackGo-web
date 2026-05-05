@@ -8,10 +8,11 @@ import {
     markClientNotSuitable,
     subscribeIncompleteClients,
     subscribeNotSuitableClients,
+    takeIncompleteClient,
     takeNotSuitableClient,
 } from "@/data/incompleteClientsRepo";
-import { assignLeadToUser } from "@/data/leadsRepo";
-import type { MetaLeadDoc } from "@/types/leads";
+import { subscribeLeadMessages } from "@/data/leadChatRepo";
+import type { LeadMessageDoc, MetaLeadDoc } from "@/types/leads";
 import { getWhatsAppSentIds, markWhatsAppSent } from "@/lib/userContactState";
 
 type Tab = "incomplete" | "not_suitable";
@@ -67,6 +68,30 @@ function formatRelative(ts: number | null | undefined): string {
     return new Intl.DateTimeFormat("es", { day: "2-digit", month: "short" }).format(new Date(ts));
 }
 
+function formatMessageTime(ts: number | null | undefined): string {
+    if (!ts) return "";
+    return new Intl.DateTimeFormat("es", { hour: "2-digit", minute: "2-digit" }).format(new Date(ts));
+}
+
+function detectedRows(lead: MetaLeadDoc) {
+    return [
+        { label: "Nombre", value: lead.name || "" },
+        { label: "Negocio", value: lead.business || "" },
+        { label: "Telefono", value: lead.phone || "" },
+        { label: "Ciudad", value: lead.location?.displayLabel || lead.location?.adminCityLabel || lead.location?.cityLabel || "" },
+        { label: "Direccion", value: lead.location?.address || "" },
+        { label: "Maps", value: lead.location?.mapsUrl || (lead.location?.lat ? "Ubicacion detectada" : "") },
+    ].filter((row) => row.value);
+}
+
+function missingFields(lead: MetaLeadDoc) {
+    const missing: string[] = [];
+    if (!lead.name) missing.push("nombre");
+    if (!lead.business) missing.push("tipo de negocio");
+    if (!lead.location?.mapsUrl && !lead.location?.lat) missing.push("ubicacion en Maps");
+    return missing;
+}
+
 // ── page ──────────────────────────────────────────────────────────────────────
 
 export default function UserIncompleteClientsPage() {
@@ -84,12 +109,16 @@ export default function UserIncompleteClientsPage() {
     const [searchOpen, setSearchOpen] = useState(false);
     const [infoOpen, setInfoOpen] = useState(false);
     const [dddFilter, setDddFilter] = useState("all");
+    const [toast, setToast] = useState("");
 
     // modals
     const [actionLead, setActionLead] = useState<MetaLeadDoc | null>(null);
-    const [actionType, setActionType] = useState<"note" | "not_suitable" | "accept" | null>(null);
+    const [actionType, setActionType] = useState<"note" | "not_suitable" | "accept" | "review" | null>(null);
     const [noteText, setNoteText] = useState("");
     const [saving, setSaving] = useState(false);
+    const [previewMessages, setPreviewMessages] = useState<LeadMessageDoc[]>([]);
+    const [previewLoading, setPreviewLoading] = useState(false);
+    const [previewError, setPreviewError] = useState("");
 
     useEffect(() => {
         if (!phoneCodes.length) { setLoadingIncomplete(false); setLoadingNotSuitable(false); return; }
@@ -113,6 +142,31 @@ export default function UserIncompleteClientsPage() {
 
         return () => { unsubInc(); unsubNS(); };
     }, [phoneCodes]);
+
+    useEffect(() => {
+        if (actionType !== "review" || !actionLead) {
+            setPreviewMessages([]);
+            setPreviewError("");
+            setPreviewLoading(false);
+            return;
+        }
+
+        setPreviewLoading(true);
+        setPreviewError("");
+        const unsub = subscribeLeadMessages(
+            actionLead.id,
+            (messages) => {
+                setPreviewMessages(messages);
+                setPreviewLoading(false);
+            },
+            (message) => {
+                setPreviewError(message);
+                setPreviewLoading(false);
+            }
+        );
+
+        return unsub;
+    }, [actionLead, actionType]);
 
     const activeList = tab === "incomplete" ? incomplete : notSuitable;
     const loading = tab === "incomplete" ? loadingIncomplete : loadingNotSuitable;
@@ -155,7 +209,15 @@ export default function UserIncompleteClientsPage() {
 
     function openNotSuitable(lead: MetaLeadDoc) { setActionLead(lead); setActionType("not_suitable"); }
     function openAccept(lead: MetaLeadDoc) { setActionLead(lead); setActionType("accept"); }
-    function closeAction() { setActionLead(null); setActionType(null); setSaving(false); }
+    function openReview(lead: MetaLeadDoc) { setActionLead(lead); setActionType("review"); }
+    function closeAction() {
+        setActionLead(null);
+        setActionType(null);
+        setSaving(false);
+        setPreviewMessages([]);
+        setPreviewError("");
+        setPreviewLoading(false);
+    }
 
     async function confirmNotSuitable() {
         if (!actionLead) return;
@@ -174,10 +236,19 @@ export default function UserIncompleteClientsPage() {
             if (actionLead.verificationStatus === "not_suitable") {
                 await takeNotSuitableClient(actionLead.id, userId);
             } else {
-                await assignLeadToUser(actionLead.id, userId);
+                await takeIncompleteClient(actionLead.id, userId);
             }
+            setToast("Cliente tomado. Lo encontraras en Prospectos para completar sus datos.");
+            window.setTimeout(() => setToast(""), 2600);
             closeAction();
-        } catch { setSaving(false); }
+        } catch (error) {
+            const message = error instanceof Error && error.message === "client_already_taken"
+                ? "Este cliente ya fue tomado por otro usuario."
+                : "No se pudo tomar este cliente. Intenta nuevamente.";
+            setToast(message);
+            window.setTimeout(() => setToast(""), 2800);
+            setSaving(false);
+        }
     }
 
     function openWhatsApp(lead: MetaLeadDoc) {
@@ -286,6 +357,7 @@ export default function UserIncompleteClientsPage() {
                                 onNote={() => openNote(lead)}
                                 onNotSuitable={() => openNotSuitable(lead)}
                                 onAccept={() => openAccept(lead)}
+                                onReview={() => openReview(lead)}
                             />
                         ))}
                     </div>
@@ -324,11 +396,18 @@ export default function UserIncompleteClientsPage() {
                                         onNote={() => { openNote(lead); setSearchOpen(false); }}
                                         onNotSuitable={() => { openNotSuitable(lead); setSearchOpen(false); }}
                                         onAccept={() => { openAccept(lead); setSearchOpen(false); }}
+                                        onReview={() => { openReview(lead); setSearchOpen(false); }}
                                     />
                                 ))}
                             </div>
                         )}
                     </div>
+                </div>
+            ) : null}
+
+            {toast ? (
+                <div className="fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom)+84px)] z-[60] rounded-[16px] border border-[#E8E7FB] bg-white px-4 py-3 text-center text-[12px] font-black text-[#101936] shadow-[0_16px_42px_rgba(91,33,255,0.16)]">
+                    {toast}
                 </div>
             ) : null}
 
@@ -376,6 +455,72 @@ export default function UserIncompleteClientsPage() {
             ) : null}
 
             {/* ── NO APTO MODAL ───────────────────────────────────────── */}
+            {actionType === "review" && actionLead ? (
+                <BottomSheet onClose={closeAction}>
+                    <div className="mb-4 flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                            <span className="inline-flex items-center rounded-full bg-[#f3f0ff] px-2.5 py-1 text-[10px] font-black text-[#7C3AED]">REVISION</span>
+                            <p className="mt-2 truncate text-[17px] font-black text-[#101936]">{displayName(actionLead)}</p>
+                            <p className="mt-0.5 text-[12px] font-semibold text-[#66739A]">{actionLead.phone}</p>
+                        </div>
+                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-black text-amber-700">Solo lectura</span>
+                    </div>
+
+                    <div className="mb-3 grid grid-cols-2 gap-2">
+                        {detectedRows(actionLead).map((row) => (
+                            <div key={row.label} className="min-w-0 rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 py-2">
+                                <p className="text-[9px] font-black uppercase tracking-[0.06em] text-[#98A2B3]">{row.label}</p>
+                                <p className="mt-0.5 truncate text-[12px] font-black text-[#101936]">{row.value}</p>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="mb-3 rounded-[14px] border border-amber-100 bg-amber-50 px-3 py-2">
+                        <p className="text-[10px] font-black uppercase tracking-[0.06em] text-amber-700">Campos faltantes</p>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                            {missingFields(actionLead).length ? missingFields(actionLead).map((field) => (
+                                <span key={field} className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-amber-700">{field}</span>
+                            )) : (
+                                <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black text-emerald-700">Datos principales detectados</span>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="mb-4 max-h-[34vh] overflow-y-auto rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 py-3">
+                        {previewLoading ? (
+                            <div className="flex justify-center py-8">
+                                <svg className="tg-spin h-6 w-6 text-[#7C3AED]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                                    <path d="M21 12a9 9 0 1 1-3.1-6.8" />
+                                </svg>
+                            </div>
+                        ) : previewError ? (
+                            <p className="py-6 text-center text-[12px] font-bold text-red-600">{previewError}</p>
+                        ) : previewMessages.length === 0 ? (
+                            <p className="py-6 text-center text-[12px] font-semibold text-[#98A2B3]">Sin mensajes guardados.</p>
+                        ) : (
+                            <div className="space-y-2">
+                                {previewMessages.map((message) => (
+                                    <PreviewMessageBubble key={message.id} message={message} />
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <p className="mb-3 rounded-[14px] border border-violet-100 bg-violet-50 px-3 py-2 text-[11px] font-semibold text-[#5B21FF]">
+                        Para responder, primero toma el cliente. Luego lo veras en Prospectos.
+                    </p>
+
+                    <button
+                        type="button"
+                        onClick={confirmAccept}
+                        disabled={saving || previewLoading}
+                        className="w-full rounded-[14px] bg-emerald-600 py-3 text-[13px] font-black text-white disabled:opacity-60"
+                    >
+                        {saving ? "Tomando..." : "Tomar cliente"}
+                    </button>
+                </BottomSheet>
+            ) : null}
+
             {actionType === "not_suitable" && actionLead ? (
                 <BottomSheet onClose={closeAction}>
                     <div className="mb-4">
@@ -423,7 +568,7 @@ export default function UserIncompleteClientsPage() {
 
 function ClientCard({
     lead, note, waSent, tab,
-    onWhatsApp, onNote, onNotSuitable, onAccept,
+    onWhatsApp, onNote, onNotSuitable, onAccept, onReview,
 }: {
     lead: MetaLeadDoc;
     note?: string;
@@ -433,6 +578,7 @@ function ClientCard({
     onNote: () => void;
     onNotSuitable: () => void;
     onAccept: () => void;
+    onReview: () => void;
 }) {
     const ddd = extractDDD(lead.phone);
     const hasLocation = !!lead.location?.lat;
@@ -507,30 +653,22 @@ function ClientCard({
 
                 {/* Actions */}
                 <div className="mt-3 flex items-center gap-1.5 border-t border-[#F2F0FF] pt-2.5">
-                    <ActionBtn onClick={onWhatsApp} tone={waSent ? "sent" : "green"} title={waSent ? "Enviado" : "WhatsApp"}>
-                        {waSent ? <WACheckIcon /> : <WAIcon />}
-                    </ActionBtn>
                     {tab === "incomplete" ? (
-                        <ActionBtn onClick={onNote} tone="violet" title="Nota"><NoteIcon /></ActionBtn>
-                    ) : null}
+                        <button
+                            type="button"
+                            onClick={onReview}
+                            className="flex h-9 flex-1 items-center justify-center gap-2 rounded-[12px] border border-violet-200 bg-violet-50 text-[12px] font-black text-[#7C3AED] transition active:bg-violet-100"
+                        >
+                            <ChatIcon /> Revisar
+                        </button>
+                    ) : (
+                        <ActionBtn onClick={onWhatsApp} tone={waSent ? "sent" : "green"} title={waSent ? "Enviado" : "WhatsApp"}>
+                            {waSent ? <WACheckIcon /> : <WAIcon />}
+                        </ActionBtn>
+                    )}
                     <div className="flex-1" />
                     {tab === "incomplete" ? (
-                        <>
-                            <button
-                                type="button"
-                                onClick={onNotSuitable}
-                                className="flex h-8 items-center gap-1.5 rounded-[11px] border border-orange-200 bg-orange-50 px-2.5 text-[11px] font-black text-orange-600 transition active:bg-orange-100"
-                            >
-                                <BanIcon /> No apto
-                            </button>
-                            <button
-                                type="button"
-                                onClick={onAccept}
-                                className="flex h-8 items-center gap-1.5 rounded-[11px] border border-emerald-200 bg-emerald-50 px-2.5 text-[11px] font-black text-emerald-700 transition active:bg-emerald-100"
-                            >
-                                <CheckIcon /> Tomar
-                            </button>
-                        </>
+                        <ActionBtn onClick={onNotSuitable} tone="gray" title="Marcar no apto"><BanIcon /></ActionBtn>
                     ) : (
                         <button
                             type="button"
@@ -547,6 +685,30 @@ function ClientCard({
 }
 
 // ── SUB-COMPONENTS ────────────────────────────────────────────────────────────
+
+function PreviewMessageBubble({ message }: { message: LeadMessageDoc }) {
+    const outbound = message.direction === "outbound";
+    const sender = message.senderType === "bot" ? "Bot" : message.senderType === "admin" ? "Admin" : "Cliente";
+
+    return (
+        <div className={["flex", outbound ? "justify-end" : "justify-start"].join(" ")}>
+            <div className={[
+                "max-w-[82%] rounded-[15px] px-3 py-2",
+                outbound
+                    ? "rounded-br-[4px] bg-[#7C3AED] text-white"
+                    : "rounded-bl-[4px] border border-[#E8E7FB] bg-white text-[#101936]",
+            ].join(" ")}>
+                <p className={["mb-0.5 text-[9px] font-black uppercase tracking-wide", outbound ? "text-violet-200" : "text-[#98A2B3]"].join(" ")}>
+                    {sender}
+                </p>
+                <p className="whitespace-pre-wrap text-[12px] font-semibold leading-relaxed">{message.text}</p>
+                <p className={["mt-1 text-right text-[9px] font-semibold", outbound ? "text-violet-200" : "text-[#98A2B3]"].join(" ")}>
+                    {formatMessageTime(message.createdAt)}
+                </p>
+            </div>
+        </div>
+    );
+}
 
 function TabBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
     return (
@@ -625,6 +787,7 @@ function PinIcon() { return <svg viewBox="0 0 24 24" className="h-3 w-3 shrink-0
 function CheckIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M20 6 9 17l-5-5" /></svg>; }
 function NoteIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" /><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" /></svg>; }
 function BanIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><circle cx="12" cy="12" r="10" /><path d="m4.9 4.9 14.2 14.2" /></svg>; }
+function ChatIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z" /><path d="M8 9h8M8 13h5" /></svg>; }
 function WAIcon() { return <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M17.47 14.38c-.28-.14-1.65-.82-1.9-.91-.26-.09-.44-.14-.63.14-.19.28-.73.91-.9 1.1-.16.18-.33.2-.61.07-.28-.14-1.18-.44-2.25-1.39-.83-.74-1.39-1.66-1.55-1.93-.16-.28-.02-.43.12-.57.12-.12.28-.32.42-.48.14-.16.18-.28.28-.46.09-.18.05-.34-.02-.48-.07-.14-.63-1.52-.86-2.08-.23-.55-.46-.47-.63-.48-.16-.01-.35-.01-.53-.01-.18 0-.48.07-.73.34-.25.27-.97.95-.97 2.31 0 1.36.99 2.67 1.13 2.86.14.18 1.96 2.99 4.75 4.2.66.28 1.18.45 1.58.58.66.21 1.27.18 1.74.11.53-.08 1.65-.68 1.88-1.33.24-.65.24-1.2.17-1.33-.07-.12-.25-.19-.53-.33Z"/><path d="M12.05 2.01C6.49 2.01 2 6.5 2 12.07c0 1.87.51 3.63 1.4 5.14L2 22l4.93-1.36A10.04 10.04 0 0 0 12.05 22C17.61 22 22 17.5 22 11.93 22 6.5 17.61 2.01 12.05 2.01Zm0 18.37a8.34 8.34 0 0 1-4.23-1.15l-.3-.18-3.13.86.86-3.17-.2-.32a8.35 8.35 0 0 1-1.27-4.41c0-4.61 3.72-8.36 8.3-8.36 4.57 0 8.29 3.75 8.29 8.36-.01 4.61-3.72 8.37-8.32 8.37Z"/></svg>; }
 function WACheckIcon() { return <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M17.47 14.38c-.28-.14-1.65-.82-1.9-.91-.26-.09-.44-.14-.63.14-.19.28-.73.91-.9 1.1-.16.18-.33.2-.61.07-.28-.14-1.18-.44-2.25-1.39-.83-.74-1.39-1.66-1.55-1.93-.16-.28-.02-.43.12-.57.12-.12.28-.32.42-.48.14-.16.18-.28.28-.46.09-.18.05-.34-.02-.48-.07-.14-.63-1.52-.86-2.08-.23-.55-.46-.47-.63-.48-.16-.01-.35-.01-.53-.01-.18 0-.48.07-.73.34-.25.27-.97.95-.97 2.31 0 1.36.99 2.67 1.13 2.86.14.18 1.96 2.99 4.75 4.2.66.28 1.18.45 1.58.58.66.21 1.27.18 1.74.11.53-.08 1.65-.68 1.88-1.33.24-.65.24-1.2.17-1.33-.07-.12-.25-.19-.53-.33Z"/><path d="M12.05 2.01C6.49 2.01 2 6.5 2 12.07c0 1.87.51 3.63 1.4 5.14L2 22l4.93-1.36A10.04 10.04 0 0 0 12.05 22C17.61 22 22 17.5 22 11.93 22 6.5 17.61 2.01 12.05 2.01Zm0 18.37a8.34 8.34 0 0 1-4.23-1.15l-.3-.18-3.13.86.86-3.17-.2-.32a8.35 8.35 0 0 1-1.27-4.41c0-4.61 3.72-8.36 8.3-8.36 4.57 0 8.29 3.75 8.29 8.36-.01 4.61-3.72 8.37-8.32 8.37Z"/><path d="m14.5 9-4.5 4.5-2-2" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>; }
 function ClientsIcon({ className }: { className?: string }) { return <svg viewBox="0 0 24 24" className={className} {...ic}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>; }

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/features/auth/AuthProvider";
 import {
@@ -633,6 +634,7 @@ function LeadCard({
     const isPending = !lead.status || lead.status === "pending";
     const isVisited = lead.status === "visited";
     const isRejected = lead.status === "rejected";
+    const needsData = lead.verificationStatus === "pending_review" && (!lead.location?.lat || !lead.location?.mapsUrl || !lead.name);
 
     return (
         <div className={[
@@ -657,7 +659,14 @@ function LeadCard({
                             ) : null}
                         </div>
                     </div>
-                    <StatusBadge status={lead.status} />
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                        <StatusBadge status={lead.status} />
+                        {needsData ? (
+                            <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-black text-amber-700">
+                                Faltan datos
+                            </span>
+                        ) : null}
+                    </div>
                 </div>
 
                 {/* ── DETAILS ── */}
@@ -723,6 +732,14 @@ function LeadCard({
 
                     {isPending ? (
                         <div className="flex gap-1.5">
+                            {needsData ? (
+                                <Link
+                                    href={`/user/chat/${lead.id}`}
+                                    className="flex h-7 items-center rounded-[10px] border border-violet-200 bg-violet-50 px-2.5 text-[10px] font-black text-[#7C3AED] shadow-sm transition active:bg-violet-100"
+                                >
+                                    Chatear
+                                </Link>
+                            ) : null}
                             <button
                                 type="button"
                                 onClick={onManage}
