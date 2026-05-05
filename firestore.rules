@@ -69,6 +69,17 @@ service cloud.firestore {
       return !(field in d) || d[field] == null || d[field] is number;
     }
 
+    function validWebPushTokenDoc(d) {
+      return d.token is string
+        && d.token.size() > 0
+        && d.platform is string
+        && d.createdAt is int
+        && d.updatedAt is int
+        && d.lastSeenAt is int
+        && validOptionalString(d, "userAgent")
+        && validOptionalString(d, "endpoint");
+    }
+
     function validClientStatusValue(s) {
       return s in ["pending", "visited", "rejected"];
     }
@@ -342,6 +353,24 @@ service cloud.firestore {
         );
 
       allow delete: if false;
+
+      match /webPushTokens/{tokenId} {
+        allow read, write: if isAdmin();
+
+        allow create, update: if isSelf(uid)
+          && request.resource.data.keys().hasOnly([
+            "token",
+            "platform",
+            "userAgent",
+            "endpoint",
+            "createdAt",
+            "updatedAt",
+            "lastSeenAt"
+          ])
+          && validWebPushTokenDoc(request.resource.data);
+
+        allow delete: if isSelf(uid);
+      }
     }
 
     // -------------------------
