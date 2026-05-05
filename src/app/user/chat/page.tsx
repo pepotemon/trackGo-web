@@ -456,8 +456,17 @@ export default function UserIncompleteClientsPage() {
 
             {/* ── NO APTO MODAL ───────────────────────────────────────── */}
             {actionType === "review" && actionLead ? (
-                <BottomSheet onClose={closeAction}>
-                    <div className="mb-4 flex items-start justify-between gap-3">
+                <BottomSheet onClose={closeAction} fixedFooter={
+                    <button
+                        type="button"
+                        onClick={confirmAccept}
+                        disabled={saving || previewLoading}
+                        className="w-full rounded-[14px] bg-emerald-600 py-3 text-[13px] font-black text-white disabled:opacity-60"
+                    >
+                        {saving ? "Tomando..." : "Tomar cliente"}
+                    </button>
+                }>
+                    <div className="mb-3 flex items-start justify-between gap-3">
                         <div className="min-w-0">
                             <span className="inline-flex items-center rounded-full bg-[#f3f0ff] px-2.5 py-1 text-[10px] font-black text-[#7C3AED]">REVISION</span>
                             <p className="mt-2 truncate text-[17px] font-black text-[#101936]">{displayName(actionLead)}</p>
@@ -466,7 +475,7 @@ export default function UserIncompleteClientsPage() {
                         <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-black text-amber-700">Solo lectura</span>
                     </div>
 
-                    <div className="mb-3 grid grid-cols-2 gap-2">
+                    <div className="mb-2 grid grid-cols-2 gap-2">
                         {detectedRows(actionLead).map((row) => (
                             <div key={row.label} className="min-w-0 rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 py-2">
                                 <p className="text-[9px] font-black uppercase tracking-[0.06em] text-[#98A2B3]">{row.label}</p>
@@ -475,7 +484,7 @@ export default function UserIncompleteClientsPage() {
                         ))}
                     </div>
 
-                    <div className="mb-3 rounded-[14px] border border-amber-100 bg-amber-50 px-3 py-2">
+                    <div className="mb-2 rounded-[14px] border border-amber-100 bg-amber-50 px-3 py-2">
                         <p className="text-[10px] font-black uppercase tracking-[0.06em] text-amber-700">Campos faltantes</p>
                         <div className="mt-2 flex flex-wrap gap-1.5">
                             {missingFields(actionLead).length ? missingFields(actionLead).map((field) => (
@@ -486,7 +495,7 @@ export default function UserIncompleteClientsPage() {
                         </div>
                     </div>
 
-                    <div className="mb-4 max-h-[34vh] overflow-y-auto rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 py-3">
+                    <div className="max-h-[38vh] overflow-y-auto overscroll-contain rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 py-3">
                         {previewLoading ? (
                             <div className="flex justify-center py-8">
                                 <svg className="tg-spin h-6 w-6 text-[#7C3AED]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -506,18 +515,9 @@ export default function UserIncompleteClientsPage() {
                         )}
                     </div>
 
-                    <p className="mb-3 rounded-[14px] border border-violet-100 bg-violet-50 px-3 py-2 text-[11px] font-semibold text-[#5B21FF]">
+                    <p className="mt-3 rounded-[14px] border border-violet-100 bg-violet-50 px-3 py-2 text-[11px] font-semibold text-[#5B21FF]">
                         Para responder, primero toma el cliente. Luego lo veras en Prospectos.
                     </p>
-
-                    <button
-                        type="button"
-                        onClick={confirmAccept}
-                        disabled={saving || previewLoading}
-                        className="w-full rounded-[14px] bg-emerald-600 py-3 text-[13px] font-black text-white disabled:opacity-60"
-                    >
-                        {saving ? "Tomando..." : "Tomar cliente"}
-                    </button>
                 </BottomSheet>
             ) : null}
 
@@ -739,13 +739,21 @@ function ActionBtn({ onClick, tone, title, children }: { onClick: () => void; to
     };
     return <button type="button" onClick={onClick} title={title} className={`flex h-8 w-8 items-center justify-center rounded-[11px] border transition active:opacity-70 ${cls[tone]}`}>{children}</button>;
 }
-function BottomSheet({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+function BottomSheet({ children, onClose, fixedFooter }: { children: React.ReactNode; onClose: () => void; fixedFooter?: React.ReactNode }) {
     return (
         <div className="fixed inset-0 z-50 flex items-end xl:items-center xl:justify-center">
             <button type="button" className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" onClick={onClose} />
-            <div className="relative w-full overflow-y-auto rounded-t-[24px] bg-white px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-4 shadow-2xl xl:max-w-md xl:rounded-[24px] xl:pb-6 max-h-[80vh]">
-                <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-[#E8E7FB] xl:hidden" />
-                {children}
+            <div className="relative flex max-h-[80vh] w-full flex-col overflow-hidden rounded-t-[24px] bg-white shadow-2xl xl:max-w-md xl:rounded-[24px]">
+                <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-4">
+                    <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-[#E8E7FB] xl:hidden" />
+                    {children}
+                    {!fixedFooter ? <div className="h-[max(env(safe-area-inset-bottom),1.5rem)]" /> : null}
+                </div>
+                {fixedFooter ? (
+                    <div className="shrink-0 border-t border-[#E8E7FB] bg-white/96 px-4 pb-[max(env(safe-area-inset-bottom),1rem)] pt-3 shadow-[0_-12px_30px_rgba(16,25,54,0.08)] backdrop-blur-xl">
+                        {fixedFooter}
+                    </div>
+                ) : null}
             </div>
         </div>
     );
