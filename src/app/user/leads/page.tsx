@@ -107,6 +107,8 @@ export default function UserLeadsPage() {
     const [searchOpen, setSearchOpen] = useState(false);
     const [notes, setNotes] = useState<Record<string, string>>({});
     const [waSent, setWaSent] = useState<Set<string>>(new Set());
+    const [copiedLeadId, setCopiedLeadId] = useState<string | null>(null);
+    const copyToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const [actionLead, setActionLead] = useState<MetaLeadDoc | null>(null);
     const [actionType, setActionType] = useState<"visit" | "reject" | "note" | "manage" | null>(null);
@@ -119,6 +121,12 @@ export default function UserLeadsPage() {
     const userId = firebaseUser?.uid ?? "";
     const userName = profile?.name?.split(" ")[0] ?? "Vendedor";
     const activeWeek = useMemo(() => weekRange(), []);
+
+    useEffect(() => {
+        return () => {
+            if (copyToastTimer.current) clearTimeout(copyToastTimer.current);
+        };
+    }, []);
 
     useEffect(() => {
         if (!userId) return;
@@ -270,6 +278,10 @@ export default function UserLeadsPage() {
         } catch {
             window.prompt("Copia los datos del cliente", text);
         }
+
+        setCopiedLeadId(lead.id);
+        if (copyToastTimer.current) clearTimeout(copyToastTimer.current);
+        copyToastTimer.current = setTimeout(() => setCopiedLeadId(null), 1200);
     }
 
     const today = todayKey();
@@ -363,6 +375,7 @@ export default function UserLeadsPage() {
                                     lead={lead}
                                     note={notes[lead.id]}
                                     waSent={waSent.has(lead.id)}
+                                    copied={copiedLeadId === lead.id}
                                     priority={priority >= 0 && priority < 3 ? priority + 1 : null}
                                     canUndo={canUndo(lead)}
                                     onManage={() => openManage(lead)}
@@ -410,6 +423,7 @@ export default function UserLeadsPage() {
                                         lead={lead}
                                         note={notes[lead.id]}
                                         waSent={waSent.has(lead.id)}
+                                        copied={copiedLeadId === lead.id}
                                         priority={null}
                                         canUndo={canUndo(lead)}
                                         onManage={() => { openManage(lead); setSearchOpen(false); }}
@@ -593,6 +607,7 @@ function LeadCard({
     lead,
     note,
     waSent,
+    copied,
     priority,
     canUndo,
     onManage,
@@ -605,6 +620,7 @@ function LeadCard({
     lead: MetaLeadDoc;
     note?: string;
     waSent?: boolean;
+    copied?: boolean;
     priority: number | null;
     canUndo: boolean;
     onManage: () => void;
@@ -686,9 +702,16 @@ function LeadCard({
                         <ActionBtn onClick={onMaps} title="Maps" tone="blue">
                             <MapsIcon />
                         </ActionBtn>
-                        <ActionBtn onClick={onCopy} title="Copiar" tone="violet">
-                            <CopyIcon />
-                        </ActionBtn>
+                        <div className="relative">
+                            <ActionBtn onClick={onCopy} title={copied ? "Copiado" : "Copiar"} tone={copied ? "sent" : "violet"}>
+                                {copied ? <CheckIcon /> : <CopyIcon />}
+                            </ActionBtn>
+                            {copied ? (
+                                <span className="pointer-events-none absolute -top-7 left-1/2 -translate-x-1/2 rounded-full border border-emerald-200 bg-white px-2 py-1 text-[9px] font-black text-emerald-700 shadow-[0_8px_22px_rgba(16,185,129,0.16)]">
+                                    Copiado
+                                </span>
+                            ) : null}
+                        </div>
                         {onNote ? (
                             <ActionBtn onClick={onNote} title="Nota" tone="violet">
                                 <NoteIcon />

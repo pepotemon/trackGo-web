@@ -299,7 +299,7 @@ export default function LeadChatPage() {
         <div className="mx-auto w-full max-w-[1220px]">
 
             {/* ====================== MOBILE LAYOUT (xl:hidden) ====================== */}
-            <div className="xl:hidden -mx-3 -mt-4 flex h-dvh flex-col bg-white">
+            <div className="fixed inset-0 z-30 flex h-dvh flex-col overflow-hidden bg-white xl:hidden">
 
                 {/* STICKY HEADER — pressable for quick actions */}
                 <div className="shrink-0 border-b border-[#E8E7FB] bg-white">
@@ -379,7 +379,7 @@ export default function LeadChatPage() {
                 {/* MESSAGES AREA — scrollable */}
                 <div
                     key={clientId}
-                    className="tg-chat-thread flex-1 space-y-3 overflow-y-auto bg-[radial-gradient(circle_at_top_left,#f5f3ff_0,#fbfaff_28%,#ffffff_70%)] p-4"
+                    className="tg-chat-thread min-h-0 flex-1 touch-pan-y space-y-3 overflow-y-auto overscroll-contain bg-[radial-gradient(circle_at_top_left,#f5f3ff_0,#fbfaff_28%,#ffffff_70%)] p-4 pb-[calc(env(safe-area-inset-bottom)+88px)]"
                     onClick={activateHumanMode}
                     onTouchStart={(event) => setTouchStartX(event.touches[0]?.clientX ?? null)}
                     onTouchEnd={(event) => finishSwipe(event.changedTouches[0]?.clientX ?? 0)}
@@ -405,7 +405,7 @@ export default function LeadChatPage() {
                 </div>
 
                 {/* INPUT BAR — fixed at bottom */}
-                <div className="shrink-0 border-t border-[#E8E7FB] bg-white px-3 py-3">
+                <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[#E8E7FB] bg-white/96 px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3 shadow-[0_-12px_30px_rgba(16,25,54,0.08)] backdrop-blur-xl">
                     <div className="flex gap-2 rounded-[14px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 py-2">
                         <input
                             value={draft}
