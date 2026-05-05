@@ -20,6 +20,8 @@ import {
 import { auth, db } from "@/lib/firebase";
 import type { AdminPermissions, UserPermissions } from "@/types/users";
 
+const PROFILE_CACHE_PREFIX = "trackgo_profile_cache_";
+
 const COUNTRY_PHONE_CODES: Record<string, string> = {
     panama: "507",
     guatemala: "502",
@@ -76,6 +78,31 @@ function profileFromSnapshot(id: string, data: Record<string, unknown>, authEmai
     };
 }
 
+function profileCacheKey(uid: string) {
+    return `${PROFILE_CACHE_PREFIX}${uid}`;
+}
+
+function readCachedProfile(uid: string): AppUser | null {
+    if (typeof window === "undefined") return null;
+    try {
+        const raw = window.localStorage.getItem(profileCacheKey(uid));
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as AppUser;
+        return parsed?.id === uid ? parsed : null;
+    } catch {
+        return null;
+    }
+}
+
+function saveCachedProfile(profile: AppUser) {
+    if (typeof window === "undefined") return;
+    try {
+        window.localStorage.setItem(profileCacheKey(profile.id), JSON.stringify(profile));
+    } catch {
+        // localStorage can be unavailable in private/restricted contexts.
+    }
+}
+
 async function readUserProfile(uid: string): Promise<DocumentSnapshot> {
     const ref = doc(db, "users", uid);
     try {
@@ -129,33 +156,80 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const unsub = onAuthStateChanged(auth, async (user) => {
-            setLoading(true);
+        let disposed = false;
+        let retryTimer: number | null = null;
+
+        async function loadProfile(user: User, attempt = 0) {
+            if (disposed) return;
 
             try {
-                setFirebaseUser(user);
-
-                if (!user) {
-                    setProfile(null);
-                    return;
-                }
-
                 const snap = await readUserProfile(user.uid);
+                if (disposed) return;
 
                 if (!snap.exists()) {
                     setProfile(null);
+                    setLoading(false);
                     return;
                 }
 
                 const data = snap.data() as Record<string, unknown>;
+                const nextProfile = profileFromSnapshot(snap.id, data, user.email);
+                setProfile(nextProfile);
+                saveCachedProfile(nextProfile);
+                setLoading(false);
+            } catch (error) {
+                if (disposed) return;
 
-                setProfile(profileFromSnapshot(snap.id, data, user.email));
-            } finally {
+                const cached = readCachedProfile(user.uid);
+                if (cached) {
+                    console.warn("[auth] Using cached profile while Firestore recovers.", error);
+                    setProfile(cached);
+                    setLoading(false);
+
+                    if (attempt < 5) {
+                        retryTimer = window.setTimeout(() => loadProfile(user, attempt + 1), 1200 * (attempt + 1));
+                    }
+                    return;
+                }
+
+                if (attempt < 8) {
+                    retryTimer = window.setTimeout(() => loadProfile(user, attempt + 1), 500 * (attempt + 1));
+                    return;
+                }
+
+                console.error("[auth] Could not load profile after retries.", error);
+                setProfile(null);
                 setLoading(false);
             }
+        }
+
+        const unsub = onAuthStateChanged(auth, async (user) => {
+            setLoading(true);
+
+            if (retryTimer) {
+                window.clearTimeout(retryTimer);
+                retryTimer = null;
+            }
+
+            setFirebaseUser(user);
+
+            if (!user) {
+                setProfile(null);
+                setLoading(false);
+                return;
+            }
+
+            const cached = readCachedProfile(user.uid);
+            if (cached) setProfile(cached);
+
+            await loadProfile(user);
         });
 
-        return () => unsub();
+        return () => {
+            disposed = true;
+            if (retryTimer) window.clearTimeout(retryTimer);
+            unsub();
+        };
     }, []);
 
     const value = useMemo<AuthContextValue>(
