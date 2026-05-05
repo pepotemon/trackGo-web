@@ -183,6 +183,65 @@ async function requireAdminUser(req) {
     return { uid, user };
 }
 
+async function requireActivePanelUser(req) {
+    const authHeader = String(req.headers.authorization || "");
+    const match = authHeader.match(/^Bearer\s+(.+)$/i);
+
+    if (!match?.[1]) {
+        const err = new Error("missing_authorization_token");
+        err.statusCode = 401;
+        throw err;
+    }
+
+    const decoded = await getAuth().verifyIdToken(match[1]);
+    const uid = String(decoded?.uid || "").trim();
+
+    if (!uid) {
+        const err = new Error("invalid_auth_user");
+        err.statusCode = 401;
+        throw err;
+    }
+
+    const userSnap = await db.doc(`users/${uid}`).get();
+
+    if (!userSnap.exists) {
+        const err = new Error("user_not_found");
+        err.statusCode = 403;
+        throw err;
+    }
+
+    const user = userSnap.data() || {};
+
+    if (user.active !== true || !["admin", "user"].includes(String(user.role || ""))) {
+        const err = new Error("active_panel_user_required");
+        err.statusCode = 403;
+        throw err;
+    }
+
+    return { uid, user };
+}
+
+async function assertCanSendManualMessage({ uid, user, clientId }) {
+    if (user.role === "admin") return;
+
+    const clientSnap = await db.doc(`clients/${clientId}`).get();
+
+    if (!clientSnap.exists) {
+        const err = new Error("client_not_found");
+        err.statusCode = 404;
+        throw err;
+    }
+
+    const client = clientSnap.data() || {};
+    const assignedTo = String(client.assignedTo || "").trim();
+
+    if (assignedTo !== uid) {
+        const err = new Error("client_not_assigned_to_user");
+        err.statusCode = 403;
+        throw err;
+    }
+}
+
 async function maybeReplyToLead({
     clientId,
     waId,
@@ -418,7 +477,7 @@ exports.sendManualLeadMessage = onRequest(
                 return;
             }
 
-            const { uid } = await requireAdminUser(req);
+            const { uid, user } = await requireActivePanelUser(req);
 
             const body = req.body || {};
             const clientId = String(body?.clientId || "").trim();
@@ -434,6 +493,8 @@ exports.sendManualLeadMessage = onRequest(
                 res.status(400).json({ ok: false, error: "missing_text" });
                 return;
             }
+
+            await assertCanSendManualMessage({ uid, user, clientId });
 
             const result = await sendManualWhatsAppMessage({
                 clientId,

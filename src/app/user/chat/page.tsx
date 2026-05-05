@@ -457,14 +457,19 @@ export default function UserIncompleteClientsPage() {
             {/* ── NO APTO MODAL ───────────────────────────────────────── */}
             {actionType === "review" && actionLead ? (
                 <BottomSheet onClose={closeAction} fixedFooter={
-                    <button
-                        type="button"
-                        onClick={confirmAccept}
-                        disabled={saving || previewLoading}
-                        className="w-full rounded-[14px] bg-emerald-600 py-3 text-[13px] font-black text-white disabled:opacity-60"
-                    >
-                        {saving ? "Tomando..." : "Tomar cliente"}
-                    </button>
+                    <div>
+                        <p className="mb-2 rounded-[14px] border border-violet-100 bg-violet-50 px-3 py-2 text-[11px] font-semibold text-[#5B21FF]">
+                            Para responder, primero toma el cliente. Luego lo veras en Prospectos.
+                        </p>
+                        <button
+                            type="button"
+                            onClick={confirmAccept}
+                            disabled={saving || previewLoading}
+                            className="w-full rounded-[14px] bg-emerald-600 py-3 text-[13px] font-black text-white disabled:opacity-60"
+                        >
+                            {saving ? "Tomando..." : "Tomar cliente"}
+                        </button>
+                    </div>
                 }>
                     <div className="mb-3 flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -515,9 +520,6 @@ export default function UserIncompleteClientsPage() {
                         )}
                     </div>
 
-                    <p className="mt-3 rounded-[14px] border border-violet-100 bg-violet-50 px-3 py-2 text-[11px] font-semibold text-[#5B21FF]">
-                        Para responder, primero toma el cliente. Luego lo veras en Prospectos.
-                    </p>
                 </BottomSheet>
             ) : null}
 
