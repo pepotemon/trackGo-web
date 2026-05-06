@@ -3,6 +3,7 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {
     assignLeadToUser,
+    getLeadQueueFacetLeads,
     getLeadQueuePage,
     updateLeadStatus,
 } from "@/data/leadsRepo";
@@ -20,6 +21,11 @@ import type {
     MetaLeadDoc,
 } from "@/types/leads";
 import type { UserDoc } from "@/types/users";
+import {
+    buildPhonePrefixOptions,
+    leadMatchesPhonePrefix,
+    type PhonePrefixOption,
+} from "@/lib/phonePrefixes";
 
 function defaultFilters(): LeadFilters {
     const { startKey, endKey } = weekRangeKeysMonToSun();
@@ -27,6 +33,7 @@ function defaultFilters(): LeadFilters {
         status: "pending_review",
         city: "all",
         assignment: "all",
+        phonePrefix: "all",
         search: "",
         startKey,
         endKey,
@@ -37,6 +44,7 @@ const DEFAULT_PAGE_SIZE = 43;
 const FILTERED_PAGE_SIZE = 43;
 const MIN_FILTERED_RESULTS = 50;
 const MAX_AUTO_FETCH_PAGES = 1;
+const MAX_CLIENT_FILTER_FETCH_PAGES = 10;
 
 const CITY_FILTER_FIELDS = new Set<LeadQueueCityField>([
     "geoAdminCityNormalized",
@@ -137,7 +145,7 @@ function parseCityFilter(value: string): LeadQueueCityFilter | null {
 }
 
 function hasClientSideFilters(filters: LeadFilters) {
-    return !!filters.search.trim() || filters.assignment !== "all";
+    return !!filters.search.trim() || filters.phonePrefix !== "all";
 }
 
 function filterLeads(leads: MetaLeadDoc[], filters: LeadFilters) {
@@ -153,9 +161,7 @@ function filterLeads(leads: MetaLeadDoc[], filters: LeadFilters) {
             return false;
         }
 
-        const isAutoAssigned = !!lead.autoAssignedAt;
-        if (filters.assignment === "auto" && !isAutoAssigned) return false;
-        if (filters.assignment === "manual" && isAutoAssigned) return false;
+        if (!leadMatchesPhonePrefix(lead.phone, filters.phonePrefix)) return false;
 
         if (filters.startKey || filters.endKey) {
             const at = leadActivityAt(lead);
@@ -171,10 +177,12 @@ function filterLeads(leads: MetaLeadDoc[], filters: LeadFilters) {
 export function useAdminLeadQueue() {
     const [leads, setLeads] = useState<MetaLeadDoc[]>([]);
     const [users, setUsers] = useState<UserDoc[]>([]);
+    const [facetLeads, setFacetLeads] = useState<MetaLeadDoc[]>([]);
     const [filters, setFilters] = useState<LeadFilters>(() => defaultFilters());
     const deferredSearch = useDeferredValue(filters.search);
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
+    const [loadingFilterOptions, setLoadingFilterOptions] = useState(false);
     const [cursor, setCursor] = useState<LeadQueuePageCursor | null>(null);
     const [hasMore, setHasMore] = useState(false);
     const [savingId, setSavingId] = useState<string | null>(null);
@@ -184,14 +192,18 @@ export function useAdminLeadQueue() {
     const cityOptions = useMemo<LeadCityOption[]>(() => {
         const map = new Map<string, string>();
 
-        for (const lead of leads) {
+        for (const lead of [...facetLeads, ...leads]) {
             map.set(cityFilterValue(lead), cityLabel(lead));
         }
 
         return Array.from(map.entries())
             .map(([value, label]) => ({ value, label }))
             .sort((a, b) => a.label.localeCompare(b.label, "es"));
-    }, [leads]);
+    }, [facetLeads, leads]);
+
+    const phonePrefixOptions = useMemo<PhonePrefixOption[]>(() => {
+        return buildPhonePrefixOptions([...facetLeads, ...leads].map((lead) => lead.phone));
+    }, [facetLeads, leads]);
 
     const filteredLeads = useMemo(() => {
         return filterLeads(leads, filters);
@@ -267,8 +279,11 @@ export function useAdminLeadQueue() {
             let nextCursor = reset ? null : cursor;
             let nextHasMore = true;
             let pagesFetched = 0;
+            const maxPages = hasClientSideFilters(activeFilters)
+                ? MAX_CLIENT_FILTER_FETCH_PAGES
+                : MAX_AUTO_FETCH_PAGES;
 
-            while (nextHasMore && pagesFetched < MAX_AUTO_FETCH_PAGES) {
+            while (nextHasMore && pagesFetched < maxPages) {
                 const page = await getLeadQueuePage({
                     cursor: nextCursor,
                     statuses: queryStatuses(activeFilters),
@@ -323,7 +338,26 @@ export function useAdminLeadQueue() {
             void loadLeadsPage(true, effectiveFilters());
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [filters.status, filters.city, filters.startKey, filters.endKey, filters.assignment, deferredSearch]);
+    }, [filters.status, filters.city, filters.startKey, filters.endKey, filters.phonePrefix, deferredSearch]);
+
+    async function loadFilterOptions() {
+        if (loadingFilterOptions) return;
+
+        setLoadingFilterOptions(true);
+        setErr(null);
+
+        try {
+            const next = await getLeadQueueFacetLeads({
+                statuses: queryStatuses(filters),
+                maxPages: 12,
+            });
+            setFacetLeads(next);
+        } catch (e: unknown) {
+            setErr(errorMessage(e, "No se pudieron cargar las opciones de filtros."));
+        } finally {
+            setLoadingFilterOptions(false);
+        }
+    }
 
     async function setLeadStatus(
         lead: MetaLeadDoc,
@@ -417,9 +451,11 @@ export function useAdminLeadQueue() {
         filters,
         filteredLeads,
         cityOptions,
+        phonePrefixOptions,
         stats,
         loading,
         loadingMore,
+        loadingFilterOptions,
         hasMore,
         savingId,
         err,
@@ -427,6 +463,7 @@ export function useAdminLeadQueue() {
         resetFilters,
         reloadUsers: loadUsers,
         reloadLeads: () => loadLeadsPage(true, effectiveFilters()),
+        loadFilterOptions,
         loadMore: () => loadLeadsPage(false, effectiveFilters()),
         setLeadStatus,
         assignLead,

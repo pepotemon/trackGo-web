@@ -151,9 +151,11 @@ export default function AdminLeadsPage() {
         filters,
         filteredLeads,
         cityOptions,
+        phonePrefixOptions,
         stats,
         loading,
         loadingMore,
+        loadingFilterOptions,
         hasMore,
         savingId,
         err,
@@ -161,6 +163,7 @@ export default function AdminLeadsPage() {
         resetFilters,
         reloadUsers,
         reloadLeads,
+        loadFilterOptions,
         loadMore,
         setLeadStatus,
         assignLead,
@@ -220,7 +223,7 @@ export default function AdminLeadsPage() {
         let total = 0;
         if (filters.status !== "pending_review") total++;
         if (filters.city !== "all") total++;
-        if (filters.assignment !== "all") total++;
+        if (filters.phonePrefix !== "all") total++;
         if (filters.search.trim()) total++;
         if (filters.startKey) total++;
         if (filters.endKey) total++;
@@ -279,13 +282,16 @@ export default function AdminLeadsPage() {
                     stats={stats}
                     filters={filters}
                     cityOptions={cityOptions}
+                    phonePrefixOptions={phonePrefixOptions}
                     loading={loading}
                     loadingMore={loadingMore}
+                    loadingFilterOptions={loadingFilterOptions}
                     hasMore={hasMore}
                     savingId={savingId}
                     activeFiltersCount={activeFiltersCount}
                     onPatchFilters={patchFilters}
                     onResetFilters={resetFilters}
+                    onLoadFilterOptions={loadFilterOptions}
                     onReloadUsers={reloadUsers}
                     onLoadMore={loadMore}
                     onOpenCoverage={() => setCoverageOpen(true)}
@@ -402,6 +408,7 @@ export default function AdminLeadsPage() {
                                 label="Ciudad"
                                 value={filters.city}
                                 onChange={(value) => patchFilters({ city: value })}
+                                onFocus={loadFilterOptions}
                             >
                                 <option value="all">Todas las ciudades</option>
                                 {cityOptions.map((city) => (
@@ -412,17 +419,23 @@ export default function AdminLeadsPage() {
                             </FilterSelect>
 
                             <FilterSelect
-                                label="Asignación"
-                                value={filters.assignment}
+                                label="Indicativo"
+                                value={filters.phonePrefix}
                                 onChange={(value) =>
                                     patchFilters({
-                                        assignment: value as LeadFilters["assignment"],
+                                        phonePrefix: value,
                                     })
                                 }
+                                onFocus={loadFilterOptions}
                             >
-                                <option value="all">Manual y auto</option>
-                                <option value="auto">Auto-asignados</option>
-                                <option value="manual">Manuales</option>
+                                <option value="all">
+                                    {loadingFilterOptions ? "Cargando indicativos..." : "Todos los indicativos"}
+                                </option>
+                                {phonePrefixOptions.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                        {option.label}
+                                    </option>
+                                ))}
                             </FilterSelect>
 
                             <FilterDate
@@ -619,13 +632,16 @@ function MobileLeadQueue({
     stats,
     filters,
     cityOptions,
+    phonePrefixOptions,
     loading,
     loadingMore,
+    loadingFilterOptions,
     hasMore,
     savingId,
     activeFiltersCount,
     onPatchFilters,
     onResetFilters,
+    onLoadFilterOptions,
     onReloadUsers,
     onLoadMore,
     onOpenCoverage,
@@ -640,13 +656,16 @@ function MobileLeadQueue({
     stats: ReturnType<typeof useAdminLeadQueue>["stats"];
     filters: LeadFilters;
     cityOptions: { value: string; label: string }[];
+    phonePrefixOptions: { value: string; label: string }[];
     loading: boolean;
     loadingMore: boolean;
+    loadingFilterOptions: boolean;
     hasMore: boolean;
     savingId: string | null;
     activeFiltersCount: number;
     onPatchFilters: (patch: Partial<LeadFilters>) => void;
     onResetFilters: () => void;
+    onLoadFilterOptions: () => void;
     onReloadUsers: () => void;
     onLoadMore: () => void;
     onOpenCoverage: () => void;
@@ -662,11 +681,17 @@ function MobileLeadQueue({
     const modalFiltersCount = useMemo(
         () =>
             (filters.city !== "all" ? 1 : 0) +
-            (filters.assignment !== "all" ? 1 : 0) +
+            (filters.phonePrefix !== "all" ? 1 : 0) +
             (filters.startKey ? 1 : 0) +
             (filters.endKey ? 1 : 0),
-        [filters.city, filters.assignment, filters.startKey, filters.endKey]
+        [filters.city, filters.phonePrefix, filters.startKey, filters.endKey]
     );
+
+    useEffect(() => {
+        if (!filterModalOpen) return;
+        void onLoadFilterOptions();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [filterModalOpen]);
 
     return (
         <div className="-mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] max-w-[100vw] bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.10),transparent_36%),linear-gradient(180deg,#fbfaff_0%,#f6f3ff_52%,#f8fafc_100%)] pb-6 text-[#101936]">
@@ -830,6 +855,8 @@ function MobileLeadQueue({
                 onClose={() => setFilterModalOpen(false)}
                 filters={filters}
                 cityOptions={cityOptions}
+                phonePrefixOptions={phonePrefixOptions}
+                loadingFilterOptions={loadingFilterOptions}
                 onPatchFilters={onPatchFilters}
                 onResetFilters={onResetFilters}
                 activeFiltersCount={modalFiltersCount}
@@ -1148,6 +1175,8 @@ function MobileFiltersModal({
     onClose,
     filters,
     cityOptions,
+    phonePrefixOptions,
+    loadingFilterOptions,
     onPatchFilters,
     onResetFilters,
     activeFiltersCount,
@@ -1156,6 +1185,8 @@ function MobileFiltersModal({
     onClose: () => void;
     filters: LeadFilters;
     cityOptions: { value: string; label: string }[];
+    phonePrefixOptions: { value: string; label: string }[];
+    loadingFilterOptions: boolean;
     onPatchFilters: (patch: Partial<LeadFilters>) => void;
     onResetFilters: () => void;
     activeFiltersCount: number;
@@ -1224,17 +1255,22 @@ function MobileFiltersModal({
                     </MobileFilterSelect>
 
                     <MobileFilterSelect
-                        label="Asignación"
-                        value={filters.assignment}
+                        label="Indicativo"
+                        value={filters.phonePrefix}
                         onChange={(value) =>
                             onPatchFilters({
-                                assignment: value as LeadFilters["assignment"],
+                                phonePrefix: value,
                             })
                         }
                     >
-                        <option value="all">Manual y auto</option>
-                        <option value="auto">Auto-asignados</option>
-                        <option value="manual">Manuales</option>
+                        <option value="all">
+                            {loadingFilterOptions ? "Cargando indicativos..." : "Todos los indicativos"}
+                        </option>
+                        {phonePrefixOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                                {option.label}
+                            </option>
+                        ))}
                     </MobileFilterSelect>
                 </div>
 
@@ -1336,11 +1372,13 @@ function FilterSelect({
     label,
     value,
     onChange,
+    onFocus,
     children,
 }: {
     label: string;
     value: string;
     onChange: (value: string) => void;
+    onFocus?: () => void;
     children: React.ReactNode;
 }) {
     return (
@@ -1348,6 +1386,7 @@ function FilterSelect({
             <span className="text-[11px] font-semibold text-[#71717a]">{label}</span>
             <select
                 value={value}
+                onFocus={onFocus}
                 onChange={(e) => onChange(e.target.value)}
                 className={selectClassName("w-full")}
             >

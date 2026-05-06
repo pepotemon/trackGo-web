@@ -76,6 +76,7 @@ export type LeadFilters = {
     status: LeadReviewStatus | "all";
     city: string;
     assignment: LeadAutoAssignmentFilter;
+    phonePrefix: string;
     search: string;
     startKey: string;
     endKey: string;

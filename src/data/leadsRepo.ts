@@ -340,6 +340,37 @@ export async function getLeadQueuePage({
     };
 }
 
+export async function getLeadQueueFacetLeads({
+    statuses,
+    maxPages = 10,
+}: {
+    statuses?: LeadReviewStatus[];
+    maxPages?: number;
+} = {}): Promise<MetaLeadDoc[]> {
+    const map = new Map<string, MetaLeadDoc>();
+    let cursor: LeadQueuePageCursor | null = null;
+    let hasMore = true;
+    let page = 0;
+
+    while (hasMore && page < maxPages) {
+        const result = await getLeadQueuePage({
+            cursor,
+            statuses,
+            pageSize: 150,
+        });
+
+        for (const lead of result.items) {
+            map.set(lead.id, lead);
+        }
+
+        cursor = result.cursor;
+        hasMore = result.hasMore;
+        page += 1;
+    }
+
+    return Array.from(map.values());
+}
+
 export async function getLeadHistoryPage({
     cursor,
     pageSize,
