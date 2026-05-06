@@ -235,11 +235,24 @@ async function assertCanSendManualMessage({ uid, user, clientId }) {
     const client = clientSnap.data() || {};
     const assignedTo = String(client.assignedTo || "").trim();
     const takenFromIncompleteAt = Number(client.takenFromIncompleteAt || 0);
+    const status = String(client.status || "pending").trim() || "pending";
+    const userPermissions = user.userPermissions && typeof user.userPermissions === "object"
+        ? user.userPermissions
+        : {};
+    const canChatWithProspects = userPermissions.canChatWithProspects === true;
 
     if (assignedTo !== uid) {
         const err = new Error("client_not_assigned_to_user");
         err.statusCode = 403;
         throw err;
+    }
+
+    if (Number.isFinite(takenFromIncompleteAt) && takenFromIncompleteAt > 0) {
+        return;
+    }
+
+    if (canChatWithProspects && status === "pending") {
+        return;
     }
 
     if (!Number.isFinite(takenFromIncompleteAt) || takenFromIncompleteAt <= 0) {

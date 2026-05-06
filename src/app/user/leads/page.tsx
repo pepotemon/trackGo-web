@@ -109,7 +109,7 @@ function saveNote(leadId: string, note: string) {
 }
 
 export default function UserLeadsPage() {
-    const { firebaseUser, profile } = useAuth();
+    const { firebaseUser, profile, userPermissions } = useAuth();
     const [leads, setLeads] = useState<MetaLeadDoc[]>([]);
     const [events, setEvents] = useState<DailyEventDoc[]>([]);
     const [loading, setLoading] = useState(true);
@@ -395,9 +395,10 @@ export default function UserLeadsPage() {
                                     onUndo={() => handleUndo(lead)}
                                     onWhatsApp={() => openWhatsApp(lead)}
                                     onMaps={() => openMaps(lead)}
-                                    onCopy={() => copyLead(lead)}
-                                    onNote={() => openNoteAction(lead)}
-                                />
+                                onCopy={() => copyLead(lead)}
+                                onNote={() => openNoteAction(lead)}
+                                canChatWithProspects={userPermissions.canChatWithProspects}
+                            />
                             );
                         })}
                     </div>
@@ -445,6 +446,7 @@ export default function UserLeadsPage() {
                                         onMaps={() => openMaps(lead)}
                                         onCopy={() => copyLead(lead)}
                                         onNote={() => { openNoteAction(lead); setSearchOpen(false); }}
+                                        canChatWithProspects={userPermissions.canChatWithProspects}
                                     />
                                 ))}
                             </div>
@@ -629,6 +631,7 @@ function LeadCard({
     onMaps,
     onCopy,
     onNote,
+    canChatWithProspects,
 }: {
     lead: MetaLeadDoc;
     note?: string;
@@ -642,12 +645,13 @@ function LeadCard({
     onMaps: () => void;
     onCopy: () => void;
     onNote?: () => void;
+    canChatWithProspects: boolean;
 }) {
     const isPending = !lead.status || lead.status === "pending";
     const isVisited = lead.status === "visited";
     const isRejected = lead.status === "rejected";
     const needsData = lead.verificationStatus === "pending_review" && (!lead.location?.lat || !lead.location?.mapsUrl || !lead.name);
-    const canChat = isPending && Boolean(lead.takenFromIncompleteAt);
+    const canChat = isPending && (Boolean(lead.takenFromIncompleteAt) || canChatWithProspects);
     const userSeenAt = Math.max(lead.userChatLastSeenMessageAt ?? 0, lead.userChatSeenAt ?? 0);
     const hasUnreadChat = canChat && Boolean((lead.lastInboundMessageAt ?? 0) > userSeenAt);
     const unreadChatCount = hasUnreadChat ? Math.max(1, lead.userUnreadMessageCount ?? 0) : 0;

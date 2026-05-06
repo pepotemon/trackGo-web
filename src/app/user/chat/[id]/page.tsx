@@ -6,6 +6,7 @@ import { markUserLeadMessagesSeen, sendManualLeadMessage, subscribeLeadClient, s
 import { dddCity, extractDDD } from "@/data/incompleteClientsRepo";
 import type { LeadMessageDoc, MetaLeadDoc } from "@/types/leads";
 import { buildWhatsAppUrl } from "@/lib/whatsapp";
+import { useAuth } from "@/features/auth/AuthProvider";
 
 function formatTime(ts: number | null | undefined) {
     if (!ts) return "";
@@ -53,6 +54,7 @@ function lastInboundAt(lead: MetaLeadDoc | null, messages: LeadMessageDoc[]) {
 export default function UserChatDetailPage() {
     const params = useParams();
     const router = useRouter();
+    const { userPermissions } = useAuth();
     const clientId = String(params?.id ?? "");
 
     const [lead, setLead] = useState<MetaLeadDoc | null>(null);
@@ -103,7 +105,7 @@ export default function UserChatDetailPage() {
 
     async function handleSend() {
         const msg = text.trim();
-        if (!msg || !clientId || sending) return;
+        if (!msg || !clientId || sending || !canReply) return;
         setSending(true);
         setSendError("");
         try {
@@ -131,6 +133,10 @@ export default function UserChatDetailPage() {
 
     const ddd = lead ? extractDDD(lead.phone) : null;
     const dayGroups = groupByDay(messages);
+    const canReply =
+        !!lead &&
+        (!lead.status || lead.status === "pending") &&
+        (Boolean(lead.takenFromIncompleteAt) || userPermissions.canChatWithProspects);
 
     if (loadingLead) {
         return (
@@ -254,7 +260,11 @@ export default function UserChatDetailPage() {
 
             {/* ── INPUT ───────────────────────────────────────────────── */}
             <div className="fixed inset-x-0 bottom-0 z-[60] border-t border-[#E8E7FB] bg-white/96 px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-2 shadow-[0_-12px_30px_rgba(16,25,54,0.08)] backdrop-blur-xl">
-                {sendError ? (
+                {!canReply ? (
+                    <p className="mb-1.5 rounded-[12px] border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-700">
+                        Chat no habilitado para este prospecto.
+                    </p>
+                ) : sendError ? (
                     <p className="mb-1.5 text-[11px] font-bold text-red-600">{sendError}</p>
                 ) : null}
                 <div className="flex items-end gap-2">
@@ -267,13 +277,14 @@ export default function UserChatDetailPage() {
                         }}
                         placeholder="Escribe un mensaje..."
                         rows={1}
+                        disabled={!canReply}
                         className="min-h-[40px] flex-1 resize-none rounded-[14px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 py-2.5 text-[13px] font-semibold text-[#101936] outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-violet-100"
                         style={{ maxHeight: "120px" }}
                     />
                     <button
                         type="button"
                         onClick={handleSend}
-                        disabled={!text.trim() || sending}
+                        disabled={!canReply || !text.trim() || sending}
                         className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-[#7C3AED] text-white shadow-md transition active:bg-[#6d28d9] disabled:opacity-40"
                     >
                         {sending ? (

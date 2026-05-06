@@ -245,6 +245,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 canSeeMap: profile?.userPermissions?.canSeeMap ?? true,
                 canSeeHistory: profile?.userPermissions?.canSeeHistory ?? true,
                 canSeeChat: profile?.userPermissions?.canSeeChat ?? true,
+                canChatWithProspects: profile?.userPermissions?.canChatWithProspects ?? false,
             },
             phoneCodes: profile?.phoneCodes ?? [],
             login: async (email, password) => {

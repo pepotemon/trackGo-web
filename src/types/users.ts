@@ -96,14 +96,16 @@ export type UserPermissions = {
     canSeeHistory: boolean;
     /** Can view the chat / incomplete-clients screen. */
     canSeeChat: boolean;
+    /** Can reply from TrackGo chat to any assigned pending prospect. */
+    canChatWithProspects: boolean;
 };
 
 export function defaultUserPermissions(): UserPermissions {
-    return { canSeeMap: true, canSeeHistory: true, canSeeChat: true };
+    return { canSeeMap: true, canSeeHistory: true, canSeeChat: true, canChatWithProspects: false };
 }
 
 export function fullUserPermissions(): UserPermissions {
-    return { canSeeMap: true, canSeeHistory: true, canSeeChat: true };
+    return { canSeeMap: true, canSeeHistory: true, canSeeChat: true, canChatWithProspects: true };
 }
 
 /** Returns a permissions object with everything enabled (used for superadmin). */

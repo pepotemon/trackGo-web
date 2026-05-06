@@ -1699,6 +1699,7 @@ function EditUserModal({
                                         { key: "canSeeMap" as keyof UserPermissions, label: "Ver Mapa de prospectos" },
                                         { key: "canSeeHistory" as keyof UserPermissions, label: "Ver Historial de visitas" },
                                         { key: "canSeeChat" as keyof UserPermissions, label: "Ver Chat de clientes incompletos" },
+                                        { key: "canChatWithProspects" as keyof UserPermissions, label: "Responder por chat a prospectos pendientes" },
                                     ]).map(({ key, label }) => (
                                         <PermissionToggle
                                             key={key}
@@ -1720,7 +1721,7 @@ function EditUserModal({
                             </button>
                             <button
                                 type="button"
-                                onClick={() => setUserPermissions({ canSeeMap: false, canSeeHistory: false, canSeeChat: false })}
+                                onClick={() => setUserPermissions({ canSeeMap: false, canSeeHistory: false, canSeeChat: false, canChatWithProspects: false })}
                                 className="flex-1 rounded-lg border border-red-200 bg-red-50 py-2 text-[12px] font-semibold text-red-600 transition hover:bg-red-100"
                             >
                                 Revocar todo
