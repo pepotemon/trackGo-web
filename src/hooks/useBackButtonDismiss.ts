@@ -21,6 +21,7 @@ export function useBackButtonDismiss(open: boolean, onClose: () => void) {
         }
 
         const marker = `trackgo-modal-${Date.now()}-${modalSequence++}`;
+        const openedUrl = window.location.href;
         let closedByPop = false;
 
         window.history.pushState({ ...(window.history.state ?? {}), __trackgoModal: marker }, "");
@@ -35,11 +36,11 @@ export function useBackButtonDismiss(open: boolean, onClose: () => void) {
         return () => {
             window.removeEventListener("popstate", handlePopState);
 
-            if (!closedByPop && window.history.state?.__trackgoModal === marker) {
+            if (!closedByPop && window.location.href === openedUrl && window.history.state?.__trackgoModal === marker) {
                 cleanupTimerRef.current = window.setTimeout(() => {
                     cleanupTimerRef.current = null;
 
-                    if (window.history.state?.__trackgoModal === marker) {
+                    if (window.location.href === openedUrl && window.history.state?.__trackgoModal === marker) {
                         window.history.back();
                     }
                 }, 80);
