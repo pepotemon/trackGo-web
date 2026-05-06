@@ -94,6 +94,10 @@ function isPendingLead(lead: MetaLeadDoc) {
     return !lead.status || lead.status === "pending";
 }
 
+function leadQueueTime(lead: MetaLeadDoc) {
+    return lead.assignedAt || lead.createdAt || lead.updatedAt || 0;
+}
+
 function leadVisibleInWorkRange(lead: MetaLeadDoc, startKey: string, endKey: string) {
     if (isPendingLead(lead)) return true;
     return leadInRange(lead, startKey, endKey);
@@ -194,6 +198,11 @@ export default function UserLeadsPage() {
                 norm(l.location.displayLabel).includes(q)
             );
         }
+
+        if (filter === "pending") {
+            list = [...list].sort((a, b) => leadQueueTime(a) - leadQueueTime(b));
+        }
+
         return list;
     }, [activeWeek, leads, filter, search]);
 
@@ -819,7 +828,7 @@ function ActionBtn({ onClick, title, tone, children }: { onClick: () => void; ti
         green: "border-emerald-200 bg-emerald-50 text-emerald-700",
         blue: "border-blue-200 bg-blue-50 text-blue-700",
         violet: "border-violet-200 bg-violet-50 text-violet-700",
-        sent: "border-emerald-300 bg-emerald-100 text-emerald-700",
+        sent: "border-[#6D28D9] bg-[#7C3AED] text-white shadow-[0_8px_18px_rgba(124,58,237,0.28)]",
     };
     return (
         <button
