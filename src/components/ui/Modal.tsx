@@ -24,6 +24,7 @@ export function Modal({
 
     return (
         <div
+            data-trackgo-modal="true"
             className="fixed inset-0 z-50 flex items-end justify-center bg-[#101936]/25 p-0 backdrop-blur-md sm:items-center sm:p-4"
             onClick={onClose}
         >

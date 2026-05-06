@@ -36,7 +36,10 @@ export function AssignUserModal({
                 className="fixed inset-0 z-[60] bg-black/50 xl:hidden"
                 aria-label="Cerrar"
             />
-            <div className="fixed inset-x-0 bottom-0 z-[70] rounded-t-[24px] bg-white px-4 pb-8 pt-4 shadow-[0_-8px_40px_rgba(0,0,0,0.22)] xl:hidden">
+            <div
+                data-trackgo-modal="true"
+                className="fixed inset-x-0 bottom-0 z-[70] rounded-t-[24px] bg-white px-4 pb-8 pt-4 shadow-[0_-8px_40px_rgba(0,0,0,0.22)] xl:hidden"
+            >
                 <div className="mx-auto mb-4 h-1 w-12 rounded-full bg-[#E8E7FB]" />
 
                 <div className="mb-4 flex items-center gap-2">

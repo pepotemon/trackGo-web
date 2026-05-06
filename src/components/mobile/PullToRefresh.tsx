@@ -42,6 +42,8 @@ export function PullToRefresh({ disabled = false, onRefresh }: PullToRefreshProp
 
         function onTouchStart(event: TouchEvent) {
             if (!isMobile() || window.scrollY > 0) return;
+            const target = event.target;
+            if (target instanceof Element && target.closest("[data-trackgo-modal='true']")) return;
             const touch = event.touches[0];
             if (!touch) return;
             startY = touch.clientY;

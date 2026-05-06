@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     listActivityEventsPage,
     listPendingClientsForActivity,
@@ -671,8 +671,10 @@ export default function ActivityPage() {
             <ActivityListModal
                 mode={listMode}
                 rows={listMode ? activityRowsByType[listMode] : []}
+                users={visibleUsers}
                 onClose={() => setListMode(null)}
                 onOpenSheet={setMobileSheetRow}
+                onChanged={() => loadInitial(filters)}
             />
 
             <EarningsModal
@@ -1487,17 +1489,34 @@ function followUpBadge(state: ClientFollowUp | undefined, originalUserId: string
 function ActivityListModal({
     mode,
     rows,
+    users,
     onClose,
     onOpenSheet,
+    onChanged,
 }: {
     mode: Exclude<ActivityEventType, "all"> | null;
     rows: ActivityEventRow[];
+    users: ActivityUserOption[];
     onClose: () => void;
     onOpenSheet?: (row: ActivityEventRow) => void;
+    onChanged?: () => void;
 }) {
+    const canAssign = useCan("leadsAssign");
+    const canDelete = useCan("leadsDelete");
     const [q, setQ] = useState("");
     const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set());
     const [clientStates, setClientStates] = useState<Map<string, ClientFollowUp>>(new Map());
+    const [selectionMode, setSelectionMode] = useState(false);
+    const [selectedClientIds, setSelectedClientIds] = useState<Set<string>>(new Set());
+    const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
+    const [bulkSaving, setBulkSaving] = useState(false);
+    const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => {
+        setSelectionMode(false);
+        setSelectedClientIds(new Set());
+        setBulkAssignOpen(false);
+    }, [mode]);
 
     useEffect(() => {
         if (mode !== "rejected" || !rows.length) {
@@ -1508,6 +1527,10 @@ function ActivityListModal({
         getClientCurrentStates(ids).then(setClientStates).catch(() => {});
     }, [mode, rows]);
 
+    function rowKey(row: ActivityEventRow) {
+        return row.clientId || row.id;
+    }
+
     function toggleUser(userId: string) {
         setExpandedUsers((prev) => {
             const next = new Set(prev);
@@ -1515,6 +1538,34 @@ function ActivityListModal({
             else next.add(userId);
             return next;
         });
+    }
+
+    function toggleRow(row: ActivityEventRow) {
+        const key = rowKey(row);
+        if (!key) return;
+
+        setSelectedClientIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
+            if (next.size === 0) setSelectionMode(false);
+            return next;
+        });
+    }
+
+    function startLongPress(row: ActivityEventRow) {
+        if (!canAssign && !canDelete) return;
+        if (longPressTimer.current) clearTimeout(longPressTimer.current);
+        longPressTimer.current = setTimeout(() => {
+            setSelectionMode(true);
+            setSelectedClientIds((prev) => new Set(prev).add(rowKey(row)));
+        }, 430);
+    }
+
+    function clearLongPress() {
+        if (!longPressTimer.current) return;
+        clearTimeout(longPressTimer.current);
+        longPressTimer.current = null;
     }
 
     const visibleRows = useMemo(() => {
@@ -1538,6 +1589,20 @@ function ActivityListModal({
         );
     }, [q, rows]);
 
+    const selectedRows = useMemo(() => {
+        const seen = new Set<string>();
+        const selected: ActivityEventRow[] = [];
+
+        for (const row of visibleRows) {
+            const key = rowKey(row);
+            if (!key || !selectedClientIds.has(key) || seen.has(key)) continue;
+            seen.add(key);
+            selected.push(row);
+        }
+
+        return selected;
+    }, [selectedClientIds, visibleRows]);
+
     const groupedRows = useMemo(() => {
         const map = new Map<string, { userId: string; userName: string; rows: ActivityEventRow[] }>();
 
@@ -1553,100 +1618,244 @@ function ActivityListModal({
         return Array.from(map.values()).sort((a, b) => a.userName.localeCompare(b.userName));
     }, [visibleRows]);
 
+    async function bulkAssign(userId: string) {
+        const targetUser = users.find((user) => user.id === userId);
+        setBulkSaving(true);
+
+        try {
+            for (const row of selectedRows) {
+                await assignLeadToUser(row.clientId, userId);
+                writeManualAssignLog({
+                    leadId: row.clientId,
+                    leadName: row.name,
+                    leadPhone: row.phone,
+                    leadBusiness: row.business,
+                    userId,
+                    userName: targetUser?.name || targetUser?.email || null,
+                }).catch(() => {});
+            }
+
+            setBulkAssignOpen(false);
+            setSelectedClientIds(new Set());
+            setSelectionMode(false);
+            onChanged?.();
+        } finally {
+            setBulkSaving(false);
+        }
+    }
+
+    async function bulkDelete() {
+        if (!selectedRows.length) return;
+        const ok = window.confirm(`Eliminar ${selectedRows.length} prospecto(s)? Esta accion no se puede deshacer.`);
+        if (!ok) return;
+
+        setBulkSaving(true);
+        try {
+            for (const row of selectedRows) {
+                await deleteLead(row.clientId);
+            }
+            setSelectedClientIds(new Set());
+            setSelectionMode(false);
+            onChanged?.();
+        } finally {
+            setBulkSaving(false);
+        }
+    }
+
     if (!mode) return null;
 
     const modalTitle = mode === "visited" ? "Visitados" : mode === "rejected" ? "Rechazados" : "Pendientes";
 
     return (
-        <Modal
-            open={!!mode}
-            onClose={onClose}
-            title={modalTitle}
-            subtitle={`${visibleRows.length} cliente(s) · ${groupedRows.length} usuario(s)`}
-            size="lg"
-        >
-            <div className="space-y-3">
-                <Input
-                    value={q}
-                    onChange={(event) => setQ(event.target.value)}
-                    placeholder="Buscar cliente, negocio, teléfono..."
-                />
+        <>
+            <Modal
+                open={!!mode}
+                onClose={onClose}
+                title={modalTitle}
+                subtitle={selectionMode ? `${selectedRows.length} seleccionado(s)` : `${visibleRows.length} cliente(s) · ${groupedRows.length} usuario(s)`}
+                size="lg"
+            >
+                <div className="space-y-3">
+                    <Input
+                        value={q}
+                        onChange={(event) => setQ(event.target.value)}
+                        placeholder="Buscar cliente, negocio, teléfono..."
+                    />
 
-                <div className="max-h-[58vh] space-y-2 overflow-y-auto pr-1">
-                    {groupedRows.length === 0 ? (
-                        <div className="rounded-xl border border-[#e5e7eb] bg-[#fafafa] p-5 text-center text-[13px] font-semibold text-[#71717a]">
-                            No hay clientes aquí.
+                    {selectionMode ? (
+                        <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[#ded8ff] bg-[#f8f7ff] p-2 shadow-sm">
+                            <div className="text-[12px] font-black text-[#101936]">
+                                {selectedRows.length} seleccionado(s)
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {canAssign ? (
+                                    <Button type="button" variant="primary" disabled={!selectedRows.length || bulkSaving} onClick={() => setBulkAssignOpen(true)}>
+                                        Reasignar
+                                    </Button>
+                                ) : null}
+                                {canDelete ? (
+                                    <Button type="button" variant="danger" disabled={!selectedRows.length || bulkSaving} onClick={bulkDelete}>
+                                        Eliminar
+                                    </Button>
+                                ) : null}
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    onClick={() => {
+                                        setSelectionMode(false);
+                                        setSelectedClientIds(new Set());
+                                    }}
+                                >
+                                    Cancelar
+                                </Button>
+                            </div>
                         </div>
                     ) : (
-                        groupedRows.map((group) => {
-                            const isExpanded = expandedUsers.has(group.userId);
+                        <p className="text-[11px] font-semibold text-[#98A2B3]">
+                            Mantén presionado un cliente para seleccionar varios.
+                        </p>
+                    )}
 
-                            return (
-                                <div key={group.userId} className="overflow-hidden rounded-[14px] border border-[#E8E7FB] bg-white">
-                                    <button
-                                        type="button"
-                                        onClick={() => toggleUser(group.userId)}
-                                        className="flex w-full items-center justify-between gap-3 px-3 py-2.5 transition hover:bg-[#f8f7ff]"
-                                    >
-                                        <div className="flex items-center gap-2">
-                                            <AppIcon name="users" tone="purple" size="sm" className="h-4 w-4 bg-transparent text-[#7C3AED] ring-0" />
-                                            <span className="text-[13px] font-black text-[#101936]">
-                                                {group.userName}
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <Badge tone="blue">{group.rows.length}</Badge>
-                                            <AppIcon
-                                                name={isExpanded ? "close" : "plus"}
-                                                tone="slate"
-                                                size="sm"
-                                                className="h-[14px] w-[14px] bg-transparent text-[#98A2B3] ring-0"
-                                            />
-                                        </div>
-                                    </button>
+                    <div className="max-h-[58vh] space-y-2 overflow-y-auto pr-1">
+                        {groupedRows.length === 0 ? (
+                            <div className="rounded-xl border border-[#e5e7eb] bg-[#fafafa] p-5 text-center text-[13px] font-semibold text-[#71717a]">
+                                No hay clientes aquí.
+                            </div>
+                        ) : (
+                            groupedRows.map((group) => {
+                                const isExpanded = expandedUsers.has(group.userId);
 
-                                    {isExpanded ? (
-                                        <div className="divide-y divide-[#f0f1f2] border-t border-[#f0f1f2]">
-                                            {group.rows.map((row) => (
-                                                <div key={row.id} className="flex items-center gap-2 px-3 py-2.5 transition hover:bg-[#f8f7ff]">
-                                                    <Link
-                                                        href={`/admin/clients/${row.clientId}`}
-                                                        className="min-w-0 flex-1"
-                                                    >
-                                                        <div className="truncate text-[13px] font-bold text-[#101936]">
-                                                            {eventTitle(row)}
-                                                        </div>
-                                                        {eventSubtitle(row) ? (
-                                                            <div className="mt-0.5 truncate text-[11px] font-semibold text-[#66739A]">
-                                                                {eventSubtitle(row)}
-                                                            </div>
-                                                        ) : null}
-                                                    </Link>
-                                                    <Badge tone={typeTone[row.type]}>
-                                                        {row.type === "rejected" ? rejectedReasonText(row) || "Sin motivo" : typeLabel[row.type]}
-                                                    </Badge>
-                                                    {followUpBadge(clientStates.get(row.clientId), row.userId)}
-                                                    {onOpenSheet ? (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => { onClose(); onOpenSheet(row); }}
-                                                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-[#E8E7FB] bg-[#f8f7ff] transition active:bg-[#f3f0ff] xl:hidden"
-                                                            aria-label="Acciones"
+                                return (
+                                    <div key={group.userId} className="overflow-hidden rounded-[14px] border border-[#E8E7FB] bg-white">
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleUser(group.userId)}
+                                            className="flex w-full items-center justify-between gap-3 px-3 py-2.5 transition hover:bg-[#f8f7ff]"
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <AppIcon name="users" tone="purple" size="sm" className="h-4 w-4 bg-transparent text-[#7C3AED] ring-0" />
+                                                <span className="text-[13px] font-black text-[#101936]">
+                                                    {group.userName}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Badge tone="blue">{group.rows.length}</Badge>
+                                                <AppIcon
+                                                    name={isExpanded ? "close" : "plus"}
+                                                    tone="slate"
+                                                    size="sm"
+                                                    className="h-[14px] w-[14px] bg-transparent text-[#98A2B3] ring-0"
+                                                />
+                                            </div>
+                                        </button>
+
+                                        {isExpanded ? (
+                                            <div className="divide-y divide-[#f0f1f2] border-t border-[#f0f1f2]">
+                                                {group.rows.map((row) => {
+                                                    const selected = selectedClientIds.has(rowKey(row));
+
+                                                    return (
+                                                        <div
+                                                            key={row.id}
+                                                            onPointerDown={() => startLongPress(row)}
+                                                            onPointerUp={clearLongPress}
+                                                            onPointerCancel={clearLongPress}
+                                                            onPointerLeave={clearLongPress}
+                                                            onClick={(event) => {
+                                                                if (!selectionMode) return;
+                                                                event.preventDefault();
+                                                                toggleRow(row);
+                                                            }}
+                                                            className={[
+                                                                "flex items-center gap-2 px-3 py-2.5 transition hover:bg-[#f8f7ff]",
+                                                                selected ? "bg-[#f3f0ff]" : "",
+                                                            ].join(" ")}
                                                         >
-                                                            <AppIcon name="more" tone="slate" size="sm" className="h-[14px] w-[14px] bg-transparent text-[#98A2B3] ring-0" />
-                                                        </button>
-                                                    ) : null}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ) : null}
-                                </div>
-                            );
-                        })
+                                                            {selectionMode ? (
+                                                                <span
+                                                                    className={[
+                                                                        "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2",
+                                                                        selected ? "border-[#7C3AED] bg-[#7C3AED]" : "border-[#D0D5DD] bg-white",
+                                                                    ].join(" ")}
+                                                                >
+                                                                    {selected ? <AppIcon name="check" tone="slate" size="sm" className="h-3 w-3 bg-transparent text-white ring-0" /> : null}
+                                                                </span>
+                                                            ) : null}
+                                                            <Link
+                                                                href={`/admin/clients/${row.clientId}`}
+                                                                onClick={(event) => {
+                                                                    if (!selectionMode) return;
+                                                                    event.preventDefault();
+                                                                }}
+                                                                className="min-w-0 flex-1"
+                                                            >
+                                                                <div className="truncate text-[13px] font-bold text-[#101936]">
+                                                                    {eventTitle(row)}
+                                                                </div>
+                                                                {eventSubtitle(row) ? (
+                                                                    <div className="mt-0.5 truncate text-[11px] font-semibold text-[#66739A]">
+                                                                        {eventSubtitle(row)}
+                                                                    </div>
+                                                                ) : null}
+                                                            </Link>
+                                                            <Badge tone={typeTone[row.type]}>
+                                                                {row.type === "rejected" ? rejectedReasonText(row) || "Sin motivo" : typeLabel[row.type]}
+                                                            </Badge>
+                                                            {followUpBadge(clientStates.get(row.clientId), row.userId)}
+                                                            {onOpenSheet ? (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => { onClose(); onOpenSheet(row); }}
+                                                                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-[#E8E7FB] bg-[#f8f7ff] transition active:bg-[#f3f0ff] xl:hidden"
+                                                                    aria-label="Acciones"
+                                                                >
+                                                                    <AppIcon name="more" tone="slate" size="sm" className="h-[14px] w-[14px] bg-transparent text-[#98A2B3] ring-0" />
+                                                                </button>
+                                                            ) : null}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        ) : null}
+                                    </div>
+                                );
+                            })
+                        )}
+                    </div>
+                </div>
+            </Modal>
+
+            <Modal
+                open={bulkAssignOpen}
+                onClose={() => setBulkAssignOpen(false)}
+                title="Reasignar seleccionados"
+                subtitle={`${selectedRows.length} prospecto(s) seleccionados`}
+                size="sm"
+            >
+                <div className="grid gap-2">
+                    {users.length === 0 ? (
+                        <p className="rounded-2xl border border-dashed border-[#d0d5dd] bg-[#f9fafb] px-4 py-6 text-center text-[12px] font-semibold text-[#667085]">
+                            No hay usuarios disponibles.
+                        </p>
+                    ) : (
+                        users.map((user) => (
+                            <button
+                                key={user.id}
+                                type="button"
+                                disabled={bulkSaving}
+                                onClick={() => bulkAssign(user.id)}
+                                className="flex min-h-[48px] items-center gap-3 rounded-2xl border border-[#E8E7FB] bg-white px-3 text-left transition hover:bg-[#f8f7ff] disabled:opacity-60"
+                            >
+                                <AppIcon name="user" tone="purple" size="sm" />
+                                <span className="min-w-0 flex-1 truncate text-[13px] font-black text-[#101936]">
+                                    {user.name || user.email || "Usuario"}
+                                </span>
+                            </button>
+                        ))
                     )}
                 </div>
-            </div>
-        </Modal>
+            </Modal>
+        </>
     );
 }
 
