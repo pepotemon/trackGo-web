@@ -1018,6 +1018,7 @@ function LeadActionSheet({
     const canEdit = useCan("leadsEdit");
     const canDelete = useCan("leadsDelete");
     const canWhatsapp = useCan("leadsWhatsapp");
+    const canChat = useCan("chatView");
     useBackButtonDismiss(open, onClose);
 
     if (!open) return null;
@@ -1046,14 +1047,16 @@ function LeadActionSheet({
                 </div>
 
                 <div className="grid gap-2">
-                    <Link
-                        href={`/admin/leads/${lead.id}?from=leads`}
-                        onClick={onClose}
-                        className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#f3f0ff] px-4 text-[14px] font-bold text-[#101936] transition active:bg-violet-200"
-                    >
-                        <AppIcon name="chat" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#7C3AED] ring-0" />
-                        Chat
-                    </Link>
+                    {canChat ? (
+                        <Link
+                            href={`/admin/leads/${lead.id}?from=leads`}
+                            onClick={onClose}
+                            className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#f3f0ff] px-4 text-[14px] font-bold text-[#101936] transition active:bg-violet-200"
+                        >
+                            <AppIcon name="chat" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#7C3AED] ring-0" />
+                            Chat
+                        </Link>
+                    ) : null}
 
                     {canEdit ? (
                         <button
@@ -1543,6 +1546,7 @@ function LeadQuickActionsModal({
     const canEdit = useCan("leadsEdit");
     const canDelete = useCan("leadsDelete");
     const canWhatsapp = useCan("leadsWhatsapp");
+    const canChat = useCan("chatView");
 
     if (!lead) return null;
 
@@ -1555,12 +1559,14 @@ function LeadQuickActionsModal({
             size="sm"
         >
             <div className="grid gap-2">
-                <ActionTile
-                    href={`/admin/leads/${lead.id}?from=leads`}
-                    icon="chat"
-                    label="Chat"
-                    tone="purple"
-                />
+                {canChat ? (
+                    <ActionTile
+                        href={`/admin/leads/${lead.id}?from=leads`}
+                        icon="chat"
+                        label="Chat"
+                        tone="purple"
+                    />
+                ) : null}
                 {lead.location.mapsUrl ? (
                     <ActionTile
                         href={lead.location.mapsUrl}

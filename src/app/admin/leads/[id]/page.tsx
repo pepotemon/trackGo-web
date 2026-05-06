@@ -91,7 +91,8 @@ export default function LeadChatPage() {
     const canActivityChat = useCan("activityChat");
     const canLeadsEdit = useCan("leadsEdit");
     const canActivityEdit = useCan("activityEdit");
-    const canChat = canChatView || canActivityChat;
+    const from = searchParams.get("from");
+    const canChat = canChatView || (from === "activity" && canActivityChat);
     const canEdit = canLeadsEdit || canActivityEdit;
     const canAssign = useCan("leadsAssign");
     const canMaps = useCan("activityMaps");
@@ -163,13 +164,6 @@ export default function LeadChatPage() {
     }, [clientId]);
 
     useEffect(() => {
-        if (!clientId) return;
-        return () => {
-            void setLeadChatMode(clientId, "bot");
-        };
-    }, [clientId]);
-
-    useEffect(() => {
         if (!clientId || loadingLead || loadingMessages) return;
 
         const inboundAt = lastInboundAt(lead, messages);
@@ -186,12 +180,11 @@ export default function LeadChatPage() {
     const prevId = queueIndex > 0 ? mobileQueue[queueIndex - 1] : null;
     const nextId = queueIndex < mobileQueue.length - 1 ? mobileQueue[queueIndex + 1] : null;
     const returnTo = useMemo(() => {
-        const from = searchParams.get("from");
         if (from === "activity") return "/admin/activity";
         if (from === "assignments") return "/admin/leads/assignments";
         if (from === "client") return `/admin/clients/${clientId}`;
         return "/admin/leads";
-    }, [clientId, searchParams]);
+    }, [clientId, from]);
 
     const canOpenThisLead = useMemo(() => {
         if (!lead || isSuperAdmin || !profile || profile.role !== "admin") return true;
