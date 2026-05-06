@@ -29,6 +29,7 @@ const NAV_MAIN: { href: string; label: string; icon: NavIconName }[] = [
 
 const NAV_SETTINGS: { href: string; label: string; icon: NavIconName }[] = [
     { href: "/admin/settings/users", label: "Usuarios", icon: "users" },
+    { href: "/admin/settings/subscriptions", label: "Suscripciones", icon: "wallet" },
 ];
 
 const MOBILE_NAV: { href: string; label: string; icon: NavIconName }[] = [
@@ -68,6 +69,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     });
     const visibleSettingsNav = NAV_SETTINGS.filter((item) => {
         if (item.href === "/admin/settings/users") return permissions.usersView;
+        if (item.href === "/admin/settings/subscriptions") return permissions.accountingInvestmentView;
         return true;
     });
     const visibleMobileNav = MOBILE_NAV.filter((item) => {
@@ -395,6 +397,7 @@ function isDetailPage(pathname: string) {
 function isAdminRouteAllowed(pathname: string, permissions: AdminPermissions) {
     if (pathname === "/admin") return true;
     if (pathname.startsWith("/admin/settings/users")) return permissions.usersView;
+    if (pathname.startsWith("/admin/settings/subscriptions")) return permissions.accountingInvestmentView;
     if (pathname.startsWith("/admin/accounting")) return permissions.accountingView;
     if (pathname.startsWith("/admin/activity")) return permissions.actividad;
     if (pathname.startsWith("/admin/leads/assignments")) return permissions.assignmentsView;
