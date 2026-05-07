@@ -111,3 +111,37 @@ export async function duplicateAndActivateCampaign({
         lifetimeBudget,
     };
 }
+
+export async function validateMetaCampaign(baseCampaignId: string) {
+    if (!baseCampaignId.trim()) {
+        throw new ResponseError("base_campaign_required", "El ID de campana base es obligatorio.");
+    }
+
+    const data = await graphGet<{
+        id: string;
+        name?: string;
+        account_id?: string;
+        effective_status?: string;
+        status?: string;
+    }>(baseCampaignId.trim(), {
+        fields: "id,name,account_id,effective_status,status",
+    });
+
+    const expectedAccount = metaConfig().adAccountId.replace(/^act_/, "");
+    const actualAccount = String(data.account_id || "").replace(/^act_/, "");
+
+    if (actualAccount && expectedAccount && actualAccount !== expectedAccount) {
+        throw new ResponseError(
+            "campaign_wrong_account",
+            `La campana pertenece a otra cuenta publicitaria (${actualAccount}). Se esperaba ${expectedAccount}.`,
+            409,
+        );
+    }
+
+    return {
+        id: data.id,
+        name: data.name || "Campana sin nombre",
+        accountId: data.account_id || null,
+        status: data.effective_status || data.status || null,
+    };
+}

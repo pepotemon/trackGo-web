@@ -137,6 +137,11 @@ export default function SubscriptionsPage() {
     const [cityForm, setCityForm] = useState<CityFormState>(emptyCityForm);
     const [citySaving, setCitySaving] = useState(false);
     const [citySaveError, setCitySaveError] = useState("");
+    const [campaignValidation, setCampaignValidation] = useState<{
+        loading: boolean;
+        ok: boolean;
+        message: string;
+    }>({ loading: false, ok: false, message: "" });
     const [editingCityId, setEditingCityId] = useState<string | null>(null);
 
     const customSimulation = useMemo(() => {
@@ -264,6 +269,7 @@ export default function SubscriptionsPage() {
         setEditingCityId(null);
         setCityForm(emptyCityForm);
         setCitySaveError("");
+        setCampaignValidation({ loading: false, ok: false, message: "" });
         setCityModalOpen(true);
     };
 
@@ -278,6 +284,7 @@ export default function SubscriptionsPage() {
             baseCampaignId: city.baseCampaignId || "",
         });
         setCitySaveError("");
+        setCampaignValidation({ loading: false, ok: false, message: "" });
         setCityModalOpen(true);
     };
 
@@ -310,6 +317,40 @@ export default function SubscriptionsPage() {
             setCitySaveError(error instanceof Error ? error.message : "No se pudo guardar la ciudad.");
         } finally {
             setCitySaving(false);
+        }
+    };
+
+    const validateCampaign = async () => {
+        try {
+            const user = await waitForAuthUser();
+            const token = await user.getIdToken();
+            setCampaignValidation({ loading: true, ok: false, message: "" });
+
+            const response = await fetch("/api/subscriptions/validate-campaign", {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ baseCampaignId: cityForm.baseCampaignId }),
+            });
+            const data = await response.json();
+
+            if (!response.ok || !data.ok) {
+                throw new Error(data.message || "No se pudo validar la campana.");
+            }
+
+            setCampaignValidation({
+                loading: false,
+                ok: true,
+                message: `${data.campaign.name} · ${data.campaign.status || "sin estado"}`,
+            });
+        } catch (error) {
+            setCampaignValidation({
+                loading: false,
+                ok: false,
+                message: error instanceof Error ? error.message : "No se pudo validar la campana.",
+            });
         }
     };
 
@@ -612,12 +653,15 @@ export default function SubscriptionsPage() {
                 editing={Boolean(editingCityId)}
                 saving={citySaving}
                 error={citySaveError}
+                campaignValidation={campaignValidation}
                 onChange={(patch) => setCityForm((current) => ({ ...current, ...patch }))}
+                onValidateCampaign={validateCampaign}
                 onSave={saveCity}
                 onClose={() => {
                     setCityModalOpen(false);
                     setEditingCityId(null);
                     setCitySaveError("");
+                    setCampaignValidation({ loading: false, ok: false, message: "" });
                 }}
             />
         </div>
@@ -886,7 +930,9 @@ function CityConfigModal({
     editing,
     saving,
     error,
+    campaignValidation,
     onChange,
+    onValidateCampaign,
     onSave,
     onClose,
 }: {
@@ -895,7 +941,9 @@ function CityConfigModal({
     editing: boolean;
     saving: boolean;
     error: string;
+    campaignValidation: { loading: boolean; ok: boolean; message: string };
     onChange: (patch: Partial<CityFormState>) => void;
+    onValidateCampaign: () => void;
     onSave: () => void;
     onClose: () => void;
 }) {
@@ -959,14 +1007,39 @@ function CityConfigModal({
                         </select>
                     </Field>
                     <Field label="ID campana base Meta">
-                        <input
-                            value={form.baseCampaignId}
-                            onChange={(e) => onChange({ baseCampaignId: e.target.value })}
-                            placeholder="120215934567890123"
-                            className="h-11 w-full rounded-2xl border border-[#e8e7fb] bg-white px-3 font-mono text-[13px] font-bold text-[#101936] outline-none"
-                        />
+                        <div className="flex gap-2">
+                            <input
+                                value={form.baseCampaignId}
+                                onChange={(e) => {
+                                    onChange({ baseCampaignId: e.target.value });
+                                }}
+                                placeholder="120215934567890123"
+                                className="h-11 min-w-0 flex-1 rounded-2xl border border-[#e8e7fb] bg-white px-3 font-mono text-[13px] font-bold text-[#101936] outline-none"
+                            />
+                            <button
+                                type="button"
+                                onClick={onValidateCampaign}
+                                disabled={campaignValidation.loading || !form.baseCampaignId.trim()}
+                                className="h-11 shrink-0 rounded-2xl border border-[#ded8ff] bg-[#f7f3ff] px-3 text-[11px] font-black text-[#6d28d9] disabled:opacity-50"
+                            >
+                                {campaignValidation.loading ? "..." : "Validar"}
+                            </button>
+                        </div>
                     </Field>
                 </div>
+
+                {campaignValidation.message ? (
+                    <div
+                        className={[
+                            "rounded-2xl border p-3 text-[12px] font-semibold leading-snug",
+                            campaignValidation.ok
+                                ? "border-emerald-100 bg-emerald-50 text-emerald-800"
+                                : "border-red-100 bg-red-50 text-red-700",
+                        ].join(" ")}
+                    >
+                        {campaignValidation.message}
+                    </div>
+                ) : null}
 
                 {error ? (
                     <div className="rounded-2xl border border-red-100 bg-red-50 p-3 text-[12px] font-semibold text-red-700">

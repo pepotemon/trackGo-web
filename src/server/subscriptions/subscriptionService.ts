@@ -392,3 +392,105 @@ export async function processMercadoPagoPayment(paymentId: string) {
         checkoutId,
     };
 }
+
+export async function retryMetaActivation(checkoutId: string) {
+    const checkoutRef = adminDb.collection("subscriptionCheckouts").doc(checkoutId);
+    const checkoutSnap = await checkoutRef.get();
+
+    if (!checkoutSnap.exists) {
+        throw new ResponseError("checkout_not_found", "No existe el checkout.", 404);
+    }
+
+    const checkout = checkoutSnap.data() || {};
+    if (checkout.status !== "approved") {
+        throw new ResponseError("checkout_not_approved", "Este checkout todavia no tiene pago aprobado.", 409);
+    }
+
+    if (checkout.activationStatus === "active") {
+        return { ok: true, idempotent: true, checkoutId, campaignId: checkout.campaignId || null };
+    }
+
+    const cityRef = adminDb.collection("cities").doc(String(checkout.cityId || ""));
+    const subscriptionRef = adminDb.collection("subscriptions").doc(checkoutId);
+    const citySnap = await cityRef.get();
+
+    if (!citySnap.exists) throw new ResponseError("city_not_found", "No existe la ciudad del checkout.", 404);
+
+    const city = citySnap.data() || {};
+    const baseCampaignId = String(city.baseCampaignId || "");
+    if (!baseCampaignId) {
+        throw new ResponseError("base_campaign_required", "La ciudad no tiene baseCampaignId configurado.");
+    }
+
+    await checkoutRef.set(
+        {
+            activationStatus: "processing",
+            failureReason: FieldValue.delete(),
+            updatedAt: nowMs(),
+        },
+        { merge: true },
+    );
+
+    try {
+        const campaign = await duplicateAndActivateCampaign({
+            baseCampaignId,
+            cityName: String(checkout.cityName || city.name || checkout.cityId),
+            userId: String(checkout.userId),
+            adsBudget: Number(checkout.adsBudget || 0),
+        });
+
+        await Promise.all([
+            cityRef.set(
+                {
+                    status: "occupied",
+                    ownerUserId: String(checkout.userId),
+                    campaignId: campaign.campaignId,
+                    adsetIds: campaign.adsetIds,
+                    updatedAt: nowMs(),
+                },
+                { merge: true },
+            ),
+            subscriptionRef.set(
+                {
+                    id: checkoutId,
+                    checkoutId,
+                    userId: String(checkout.userId),
+                    cityId: String(checkout.cityId),
+                    city: String(checkout.cityName || city.name || checkout.cityId),
+                    plan: String(checkout.plan),
+                    amount: Number(checkout.amount || 0),
+                    adsBudget: Number(checkout.adsBudget || 0),
+                    status: "active",
+                    campaignId: campaign.campaignId,
+                    adsetIds: campaign.adsetIds,
+                    lifetimeBudget: campaign.lifetimeBudget,
+                    startDate: Timestamp.fromDate(campaign.startDate),
+                    endDate: Timestamp.fromDate(campaign.endDate),
+                    updatedAt: nowMs(),
+                    createdAt: checkout.paymentApprovedAt || checkout.createdAt || nowMs(),
+                },
+                { merge: true },
+            ),
+            checkoutRef.set(
+                {
+                    activationStatus: "active",
+                    campaignId: campaign.campaignId,
+                    updatedAt: nowMs(),
+                },
+                { merge: true },
+            ),
+        ]);
+
+        return { ok: true, checkoutId, campaignId: campaign.campaignId };
+    } catch (error) {
+        await checkoutRef.set(
+            {
+                activationStatus: "meta_failed",
+                failureReason: error instanceof Error ? error.message : "meta_failed",
+                updatedAt: nowMs(),
+            },
+            { merge: true },
+        );
+        throw error;
+    }
+}
