@@ -107,7 +107,7 @@ type CityFormState = {
     state: string;
     country: string;
     status: "available" | "reserved" | "occupied";
-    baseCampaignId: string;
+    campaignId: string;
 };
 
 const emptyCityForm: CityFormState = {
@@ -116,7 +116,7 @@ const emptyCityForm: CityFormState = {
     state: "",
     country: "Brasil",
     status: "available",
-    baseCampaignId: "",
+    campaignId: "",
 };
 
 export default function SubscriptionsPage() {
@@ -281,7 +281,7 @@ export default function SubscriptionsPage() {
             state: city.state || "",
             country: city.country || "Brasil",
             status: city.status,
-            baseCampaignId: city.baseCampaignId || "",
+            campaignId: city.campaignId || city.baseCampaignId || "",
         });
         setCitySaveError("");
         setCampaignValidation({ loading: false, ok: false, message: "" });
@@ -332,7 +332,7 @@ export default function SubscriptionsPage() {
                     Authorization: `Bearer ${token}`,
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({ baseCampaignId: cityForm.baseCampaignId }),
+                body: JSON.stringify({ campaignId: cityForm.campaignId }),
             });
             const data = await response.json();
 
@@ -342,8 +342,15 @@ export default function SubscriptionsPage() {
 
             setCampaignValidation({
                 loading: false,
-                ok: true,
-                message: `${data.campaign.name} · ${data.campaign.status || "sin estado"}`,
+                ok: data.campaign.ready !== false,
+                message: [
+                    data.campaign.name,
+                    data.campaign.status || "sin estado",
+                    `${data.campaign.adsetsCount ?? 0} ad set`,
+                    data.campaign.warning || "",
+                ]
+                    .filter(Boolean)
+                    .join(" · "),
             });
         } catch (error) {
             setCampaignValidation({
@@ -419,7 +426,7 @@ export default function SubscriptionsPage() {
                         {!loadingCities && cities.length === 0 ? (
                             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-[12px] font-semibold leading-snug text-amber-800">
                                 No hay ciudades configuradas. Crea documentos en <span className="font-mono">cities</span> con nombre,
-                                estado <span className="font-mono">available</span> y <span className="font-mono">baseCampaignId</span>.
+                                estado <span className="font-mono">available</span> y <span className="font-mono">campaignId</span>.
                             </div>
                         ) : null}
 
@@ -448,7 +455,7 @@ export default function SubscriptionsPage() {
                                             {[city.state, city.country].filter(Boolean).join(" · ") || "Sin region"}
                                         </span>
                                         <span className="mt-1 block truncate font-mono text-[10px] font-bold text-[#98a2b3]">
-                                            {city.baseCampaignId ? `Meta ${city.baseCampaignId}` : "Sin campana base"}
+                                            {city.campaignId || city.baseCampaignId ? `Meta ${city.campaignId || city.baseCampaignId}` : "Sin campana Meta"}
                                         </span>
                                     </button>
                                     <div className="flex shrink-0 items-center gap-2">
@@ -502,7 +509,7 @@ export default function SubscriptionsPage() {
                             {[
                                 ["1", "Reserva temporal", "Al generar Pix la ciudad queda reservada 30 minutos para evitar doble venta."],
                                 ["2", "Pago aprobado", "Mercado Pago llama al webhook y TrackGo valida monto exacto e idempotencia."],
-                                ["3", "Campana Meta", "Se duplica la campana base, se configura lifetime budget en ad sets y se activa."],
+                                ["3", "Campana Meta", "Se configura el presupuesto del ciclo en la campana fija de la ciudad y se activa."],
                                 ["4", "Suscripcion activa", "La ciudad queda ocupada y se guarda la suscripcion con fechas del ciclo."],
                             ].map(([step, title, body]) => (
                                 <div key={step} className="flex gap-3 rounded-2xl border border-[#eef1f5] bg-[#fbfaff] p-3">
@@ -603,7 +610,7 @@ export default function SubscriptionsPage() {
                             <StrategyNote title="Webhook publico" body="En Vercel configura MERCADOPAGO_WEBHOOK_URL con https://trackgo.co/api/webhook/mercadopago." />
                             <StrategyNote title="Credenciales" body="Las llaves deben vivir en Vercel Environment Variables, nunca en el repo." />
                             <StrategyNote title="Reembolso" body="Define flujo manual si alguien paga y Meta falla o la ciudad se ocupó por carrera." />
-                            <StrategyNote title="Meta base" body="Cada ciudad necesita baseCampaignId apuntando a una campana plantilla que nunca se modifica." />
+                            <StrategyNote title="Campana fija" body="Cada ciudad necesita campaignId apuntando a su campana fija de Meta. No duplicamos: configuramos presupuesto y fechas." />
                         </div>
                     </CardContent>
                 </Card>
@@ -957,8 +964,8 @@ function CityConfigModal({
         >
             <div className="space-y-4">
                 <div className="rounded-2xl border border-[#ded8ff] bg-[#fbfaff] p-3 text-[12px] font-semibold leading-snug text-[#52607a]">
-                    <span className="font-black text-[#101936]">baseCampaignId</span> es el ID de la campana original en Meta Ads.
-                    TrackGo no modifica esa campana: solo la copia, configura presupuesto y activa la copia.
+                    <span className="font-black text-[#101936]">campaignId</span> es el ID de la campana fija de esa ciudad en Meta Ads.
+                    TrackGo no duplica campanas: configura presupuesto, fechas y activa esa campana durante el ciclo.
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -1006,12 +1013,12 @@ function CityConfigModal({
                             <option value="occupied">Ocupada</option>
                         </select>
                     </Field>
-                    <Field label="ID campana base Meta">
+                    <Field label="ID campana Meta de la ciudad">
                         <div className="flex gap-2">
                             <input
-                                value={form.baseCampaignId}
+                                value={form.campaignId}
                                 onChange={(e) => {
-                                    onChange({ baseCampaignId: e.target.value });
+                                    onChange({ campaignId: e.target.value });
                                 }}
                                 placeholder="120215934567890123"
                                 className="h-11 min-w-0 flex-1 rounded-2xl border border-[#e8e7fb] bg-white px-3 font-mono text-[13px] font-bold text-[#101936] outline-none"
@@ -1019,7 +1026,7 @@ function CityConfigModal({
                             <button
                                 type="button"
                                 onClick={onValidateCampaign}
-                                disabled={campaignValidation.loading || !form.baseCampaignId.trim()}
+                                disabled={campaignValidation.loading || !form.campaignId.trim()}
                                 className="h-11 shrink-0 rounded-2xl border border-[#ded8ff] bg-[#f7f3ff] px-3 text-[11px] font-black text-[#6d28d9] disabled:opacity-50"
                             >
                                 {campaignValidation.loading ? "..." : "Validar"}

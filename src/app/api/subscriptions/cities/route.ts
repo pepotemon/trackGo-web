@@ -22,7 +22,7 @@ export async function POST(request: Request) {
             state: typeof body.state === "string" ? body.state : undefined,
             country: typeof body.country === "string" ? body.country : undefined,
             status: typeof body.status === "string" ? body.status : undefined,
-            baseCampaignId: String(body.baseCampaignId || ""),
+            campaignId: String(body.campaignId || body.baseCampaignId || ""),
         });
         return Response.json({ ok: true, city });
     } catch (error) {
@@ -41,7 +41,7 @@ export async function PATCH(request: Request) {
             state: typeof body.state === "string" ? body.state : undefined,
             country: typeof body.country === "string" ? body.country : undefined,
             status: typeof body.status === "string" ? body.status : undefined,
-            baseCampaignId: String(body.baseCampaignId || ""),
+            campaignId: String(body.campaignId || body.baseCampaignId || ""),
         });
         return Response.json({ ok: true, city });
     } catch (error) {

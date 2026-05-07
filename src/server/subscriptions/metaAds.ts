@@ -76,67 +76,63 @@ function formatMetaError(error?: {
         .join(" | ");
 }
 
-export async function duplicateAndActivateCampaign({
-    baseCampaignId,
+export async function configureAndActivateCityCampaign({
+    campaignId,
     cityName,
     userId,
     adsBudget,
 }: {
-    baseCampaignId: string;
+    campaignId: string;
     cityName: string;
     userId: string;
     adsBudget: number;
 }) {
-    const copy = await graphPost<{ copied_campaign_id?: string; id?: string }>(`${baseCampaignId}/copies`, {
-        name: `TrackGo - ${cityName} - ${userId}`,
-        status_option: "PAUSED",
-        deep_copy: true,
-    });
-
-    const campaignId = copy.copied_campaign_id || copy.id;
-    if (!campaignId) {
-        throw new ResponseError("meta_campaign_copy_missing", "Meta no devolvio el ID de la campana copiada.", 502);
-    }
-
-    const adsets = await graphGet<{ data?: Array<{ id: string }> }>(`${campaignId}/adsets`, {
-        fields: "id,name",
+    const campaign = await validateMetaCampaign(campaignId);
+    const adsets = await graphGet<{ data?: Array<{ id: string; name?: string; status?: string }> }>(`${campaign.id}/adsets`, {
+        fields: "id,name,status",
         limit: "50",
     });
 
     const adsetIds = adsets.data?.map((item) => item.id).filter(Boolean) || [];
     if (adsetIds.length === 0) {
-        throw new ResponseError("meta_adsets_missing", "La campana copiada no tiene ad sets para configurar.", 502);
+        throw new ResponseError("meta_adsets_missing", "La campana de esta ciudad no tiene conjuntos de anuncios.", 502);
+    }
+
+    if (adsetIds.length > 1) {
+        throw new ResponseError(
+            "meta_multiple_adsets",
+            `La campana ${campaign.name} tiene ${adsetIds.length} conjuntos de anuncios. Para este flujo de ciudad fija debe tener exactamente 1.`,
+            409,
+        );
     }
 
     const start = new Date();
     const end = calculateCycleEnd(start);
     const lifetimeBudget = Math.round(adsBudget * 100);
+    const adsetId = adsetIds[0];
 
-    await Promise.all(
-        adsetIds.map((adsetId) =>
-            graphPost(`${adsetId}`, {
-                lifetime_budget: lifetimeBudget,
-                start_time: start.toISOString(),
-                end_time: end.toISOString(),
-                status: "ACTIVE",
-            }),
-        ),
-    );
+    await graphPost(`${adsetId}`, {
+        name: `TrackGo - ${cityName} - ${userId}`,
+        lifetime_budget: lifetimeBudget,
+        start_time: start.toISOString(),
+        end_time: end.toISOString(),
+        status: "ACTIVE",
+    });
 
-    await graphPost(`${campaignId}`, { status: "ACTIVE" });
+    await graphPost(`${campaign.id}`, { status: "ACTIVE" });
 
     return {
-        campaignId,
-        adsetIds,
+        campaignId: campaign.id,
+        adsetIds: [adsetId],
         startDate: start,
         endDate: end,
         lifetimeBudget,
     };
 }
 
-export async function validateMetaCampaign(baseCampaignId: string) {
-    if (!baseCampaignId.trim()) {
-        throw new ResponseError("base_campaign_required", "El ID de campana base es obligatorio.");
+export async function validateMetaCampaign(campaignId: string) {
+    if (!campaignId.trim()) {
+        throw new ResponseError("campaign_required", "El ID de campana Meta es obligatorio.");
     }
 
     const data = await graphGet<{
@@ -145,7 +141,7 @@ export async function validateMetaCampaign(baseCampaignId: string) {
         account_id?: string;
         effective_status?: string;
         status?: string;
-    }>(baseCampaignId.trim(), {
+    }>(campaignId.trim(), {
         fields: "id,name,account_id,effective_status,status",
     });
 
@@ -165,5 +161,27 @@ export async function validateMetaCampaign(baseCampaignId: string) {
         name: data.name || "Campana sin nombre",
         accountId: data.account_id || null,
         status: data.effective_status || data.status || null,
+    };
+}
+
+export async function validateCityCampaign(campaignId: string) {
+    const campaign = await validateMetaCampaign(campaignId);
+    const adsets = await graphGet<{ data?: Array<{ id: string; name?: string; status?: string }> }>(`${campaign.id}/adsets`, {
+        fields: "id,name,status",
+        limit: "50",
+    });
+    const adsetIds = adsets.data?.map((item) => item.id).filter(Boolean) || [];
+
+    return {
+        ...campaign,
+        adsetsCount: adsetIds.length,
+        adsetIds,
+        ready: adsetIds.length === 1,
+        warning:
+            adsetIds.length === 1
+                ? null
+                : adsetIds.length === 0
+                    ? "La campana no tiene conjuntos de anuncios."
+                    : `La campana tiene ${adsetIds.length} conjuntos de anuncios. Para este flujo debe tener exactamente 1.`,
     };
 }

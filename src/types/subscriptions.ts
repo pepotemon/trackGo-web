@@ -18,8 +18,9 @@ export type SubscriptionCity = {
     country?: string | null;
     status: SubscriptionCityStatus;
     ownerUserId?: string | null;
-    baseCampaignId?: string | null;
     campaignId?: string | null;
+    activeCampaignId?: string | null;
+    baseCampaignId?: string | null;
     reservedByCheckoutId?: string | null;
     reservationExpiresAt?: number | null;
     updatedAt?: number | null;

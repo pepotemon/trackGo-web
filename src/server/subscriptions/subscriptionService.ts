@@ -4,7 +4,7 @@ import { ResponseError } from "@/server/auth";
 import { adminDb } from "@/server/firebaseAdmin";
 import { createPixPayment, getMercadoPagoPayment } from "@/server/subscriptions/mercadoPago";
 import { calculateAdsBudget, calculateCycleEnd, getPlanAmount } from "@/server/subscriptions/plans";
-import { duplicateAndActivateCampaign } from "@/server/subscriptions/metaAds";
+import { configureAndActivateCityCampaign } from "@/server/subscriptions/metaAds";
 import type { PixCheckoutResponse, SubscriptionPlanId } from "@/types/subscriptions";
 
 const RESERVATION_TTL_MS = 30 * 60 * 1000;
@@ -29,8 +29,8 @@ export async function listSubscriptionCities() {
             country: typeof data.country === "string" ? data.country : null,
             status: isExpiredReservation ? "available" : data.status || "available",
             ownerUserId: data.ownerUserId || null,
-            baseCampaignId: data.baseCampaignId || null,
             campaignId: data.campaignId || null,
+            baseCampaignId: data.baseCampaignId || null,
             reservedByCheckoutId: isExpiredReservation ? null : data.reservedByCheckoutId || null,
             reservationExpiresAt: isExpiredReservation ? null : reservationExpiresAt,
             updatedAt: Number(data.updatedAt || 0) || null,
@@ -44,15 +44,15 @@ export async function saveSubscriptionCity(input: {
     state?: string;
     country?: string;
     status?: string;
-    baseCampaignId: string;
+    campaignId: string;
 }) {
     const name = input.name.trim();
-    const baseCampaignId = input.baseCampaignId.trim();
+    const campaignId = input.campaignId.trim();
     const status = input.status || "available";
 
     if (!name) throw new ResponseError("city_name_required", "El nombre de la ciudad es obligatorio.");
-    if (!baseCampaignId) {
-        throw new ResponseError("base_campaign_required", "El ID de campana base es obligatorio.");
+    if (!campaignId) {
+        throw new ResponseError("campaign_required", "El ID de campana Meta es obligatorio.");
     }
     if (!["available", "reserved", "occupied"].includes(status)) {
         throw new ResponseError("invalid_city_status", "Estado de ciudad invalido.");
@@ -71,8 +71,8 @@ export async function saveSubscriptionCity(input: {
             country: input.country?.trim() || null,
             status,
             ownerUserId: status === "available" ? null : existing.ownerUserId || null,
-            baseCampaignId,
-            campaignId: existing.campaignId || null,
+            campaignId,
+            baseCampaignId: FieldValue.delete(),
             updatedAt: nowMs(),
             createdAt: existing.createdAt || nowMs(),
         },
@@ -131,11 +131,11 @@ export async function createPixSubscriptionCheckout(input: {
             throw new ResponseError("city_reserved", "Esta ciudad esta reservada por un pago en curso.", 409);
         }
 
-        const baseCampaignId = city.baseCampaignId;
-        if (!baseCampaignId || typeof baseCampaignId !== "string") {
+        const campaignId = city.campaignId || city.baseCampaignId;
+        if (!campaignId || typeof campaignId !== "string") {
             throw new ResponseError(
-                "city_missing_base_campaign",
-                "Esta ciudad no tiene campana base configurada.",
+                "city_missing_campaign",
+                "Esta ciudad no tiene campana Meta configurada.",
                 409,
             );
         }
@@ -169,7 +169,7 @@ export async function createPixSubscriptionCheckout(input: {
 
         return {
             name: cityName,
-            baseCampaignId,
+            campaignId,
         };
     });
 
@@ -328,8 +328,8 @@ export async function processMercadoPagoPayment(paymentId: string) {
     }
 
     try {
-        const campaign = await duplicateAndActivateCampaign({
-            baseCampaignId: String(transactionResult.city.baseCampaignId),
+        const campaign = await configureAndActivateCityCampaign({
+            campaignId: String(transactionResult.city.campaignId || transactionResult.city.baseCampaignId),
             cityName: String(checkout.cityName),
             userId: String(checkout.userId),
             adsBudget: Number(checkout.adsBudget || 0),
@@ -338,7 +338,7 @@ export async function processMercadoPagoPayment(paymentId: string) {
         await Promise.all([
             cityRef.set(
                 {
-                    campaignId: campaign.campaignId,
+                    activeCampaignId: campaign.campaignId,
                     adsetIds: campaign.adsetIds,
                     updatedAt: nowMs(),
                 },
@@ -417,9 +417,9 @@ export async function retryMetaActivation(checkoutId: string) {
     if (!citySnap.exists) throw new ResponseError("city_not_found", "No existe la ciudad del checkout.", 404);
 
     const city = citySnap.data() || {};
-    const baseCampaignId = String(city.baseCampaignId || "");
-    if (!baseCampaignId) {
-        throw new ResponseError("base_campaign_required", "La ciudad no tiene baseCampaignId configurado.");
+    const campaignId = String(city.campaignId || city.baseCampaignId || "");
+    if (!campaignId) {
+        throw new ResponseError("campaign_required", "La ciudad no tiene campaignId configurado.");
     }
 
     await checkoutRef.set(
@@ -432,8 +432,8 @@ export async function retryMetaActivation(checkoutId: string) {
     );
 
     try {
-        const campaign = await duplicateAndActivateCampaign({
-            baseCampaignId,
+        const campaign = await configureAndActivateCityCampaign({
+            campaignId,
             cityName: String(checkout.cityName || city.name || checkout.cityId),
             userId: String(checkout.userId),
             adsBudget: Number(checkout.adsBudget || 0),
@@ -444,7 +444,7 @@ export async function retryMetaActivation(checkoutId: string) {
                 {
                     status: "occupied",
                     ownerUserId: String(checkout.userId),
-                    campaignId: campaign.campaignId,
+                    activeCampaignId: campaign.campaignId,
                     adsetIds: campaign.adsetIds,
                     updatedAt: nowMs(),
                 },
