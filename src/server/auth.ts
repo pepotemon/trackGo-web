@@ -6,6 +6,7 @@ export type ServerUser = {
     uid: string;
     role?: string | null;
     active?: boolean;
+    isSuperAdmin?: boolean;
 };
 
 export async function requireServerUser(request: Request): Promise<ServerUser> {
@@ -29,11 +30,18 @@ export async function requireServerUser(request: Request): Promise<ServerUser> {
         uid: token.uid,
         role: typeof user?.role === "string" ? user.role : null,
         active: user?.active === true,
+        isSuperAdmin: user?.isSuperAdmin === true,
     };
 }
 
 export function canManageSubscriptionCheckout(user: ServerUser, userId: string) {
-    return user.uid === userId || user.role === "admin" || user.role === "superadmin";
+    return user.uid === userId || user.isSuperAdmin === true || user.role === "admin";
+}
+
+export function requireSuperAdmin(user: ServerUser) {
+    if (user.isSuperAdmin !== true) {
+        throw new ResponseError("superadmin_required", "Solo el superadmin puede hacer esta accion.", 403);
+    }
 }
 
 export class ResponseError extends Error {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import { AppIcon } from "@/components/ui/AppIcon";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { useAuth } from "@/features/auth/AuthProvider";
 import { usePermissions } from "@/features/auth/usePermissions";
 import type { PixCheckoutResponse, SubscriptionCity, SubscriptionPlanId } from "@/types/subscriptions";
 import { estimateLeadRange, SUBSCRIPTION_PLANS } from "@/lib/subscriptionPlans";
@@ -100,8 +101,27 @@ const currency = new Intl.NumberFormat("pt-BR", {
     maximumFractionDigits: 0,
 });
 
+type CityFormState = {
+    id: string;
+    name: string;
+    state: string;
+    country: string;
+    status: "available" | "reserved" | "occupied";
+    baseCampaignId: string;
+};
+
+const emptyCityForm: CityFormState = {
+    id: "",
+    name: "",
+    state: "",
+    country: "Brasil",
+    status: "available",
+    baseCampaignId: "",
+};
+
 export default function SubscriptionsPage() {
     const permissions = usePermissions();
+    const { isSuperAdmin } = useAuth();
     const [customAmount, setCustomAmount] = useState("350");
     const [selectedPlan, setSelectedPlan] = useState<UiPlan | null>(null);
     const [customModalOpen, setCustomModalOpen] = useState(false);
@@ -113,6 +133,11 @@ export default function SubscriptionsPage() {
     const [checkoutError, setCheckoutError] = useState("");
     const [checkoutLoading, setCheckoutLoading] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [cityModalOpen, setCityModalOpen] = useState(false);
+    const [cityForm, setCityForm] = useState<CityFormState>(emptyCityForm);
+    const [citySaving, setCitySaving] = useState(false);
+    const [citySaveError, setCitySaveError] = useState("");
+    const [editingCityId, setEditingCityId] = useState<string | null>(null);
 
     const customSimulation = useMemo(() => {
         const amount = Math.max(0, Number(customAmount.replace(",", ".")) || 0);
@@ -127,6 +152,7 @@ export default function SubscriptionsPage() {
     }, [customAmount]);
 
     const canEdit = permissions.accountingInvestmentEdit;
+    const canManageCities = isSuperAdmin;
     const selectedCity = cities.find((city) => city.id === selectedCityId) || null;
 
     const loadCities = useCallback(async () => {
@@ -234,6 +260,59 @@ export default function SubscriptionsPage() {
         window.setTimeout(() => setCopied(false), 1400);
     };
 
+    const openCreateCity = () => {
+        setEditingCityId(null);
+        setCityForm(emptyCityForm);
+        setCitySaveError("");
+        setCityModalOpen(true);
+    };
+
+    const openEditCity = (city: SubscriptionCity) => {
+        setEditingCityId(city.id);
+        setCityForm({
+            id: city.id,
+            name: city.name,
+            state: city.state || "",
+            country: city.country || "Brasil",
+            status: city.status,
+            baseCampaignId: city.baseCampaignId || "",
+        });
+        setCitySaveError("");
+        setCityModalOpen(true);
+    };
+
+    const saveCity = async () => {
+        try {
+            const user = await waitForAuthUser();
+            const token = await user.getIdToken();
+            setCitySaving(true);
+            setCitySaveError("");
+
+            const response = await fetch("/api/subscriptions/cities", {
+                method: editingCityId ? "PATCH" : "POST",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(cityForm),
+            });
+            const data = await response.json();
+
+            if (!response.ok || !data.ok) {
+                throw new Error(data.message || "No se pudo guardar la ciudad.");
+            }
+
+            setCityModalOpen(false);
+            setEditingCityId(null);
+            setCityForm(emptyCityForm);
+            await loadCities();
+        } catch (error) {
+            setCitySaveError(error instanceof Error ? error.message : "No se pudo guardar la ciudad.");
+        } finally {
+            setCitySaving(false);
+        }
+    };
+
     return (
         <div className="space-y-4">
             <PageHeader
@@ -241,10 +320,18 @@ export default function SubscriptionsPage() {
                 subtitle="Prueba controlada para reservar ciudad, cobrar por Pix y activar campana Meta despues del pago."
                 icon={<AppIcon name="wallet" tone="purple" plain className="text-white" />}
                 actions={
-                    <Button variant="secondary" className="gap-2" type="button" onClick={loadCities}>
-                        <AppIcon name="refresh" size="sm" plain className="h-4 w-4 text-current" />
-                        Ciudades
-                    </Button>
+                    <div className="flex items-center gap-2">
+                        {canManageCities ? (
+                            <Button variant="primary" className="gap-2" type="button" onClick={openCreateCity}>
+                                <AppIcon name="plus" size="sm" plain className="h-4 w-4 text-current" />
+                                Ciudad
+                            </Button>
+                        ) : null}
+                        <Button variant="secondary" className="gap-2" type="button" onClick={loadCities}>
+                            <AppIcon name="refresh" size="sm" plain className="h-4 w-4 text-current" />
+                            Ciudades
+                        </Button>
+                    </div>
                 }
             />
 
@@ -297,29 +384,46 @@ export default function SubscriptionsPage() {
 
                         <div className="grid gap-2">
                             {cities.map((city) => (
-                                <button
+                                <div
                                     key={city.id}
-                                    type="button"
-                                    disabled={city.status !== "available"}
-                                    onClick={() => setSelectedCityId(city.id)}
                                     className={[
                                         "flex items-center justify-between gap-3 rounded-2xl border p-3 text-left transition",
                                         selectedCityId === city.id
                                             ? "border-[#7c3aed] bg-[#f7f3ff] shadow-[0_14px_28px_rgba(91,33,255,0.12)]"
                                             : "border-[#eef1f5] bg-white hover:border-[#ded8ff]",
-                                        city.status !== "available" ? "cursor-not-allowed opacity-65" : "",
+                                        city.status !== "available" ? "opacity-80" : "",
                                     ].join(" ")}
                                 >
-                                    <span className="min-w-0">
+                                    <button
+                                        type="button"
+                                        disabled={city.status !== "available"}
+                                        onClick={() => setSelectedCityId(city.id)}
+                                        className="min-w-0 flex-1 text-left disabled:cursor-not-allowed"
+                                    >
                                         <span className="block text-[13px] font-black text-[#101936]">
                                             {city.name}
                                         </span>
                                         <span className="mt-0.5 block text-[11px] font-semibold text-[#66739a]">
                                             {[city.state, city.country].filter(Boolean).join(" · ") || "Sin region"}
                                         </span>
-                                    </span>
-                                    <CityStatusPill city={city} />
-                                </button>
+                                        <span className="mt-1 block truncate font-mono text-[10px] font-bold text-[#98a2b3]">
+                                            {city.baseCampaignId ? `Meta ${city.baseCampaignId}` : "Sin campana base"}
+                                        </span>
+                                    </button>
+                                    <div className="flex shrink-0 items-center gap-2">
+                                        <CityStatusPill city={city} />
+                                        {canManageCities ? (
+                                            <button
+                                                type="button"
+                                                aria-label={`Editar ${city.name}`}
+                                                onClick={() => openEditCity(city)}
+                                                className="flex h-8 w-8 items-center justify-center rounded-xl border border-[#ded8ff] bg-white text-[#6d28d9] shadow-sm"
+                                            >
+                                                <AppIcon name="edit" size="sm" plain className="h-4 w-4 text-current" />
+                                            </button>
+                                        ) : null}
+                                    </div>
+                                </div>
                             ))}
                         </div>
                     </CardContent>
@@ -500,6 +604,20 @@ export default function SubscriptionsPage() {
                 onClose={() => {
                     setCustomModalOpen(false);
                     resetCheckout();
+                }}
+            />
+            <CityConfigModal
+                open={cityModalOpen}
+                form={cityForm}
+                editing={Boolean(editingCityId)}
+                saving={citySaving}
+                error={citySaveError}
+                onChange={(patch) => setCityForm((current) => ({ ...current, ...patch }))}
+                onSave={saveCity}
+                onClose={() => {
+                    setCityModalOpen(false);
+                    setEditingCityId(null);
+                    setCitySaveError("");
                 }}
             />
         </div>
@@ -759,5 +877,123 @@ function CheckoutModal({
                 </Button>
             </div>
         </Modal>
+    );
+}
+
+function CityConfigModal({
+    open,
+    form,
+    editing,
+    saving,
+    error,
+    onChange,
+    onSave,
+    onClose,
+}: {
+    open: boolean;
+    form: CityFormState;
+    editing: boolean;
+    saving: boolean;
+    error: string;
+    onChange: (patch: Partial<CityFormState>) => void;
+    onSave: () => void;
+    onClose: () => void;
+}) {
+    return (
+        <Modal
+            open={open}
+            title={editing ? "Editar ciudad" : "Nueva ciudad"}
+            subtitle="Configura la ciudad y la campana plantilla que TrackGo duplicara despues del Pix."
+            size="md"
+            onClose={onClose}
+        >
+            <div className="space-y-4">
+                <div className="rounded-2xl border border-[#ded8ff] bg-[#fbfaff] p-3 text-[12px] font-semibold leading-snug text-[#52607a]">
+                    <span className="font-black text-[#101936]">baseCampaignId</span> es el ID de la campana original en Meta Ads.
+                    TrackGo no modifica esa campana: solo la copia, configura presupuesto y activa la copia.
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="ID interno">
+                        <input
+                            value={form.id}
+                            disabled={editing}
+                            onChange={(e) => onChange({ id: e.target.value })}
+                            placeholder="manaus"
+                            className="h-11 w-full rounded-2xl border border-[#e8e7fb] bg-white px-3 text-[13px] font-bold text-[#101936] outline-none disabled:bg-[#f8f7ff] disabled:text-[#98a2b3]"
+                        />
+                    </Field>
+                    <Field label="Ciudad">
+                        <input
+                            value={form.name}
+                            onChange={(e) => onChange({ name: e.target.value })}
+                            placeholder="Manaus"
+                            className="h-11 w-full rounded-2xl border border-[#e8e7fb] bg-white px-3 text-[13px] font-bold text-[#101936] outline-none"
+                        />
+                    </Field>
+                    <Field label="Estado">
+                        <input
+                            value={form.state}
+                            onChange={(e) => onChange({ state: e.target.value })}
+                            placeholder="Amazonas"
+                            className="h-11 w-full rounded-2xl border border-[#e8e7fb] bg-white px-3 text-[13px] font-bold text-[#101936] outline-none"
+                        />
+                    </Field>
+                    <Field label="Pais">
+                        <input
+                            value={form.country}
+                            onChange={(e) => onChange({ country: e.target.value })}
+                            placeholder="Brasil"
+                            className="h-11 w-full rounded-2xl border border-[#e8e7fb] bg-white px-3 text-[13px] font-bold text-[#101936] outline-none"
+                        />
+                    </Field>
+                    <Field label="Estado comercial">
+                        <select
+                            value={form.status}
+                            onChange={(e) => onChange({ status: e.target.value as CityFormState["status"] })}
+                            className="h-11 w-full rounded-2xl border border-[#e8e7fb] bg-white px-3 text-[13px] font-bold text-[#101936] outline-none"
+                        >
+                            <option value="available">Disponible</option>
+                            <option value="reserved">Reservada</option>
+                            <option value="occupied">Ocupada</option>
+                        </select>
+                    </Field>
+                    <Field label="ID campana base Meta">
+                        <input
+                            value={form.baseCampaignId}
+                            onChange={(e) => onChange({ baseCampaignId: e.target.value })}
+                            placeholder="120215934567890123"
+                            className="h-11 w-full rounded-2xl border border-[#e8e7fb] bg-white px-3 font-mono text-[13px] font-bold text-[#101936] outline-none"
+                        />
+                    </Field>
+                </div>
+
+                {error ? (
+                    <div className="rounded-2xl border border-red-100 bg-red-50 p-3 text-[12px] font-semibold text-red-700">
+                        {error}
+                    </div>
+                ) : null}
+
+                <div className="flex justify-end gap-2">
+                    <Button type="button" variant="ghost" onClick={onClose}>
+                        Cerrar
+                    </Button>
+                    <Button type="button" variant="primary" disabled={saving} onClick={onSave}>
+                        {saving ? "Guardando..." : "Guardar ciudad"}
+                    </Button>
+                </div>
+            </div>
+        </Modal>
+    );
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+    return (
+        <label className="block">
+            <span className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.12em] text-[#66739a]">
+                {label}
+            </span>
+            {children}
+        </label>
     );
 }

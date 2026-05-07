@@ -38,6 +38,64 @@ export async function listSubscriptionCities() {
     });
 }
 
+export async function saveSubscriptionCity(input: {
+    id?: string;
+    name: string;
+    state?: string;
+    country?: string;
+    status?: string;
+    baseCampaignId: string;
+}) {
+    const name = input.name.trim();
+    const baseCampaignId = input.baseCampaignId.trim();
+    const status = input.status || "available";
+
+    if (!name) throw new ResponseError("city_name_required", "El nombre de la ciudad es obligatorio.");
+    if (!baseCampaignId) {
+        throw new ResponseError("base_campaign_required", "El ID de campana base es obligatorio.");
+    }
+    if (!["available", "reserved", "occupied"].includes(status)) {
+        throw new ResponseError("invalid_city_status", "Estado de ciudad invalido.");
+    }
+
+    const id = normalizeCityId(input.id || name);
+    if (!id) throw new ResponseError("city_id_required", "El ID interno de la ciudad es obligatorio.");
+    const cityRef = adminDb.collection("cities").doc(id);
+    const snap = await cityRef.get();
+    const existing = snap.data() || {};
+
+    await cityRef.set(
+        {
+            name,
+            state: input.state?.trim() || null,
+            country: input.country?.trim() || null,
+            status,
+            ownerUserId: status === "available" ? null : existing.ownerUserId || null,
+            baseCampaignId,
+            campaignId: existing.campaignId || null,
+            updatedAt: nowMs(),
+            createdAt: existing.createdAt || nowMs(),
+        },
+        { merge: true },
+    );
+
+    const updated = await cityRef.get();
+    return {
+        id: cityRef.id,
+        ...updated.data(),
+    };
+}
+
+function normalizeCityId(value: string) {
+    return value
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 80);
+}
+
 export async function createPixSubscriptionCheckout(input: {
     userId: string;
     cityId: string;
