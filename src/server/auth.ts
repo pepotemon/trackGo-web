@@ -68,6 +68,28 @@ export function errorResponse(error: unknown) {
     }
 
     console.error(error);
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("FIREBASE_ADMIN_ENV_MISSING")) {
+        return Response.json(
+            {
+                ok: false,
+                code: "firebase_admin_env_missing",
+                message: "Faltan variables FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL o FIREBASE_PRIVATE_KEY en el servidor.",
+            },
+            { status: 500 },
+        );
+    }
+    if (message.includes("FIREBASE_PRIVATE_KEY_INVALID_FORMAT") || message.includes("PEM")) {
+        return Response.json(
+            {
+                ok: false,
+                code: "firebase_private_key_invalid",
+                message: "FIREBASE_PRIVATE_KEY tiene formato invalido. Pegala completa con saltos \\n y sin comillas extra en Vercel.",
+            },
+            { status: 500 },
+        );
+    }
+
     return Response.json(
         {
             ok: false,
