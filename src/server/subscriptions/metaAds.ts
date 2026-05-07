@@ -33,7 +33,7 @@ async function graphPost<T>(path: string, body: Record<string, string | number |
     const data = (await response.json()) as T & { error?: { message?: string; code?: number } };
     if (!response.ok || data.error) {
         console.error("[meta:post]", path, data);
-        throw new ResponseError("meta_api_error", data.error?.message || "Meta no pudo completar la operacion.", 502);
+        throw new ResponseError("meta_api_error", formatMetaError(data.error) || "Meta no pudo completar la operacion.", 502);
     }
 
     return data;
@@ -48,10 +48,32 @@ async function graphGet<T>(path: string, query?: Record<string, string>) {
     const data = (await response.json()) as T & { error?: { message?: string; code?: number } };
     if (!response.ok || data.error) {
         console.error("[meta:get]", path, data);
-        throw new ResponseError("meta_api_error", data.error?.message || "Meta no pudo consultar datos.", 502);
+        throw new ResponseError("meta_api_error", formatMetaError(data.error) || "Meta no pudo consultar datos.", 502);
     }
 
     return data;
+}
+
+function formatMetaError(error?: {
+    message?: string;
+    code?: number;
+    error_subcode?: number;
+    type?: string;
+    error_user_title?: string;
+    error_user_msg?: string;
+    fbtrace_id?: string;
+}) {
+    if (!error) return "";
+    return [
+        error.message,
+        error.error_user_title,
+        error.error_user_msg,
+        error.code ? `code=${error.code}` : "",
+        error.error_subcode ? `subcode=${error.error_subcode}` : "",
+        error.fbtrace_id ? `trace=${error.fbtrace_id}` : "",
+    ]
+        .filter(Boolean)
+        .join(" | ");
 }
 
 export async function duplicateAndActivateCampaign({
