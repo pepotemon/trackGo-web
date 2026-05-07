@@ -114,7 +114,6 @@ export async function configureAndActivateCityCampaign({
     await graphPost(`${adsetId}`, {
         name: `TrackGo - ${cityName} - ${userId}`,
         lifetime_budget: lifetimeBudget,
-        start_time: start.toISOString(),
         end_time: end.toISOString(),
         status: "ACTIVE",
     });
