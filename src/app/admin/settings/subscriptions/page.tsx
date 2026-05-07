@@ -1,15 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { auth } from "@/lib/firebase";
+import { onAuthStateChanged, type User } from "firebase/auth";
 import { AppIcon } from "@/components/ui/AppIcon";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { usePermissions } from "@/features/auth/usePermissions";
+import type { PixCheckoutResponse, SubscriptionCity, SubscriptionPlanId } from "@/types/subscriptions";
+import { estimateLeadRange, SUBSCRIPTION_PLANS } from "@/lib/subscriptionPlans";
 
-type SubscriptionPlan = {
-    id: "starter" | "growth" | "scale";
+type UiPlan = {
+    id: SubscriptionPlanId;
     name: string;
     price: number;
     campaignBudget: number;
@@ -20,9 +24,9 @@ type SubscriptionPlan = {
     features: string[];
 };
 
-const PLANS: SubscriptionPlan[] = [
+const PLANS: UiPlan[] = [
     {
-        id: "starter",
+        id: "base",
         name: "Base",
         price: 300,
         campaignBudget: 150,
@@ -36,7 +40,7 @@ const PLANS: SubscriptionPlan[] = [
         ],
     },
     {
-        id: "growth",
+        id: "crecimiento",
         name: "Crecimiento",
         price: 400,
         campaignBudget: 200,
@@ -51,7 +55,7 @@ const PLANS: SubscriptionPlan[] = [
         ],
     },
     {
-        id: "scale",
+        id: "dominio",
         name: "Dominio",
         price: 600,
         campaignBudget: 300,
@@ -69,22 +73,22 @@ const PLANS: SubscriptionPlan[] = [
 const cycleItems = [
     {
         title: "Ciclo TrackGo",
-        value: "Lun - Sab",
-        detail: "5 dias completos, cerrando el viernes en la madrugada.",
+        value: "5 dias",
+        detail: "Lunes a sabado de madrugada, con cierre operativo al terminar viernes.",
         icon: "clock" as const,
         tone: "purple" as const,
     },
     {
         title: "Distribucion",
         value: "50 / 50",
-        detail: "Mitad para anuncios, mitad margen operativo TrackGo.",
+        detail: "Mitad para anuncios Meta, mitad margen operativo TrackGo.",
         icon: "wallet" as const,
         tone: "green" as const,
     },
     {
         title: "Activacion",
         value: "Pix -> Meta",
-        detail: "Pago confirmado, campana en cola y asignacion por cobertura.",
+        detail: "Pago aprobado, ciudad reservada y campana activada desde backend.",
         icon: "play" as const,
         tone: "blue" as const,
     },
@@ -99,8 +103,16 @@ const currency = new Intl.NumberFormat("pt-BR", {
 export default function SubscriptionsPage() {
     const permissions = usePermissions();
     const [customAmount, setCustomAmount] = useState("350");
-    const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
+    const [selectedPlan, setSelectedPlan] = useState<UiPlan | null>(null);
     const [customModalOpen, setCustomModalOpen] = useState(false);
+    const [selectedCityId, setSelectedCityId] = useState("");
+    const [cities, setCities] = useState<SubscriptionCity[]>([]);
+    const [loadingCities, setLoadingCities] = useState(true);
+    const [citiesError, setCitiesError] = useState("");
+    const [pixResult, setPixResult] = useState<PixCheckoutResponse | null>(null);
+    const [checkoutError, setCheckoutError] = useState("");
+    const [checkoutLoading, setCheckoutLoading] = useState(false);
+    const [copied, setCopied] = useState(false);
 
     const customSimulation = useMemo(() => {
         const amount = Math.max(0, Number(customAmount.replace(",", ".")) || 0);
@@ -115,17 +127,123 @@ export default function SubscriptionsPage() {
     }, [customAmount]);
 
     const canEdit = permissions.accountingInvestmentEdit;
+    const selectedCity = cities.find((city) => city.id === selectedCityId) || null;
+
+    const loadCities = useCallback(async () => {
+        setLoadingCities(true);
+        setCitiesError("");
+        try {
+            const user = await waitForAuthUser();
+            const token = await user.getIdToken();
+            const response = await fetch("/api/subscriptions/cities", {
+                cache: "no-store",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            const data = await response.json();
+            if (!response.ok || !data.ok) {
+                throw new Error(data.message || "No se pudieron cargar las ciudades.");
+            }
+            setCities(data.cities || []);
+        } catch (error) {
+            setCitiesError(error instanceof Error ? error.message : "No se pudieron cargar las ciudades.");
+        } finally {
+            setLoadingCities(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        loadCities();
+    }, [loadCities]);
+
+    useEffect(() => {
+        if (!selectedCityId && cities.length) {
+            const firstAvailable = cities.find((city) => city.status === "available");
+            setSelectedCityId(firstAvailable?.id || cities[0].id);
+        }
+    }, [cities, selectedCityId]);
+
+    const resetCheckout = () => {
+        setPixResult(null);
+        setCheckoutError("");
+        setCopied(false);
+    };
+
+    const createCheckout = async ({
+        plan,
+        amount,
+    }: {
+        plan: SubscriptionPlanId;
+        amount?: number;
+    }) => {
+        if (!auth.currentUser) {
+            setCheckoutError("Debes iniciar sesion para generar Pix.");
+            return;
+        }
+
+        if (!selectedCity) {
+            setCheckoutError("Selecciona una ciudad.");
+            return;
+        }
+
+        if (selectedCity.status !== "available") {
+            setCheckoutError("Esta ciudad no esta disponible para venta.");
+            return;
+        }
+
+        setCheckoutLoading(true);
+        setCheckoutError("");
+        setPixResult(null);
+
+        try {
+            const token = await auth.currentUser.getIdToken();
+            const response = await fetch("/api/subscriptions/create-pix", {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    userId: auth.currentUser.uid,
+                    email: auth.currentUser.email,
+                    cityId: selectedCity.id,
+                    plan,
+                    amount,
+                }),
+            });
+
+            const data = await response.json();
+            if (!response.ok || !data.ok) {
+                throw new Error(data.message || "No se pudo crear el Pix.");
+            }
+
+            setPixResult(data.pix);
+            await loadCities();
+        } catch (error) {
+            setCheckoutError(error instanceof Error ? error.message : "No se pudo crear el Pix.");
+        } finally {
+            setCheckoutLoading(false);
+        }
+    };
+
+    const copyPix = async () => {
+        if (!pixResult?.qrCode) return;
+        await navigator.clipboard.writeText(pixResult.qrCode);
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1400);
+    };
 
     return (
         <div className="space-y-4">
             <PageHeader
                 title="Suscripciones Pix"
-                subtitle="Maqueta inicial para vender ciclos semanales, activar presupuesto y preparar el flujo Pix + Meta."
+                subtitle="Prueba controlada para reservar ciudad, cobrar por Pix y activar campana Meta despues del pago."
                 icon={<AppIcon name="wallet" tone="purple" plain className="text-white" />}
                 actions={
-                    <Button variant="secondary" className="gap-2" type="button">
-                        <AppIcon name="settings" size="sm" plain className="h-4 w-4 text-current" />
-                        Reglas de ciclo
+                    <Button variant="secondary" className="gap-2" type="button" onClick={loadCities}>
+                        <AppIcon name="refresh" size="sm" plain className="h-4 w-4 text-current" />
+                        Ciudades
                     </Button>
                 }
             />
@@ -151,28 +269,115 @@ export default function SubscriptionsPage() {
                 ))}
             </section>
 
-            <section className="grid gap-3 xl:grid-cols-[1fr_360px]">
+            <section className="grid gap-3 xl:grid-cols-[360px_1fr]">
+                <Card>
+                    <CardHeader
+                        title="Selecciona ciudad"
+                        subtitle="Regla activa: una ciudad solo puede tener un usuario activo."
+                    />
+                    <CardContent className="space-y-3">
+                        {loadingCities ? (
+                            <p className="rounded-2xl border border-[#eef1f5] bg-[#fbfaff] p-3 text-[12px] font-bold text-[#66739a]">
+                                Cargando ciudades...
+                            </p>
+                        ) : null}
+
+                        {citiesError ? (
+                            <p className="rounded-2xl border border-red-100 bg-red-50 p-3 text-[12px] font-bold text-red-700">
+                                {citiesError}
+                            </p>
+                        ) : null}
+
+                        {!loadingCities && cities.length === 0 ? (
+                            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-[12px] font-semibold leading-snug text-amber-800">
+                                No hay ciudades configuradas. Crea documentos en <span className="font-mono">cities</span> con nombre,
+                                estado <span className="font-mono">available</span> y <span className="font-mono">baseCampaignId</span>.
+                            </div>
+                        ) : null}
+
+                        <div className="grid gap-2">
+                            {cities.map((city) => (
+                                <button
+                                    key={city.id}
+                                    type="button"
+                                    disabled={city.status !== "available"}
+                                    onClick={() => setSelectedCityId(city.id)}
+                                    className={[
+                                        "flex items-center justify-between gap-3 rounded-2xl border p-3 text-left transition",
+                                        selectedCityId === city.id
+                                            ? "border-[#7c3aed] bg-[#f7f3ff] shadow-[0_14px_28px_rgba(91,33,255,0.12)]"
+                                            : "border-[#eef1f5] bg-white hover:border-[#ded8ff]",
+                                        city.status !== "available" ? "cursor-not-allowed opacity-65" : "",
+                                    ].join(" ")}
+                                >
+                                    <span className="min-w-0">
+                                        <span className="block text-[13px] font-black text-[#101936]">
+                                            {city.name}
+                                        </span>
+                                        <span className="mt-0.5 block text-[11px] font-semibold text-[#66739a]">
+                                            {[city.state, city.country].filter(Boolean).join(" · ") || "Sin region"}
+                                        </span>
+                                    </span>
+                                    <CityStatusPill city={city} />
+                                </button>
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
+
                 <Card>
                     <CardHeader
                         title="Planes semanales"
-                        subtitle="Cada plan reserva una parte para campana y deja clara la promesa comercial."
+                        subtitle="El Pix real se genera contra la ciudad seleccionada y queda pendiente hasta webhook."
                     />
                     <CardContent className="grid gap-3 lg:grid-cols-3">
                         {PLANS.map((plan) => (
                             <PlanCard
                                 key={plan.id}
                                 plan={plan}
-                                disabled={!canEdit}
-                                onSelect={() => setSelectedPlan(plan)}
+                                disabled={!canEdit || !selectedCity || selectedCity.status !== "available"}
+                                onSelect={() => {
+                                    resetCheckout();
+                                    setSelectedPlan(plan);
+                                }}
                             />
                         ))}
+                    </CardContent>
+                </Card>
+            </section>
+
+            <section className="grid gap-3 xl:grid-cols-[1fr_360px]">
+                <Card>
+                    <CardHeader
+                        title="Flujo de activacion"
+                        subtitle="El backend valida monto, ciudad y pago antes de tocar Meta."
+                    />
+                    <CardContent>
+                        <div className="grid gap-3 md:grid-cols-2">
+                            {[
+                                ["1", "Reserva temporal", "Al generar Pix la ciudad queda reservada 30 minutos para evitar doble venta."],
+                                ["2", "Pago aprobado", "Mercado Pago llama al webhook y TrackGo valida monto exacto e idempotencia."],
+                                ["3", "Campana Meta", "Se duplica la campana base, se configura lifetime budget en ad sets y se activa."],
+                                ["4", "Suscripcion activa", "La ciudad queda ocupada y se guarda la suscripcion con fechas del ciclo."],
+                            ].map(([step, title, body]) => (
+                                <div key={step} className="flex gap-3 rounded-2xl border border-[#eef1f5] bg-[#fbfaff] p-3">
+                                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#f3f0ff] text-[12px] font-black text-[#6d28d9] ring-1 ring-[#ded8ff]">
+                                        {step}
+                                    </span>
+                                    <div>
+                                        <p className="text-[13px] font-black text-[#101936]">{title}</p>
+                                        <p className="mt-0.5 text-[12px] font-semibold leading-snug text-[#66739a]">{body}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </CardContent>
                 </Card>
 
                 <Card className="overflow-hidden">
                     <CardHeader
                         title="Presupuesto personalizado"
-                        subtitle="Simula un valor libre antes de generar el Pix."
+                        subtitle="Calcula volumen aproximado y genera Pix con valor libre."
                     />
                     <CardContent className="space-y-4">
                         <label className="block">
@@ -212,10 +417,13 @@ export default function SubscriptionsPage() {
                             type="button"
                             variant="primary"
                             className="w-full"
-                            disabled={!canEdit || customSimulation.amount < 100}
-                            onClick={() => setCustomModalOpen(true)}
+                            disabled={!canEdit || customSimulation.amount < 100 || !selectedCity || selectedCity.status !== "available"}
+                            onClick={() => {
+                                resetCheckout();
+                                setCustomModalOpen(true);
+                            }}
                         >
-                            Simular Pix personalizado
+                            Generar Pix personalizado
                         </Button>
                     </CardContent>
                 </Card>
@@ -224,42 +432,33 @@ export default function SubscriptionsPage() {
             <section className="grid gap-3 xl:grid-cols-[0.9fr_1.1fr]">
                 <Card>
                     <CardHeader
-                        title="Flujo recomendado"
-                        subtitle="La pantalla ya queda pensada para conectar backend, Pix y Meta."
+                        title="Planes configurados"
+                        subtitle="Referencia compartida entre frontend y backend."
                     />
-                    <CardContent>
-                        <div className="space-y-3">
-                            {[
-                                ["1", "Crear solicitud", "Guardar subscriptionCheckout con usuario, plan, monto, ciclo y estado pending."],
-                                ["2", "Generar Pix", "Backend crea una cobranca dinamica o usa proveedor Pix con webhook."],
-                                ["3", "Confirmar pago", "Webhook valida txid, monto y usuario antes de activar la suscripcion."],
-                                ["4", "Activar campana", "Crear/actualizar campana Meta con presupuesto, fechas y cobertura del usuario."],
-                            ].map(([step, title, body]) => (
-                                <div key={step} className="flex gap-3 rounded-2xl border border-[#eef1f5] bg-[#fbfaff] p-3">
-                                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#f3f0ff] text-[12px] font-black text-[#6d28d9] ring-1 ring-[#ded8ff]">
-                                        {step}
-                                    </span>
-                                    <div>
-                                        <p className="text-[13px] font-black text-[#101936]">{title}</p>
-                                        <p className="mt-0.5 text-[12px] font-semibold leading-snug text-[#66739a]">{body}</p>
-                                    </div>
+                    <CardContent className="space-y-2">
+                        {SUBSCRIPTION_PLANS.map((plan) => (
+                            <div key={plan.id} className="flex items-center justify-between rounded-2xl border border-[#eef1f5] bg-white p-3">
+                                <div>
+                                    <p className="text-[13px] font-black text-[#101936]">{plan.name}</p>
+                                    <p className="text-[11px] font-semibold text-[#66739a]">{plan.description}</p>
                                 </div>
-                            ))}
-                        </div>
+                                <span className="text-[13px] font-black text-[#6d28d9]">{currency.format(plan.amount)}</span>
+                            </div>
+                        ))}
                     </CardContent>
                 </Card>
 
                 <Card>
                     <CardHeader
-                        title="Notas de estrategia"
-                        subtitle="Lo que conviene definir antes de cobrar de verdad."
+                        title="Pendiente antes de produccion"
+                        subtitle="No es bloqueo para probar, pero si para cobrar con tranquilidad."
                     />
                     <CardContent>
                         <div className="grid gap-2 md:grid-cols-2">
-                            <StrategyNote title="Pix" body="Nubank personal puede recibir Pix, pero para automatizar necesitas proveedor/API con txid y webhook confiable." />
-                            <StrategyNote title="Meta" body="Primero conviene activar campanas manual/semi-automaticas; luego automatizar con Marketing API cuando el flujo este probado." />
-                            <StrategyNote title="Promesa" body="Vender rango estimado, nunca cantidad fija. La entrega depende de ciudad, competencia, pauta y respuesta del mercado." />
-                            <StrategyNote title="Incompletos" body="Incluyelo como valor extra: base con negocio detectado para recuperar oportunidades sin depender solo de anuncios." />
+                            <StrategyNote title="Webhook publico" body="En Vercel configura MERCADOPAGO_WEBHOOK_URL con https://trackgo.co/api/webhook/mercadopago." />
+                            <StrategyNote title="Credenciales" body="Las llaves deben vivir en Vercel Environment Variables, nunca en el repo." />
+                            <StrategyNote title="Reembolso" body="Define flujo manual si alguien paga y Meta falla o la ciudad se ocupó por carrera." />
+                            <StrategyNote title="Meta base" body="Cada ciudad necesita baseCampaignId apuntando a una campana plantilla que nunca se modifica." />
                         </div>
                     </CardContent>
                 </Card>
@@ -271,8 +470,18 @@ export default function SubscriptionsPage() {
                 amount={selectedPlan?.price ?? 0}
                 campaignBudget={selectedPlan?.campaignBudget ?? 0}
                 estimatedLeads={selectedPlan?.estimatedLeads ?? ""}
+                city={selectedCity}
                 canEdit={canEdit}
-                onClose={() => setSelectedPlan(null)}
+                loading={checkoutLoading}
+                error={checkoutError}
+                pixResult={pixResult}
+                copied={copied}
+                onCopy={copyPix}
+                onCreate={() => selectedPlan && createCheckout({ plan: selectedPlan.id })}
+                onClose={() => {
+                    setSelectedPlan(null);
+                    resetCheckout();
+                }}
             />
             <CheckoutModal
                 open={customModalOpen}
@@ -280,10 +489,57 @@ export default function SubscriptionsPage() {
                 amount={customSimulation.amount}
                 campaignBudget={customSimulation.campaignBudget}
                 estimatedLeads={customSimulation.estimatedLeads}
+                city={selectedCity}
                 canEdit={canEdit}
-                onClose={() => setCustomModalOpen(false)}
+                loading={checkoutLoading}
+                error={checkoutError}
+                pixResult={pixResult}
+                copied={copied}
+                onCopy={copyPix}
+                onCreate={() => createCheckout({ plan: "custom", amount: customSimulation.amount })}
+                onClose={() => {
+                    setCustomModalOpen(false);
+                    resetCheckout();
+                }}
             />
         </div>
+    );
+}
+
+function waitForAuthUser() {
+    if (auth.currentUser) return Promise.resolve(auth.currentUser);
+
+    return new Promise<User>((resolve, reject) => {
+        const timeout = window.setTimeout(() => {
+            unsubscribe();
+            reject(new Error("No se pudo confirmar la sesion activa."));
+        }, 8000);
+
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+            if (!user) return;
+            window.clearTimeout(timeout);
+            unsubscribe();
+            resolve(user);
+        });
+    });
+}
+
+function CityStatusPill({ city }: { city: SubscriptionCity }) {
+    const styles = {
+        available: "bg-emerald-50 text-emerald-700 ring-emerald-100",
+        reserved: "bg-amber-50 text-amber-700 ring-amber-100",
+        occupied: "bg-rose-50 text-rose-700 ring-rose-100",
+    };
+    const labels = {
+        available: "Disponible",
+        reserved: "Reservada",
+        occupied: "Ocupada",
+    };
+
+    return (
+        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] ring-1 ${styles[city.status]}`}>
+            {labels[city.status]}
+        </span>
     );
 }
 
@@ -292,7 +548,7 @@ function PlanCard({
     disabled,
     onSelect,
 }: {
-    plan: SubscriptionPlan;
+    plan: UiPlan;
     disabled: boolean;
     onSelect: () => void;
 }) {
@@ -337,7 +593,7 @@ function PlanCard({
             </ul>
 
             <Button type="button" variant="primary" className="mt-auto w-full" disabled={disabled} onClick={onSelect}>
-                Simular Pix
+                Generar Pix
             </Button>
         </article>
     );
@@ -369,7 +625,14 @@ function CheckoutModal({
     amount,
     campaignBudget,
     estimatedLeads,
+    city,
     canEdit,
+    loading,
+    error,
+    pixResult,
+    copied,
+    onCopy,
+    onCreate,
     onClose,
 }: {
     open: boolean;
@@ -377,29 +640,50 @@ function CheckoutModal({
     amount: number;
     campaignBudget: number;
     estimatedLeads: string;
+    city: SubscriptionCity | null;
     canEdit: boolean;
+    loading: boolean;
+    error: string;
+    pixResult: PixCheckoutResponse | null;
+    copied: boolean;
+    onCopy: () => void;
+    onCreate: () => void;
     onClose: () => void;
 }) {
     const operation = Math.max(0, amount - campaignBudget);
-    const mockPayload = `trackgo.pix.mock|amount=${amount}|budget=${campaignBudget}|cycle=5d`;
 
     return (
-        <Modal open={open} title={title} subtitle="Vista previa. Todavia no genera cobro real." size="md" onClose={onClose}>
-            <div className="grid gap-4 sm:grid-cols-[180px_1fr]">
+        <Modal
+            open={open}
+            title={title}
+            subtitle={city ? `${city.name} · Pix real via Mercado Pago` : "Selecciona una ciudad disponible"}
+            size="md"
+            onClose={onClose}
+        >
+            <div className="grid gap-4 sm:grid-cols-[190px_1fr]">
                 <div className="rounded-3xl border border-[#ded8ff] bg-[linear-gradient(135deg,#f8f7ff,#ffffff)] p-4">
-                    <div className="grid aspect-square grid-cols-5 gap-1 rounded-2xl bg-white p-3 shadow-inner">
-                        {Array.from({ length: 25 }).map((_, index) => (
-                            <span
-                                key={index}
-                                className={[
-                                    "rounded-[4px]",
-                                    index % 2 === 0 || index % 7 === 0 ? "bg-[#6d28d9]" : "bg-[#ede9fe]",
-                                ].join(" ")}
-                            />
-                        ))}
-                    </div>
+                    {pixResult?.qrCodeBase64 ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                            src={`data:image/png;base64,${pixResult.qrCodeBase64}`}
+                            alt="QR Pix"
+                            className="aspect-square w-full rounded-2xl bg-white object-contain p-2 shadow-inner"
+                        />
+                    ) : (
+                        <div className="grid aspect-square grid-cols-5 gap-1 rounded-2xl bg-white p-3 shadow-inner">
+                            {Array.from({ length: 25 }).map((_, index) => (
+                                <span
+                                    key={index}
+                                    className={[
+                                        "rounded-[4px]",
+                                        index % 2 === 0 || index % 7 === 0 ? "bg-[#6d28d9]" : "bg-[#ede9fe]",
+                                    ].join(" ")}
+                                />
+                            ))}
+                        </div>
+                    )}
                     <p className="mt-3 text-center text-[10px] font-black uppercase tracking-[0.12em] text-[#7c70ba]">
-                        QR mock
+                        {pixResult ? "Pix listo" : "QR pendiente"}
                     </p>
                 </div>
 
@@ -416,56 +700,64 @@ function CheckoutModal({
                             {estimatedLeads} leads
                         </p>
                         <p className="mt-1 text-[12px] font-semibold leading-snug text-[#66739a]">
-                            Operacion TrackGo: {currency.format(operation)}. El valor real se confirmara por webhook antes de activar.
+                            Operacion TrackGo: {currency.format(operation)}. El webhook valida el pago antes de activar Meta.
                         </p>
                     </div>
                     <div className="rounded-2xl border border-dashed border-[#c7bfff] bg-[#f8f7ff] p-3">
                         <p className="text-[11px] font-black uppercase tracking-[0.12em] text-[#6d28d9]">
-                            Pix copia y pega mock
+                            Pix copia y pega
                         </p>
-                        <p className="mt-2 break-all rounded-xl bg-white p-2 font-mono text-[10px] font-bold text-[#52607a]">
-                            {mockPayload}
+                        <p className="mt-2 max-h-28 overflow-y-auto break-all rounded-xl bg-white p-2 font-mono text-[10px] font-bold text-[#52607a]">
+                            {pixResult?.qrCode || "Genera el checkout para recibir el codigo real de Mercado Pago."}
                         </p>
+                        {pixResult?.qrCode ? (
+                            <Button type="button" variant="secondary" className="mt-2 w-full" onClick={onCopy}>
+                                {copied ? "Copiado" : "Copiar Pix"}
+                            </Button>
+                        ) : null}
                     </div>
+                    {pixResult?.ticketUrl ? (
+                        <a
+                            href={pixResult.ticketUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block rounded-2xl border border-[#ded8ff] bg-white p-3 text-center text-[12px] font-black text-[#6d28d9]"
+                        >
+                            Abrir checkout Mercado Pago
+                        </a>
+                    ) : null}
                 </div>
             </div>
 
-            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-[12px] font-semibold leading-snug text-amber-800">
-                Este boton queda preparado para backend. El cobro real debe crearse en una Cloud Function para no exponer llaves Pix/Meta en el navegador.
-            </div>
+            {error ? (
+                <div className="mt-4 rounded-2xl border border-red-100 bg-red-50 p-3 text-[12px] font-semibold leading-snug text-red-700">
+                    {error}
+                </div>
+            ) : null}
+
+            {pixResult ? (
+                <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50 p-3 text-[12px] font-semibold leading-snug text-emerald-800">
+                    Pix creado. Cuando Mercado Pago confirme el pago, el webhook intentara ocupar la ciudad y activar la campana.
+                </div>
+            ) : (
+                <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-[12px] font-semibold leading-snug text-amber-800">
+                    La ciudad se reservara por 30 minutos al crear el Pix. Si el pago no se aprueba, podras liberarla manualmente o esperar expiracion.
+                </div>
+            )}
 
             <div className="mt-4 flex justify-end gap-2">
                 <Button type="button" variant="ghost" onClick={onClose}>
                     Cerrar
                 </Button>
-                <Button type="button" variant="primary" disabled={!canEdit}>
-                    Crear checkout pendiente
+                <Button
+                    type="button"
+                    variant="primary"
+                    disabled={!canEdit || loading || !city || city.status !== "available" || Boolean(pixResult)}
+                    onClick={onCreate}
+                >
+                    {loading ? "Generando..." : "Crear Pix"}
                 </Button>
             </div>
-
-            {/*
-                TODO Pix:
-                - Reemplazar este mock por una Cloud Function callable: createPixSubscriptionCheckout.
-                - Guardar subscriptionCheckouts/{id}: userId, amount, campaignBudget, cycleStart, cycleEnd, status=pending, txid.
-                - Generar QR dinamico o Pix copia/cola usando proveedor con webhook.
-
-                TODO Webhook:
-                - Validar txid, monto exacto, usuario y estado pendiente.
-                - Cambiar status a paid y crear weeklySubscriptionCampaigns/{cycleId_userId}.
-
-                TODO Meta:
-                - Encolar activacion de campana/ad set con presupuesto, fechas y cobertura.
-                - Guardar ids de campaign/adSet para pausar, consultar insights y auditar gasto.
-            */}
         </Modal>
     );
-}
-
-function estimateLeadRange(campaignBudget: number) {
-    if (campaignBudget <= 0) return "0-0";
-    if (campaignBudget <= 150) return "10-35";
-    if (campaignBudget <= 200) return "20-50";
-    const min = Math.round(campaignBudget * 0.115);
-    const max = Math.round(campaignBudget * 0.27);
-    return `${min}-${max}`;
 }
