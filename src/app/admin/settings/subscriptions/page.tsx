@@ -347,6 +347,7 @@ export default function SubscriptionsPage() {
                     data.campaign.name,
                     data.campaign.status || "sin estado",
                     `${data.campaign.adsetsCount ?? 0} ad set`,
+                    `${data.campaign.adsCount ?? 0} anuncio`,
                     data.campaign.warning || "",
                 ]
                     .filter(Boolean)

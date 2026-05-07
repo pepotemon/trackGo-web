@@ -110,6 +110,11 @@ export async function configureAndActivateCityCampaign({
     const end = calculateCycleEnd(start);
     const lifetimeBudget = Math.round(adsBudget * 100);
     const adsetId = adsetIds[0];
+    const ads = await graphGet<{ data?: Array<{ id: string; name?: string; status?: string }> }>(`${adsetId}/ads`, {
+        fields: "id,name,status",
+        limit: "50",
+    });
+    const adIds = ads.data?.map((item) => item.id).filter(Boolean) || [];
 
     await graphPost(`${adsetId}`, {
         name: `TrackGo - ${cityName} - ${userId}`,
@@ -118,11 +123,13 @@ export async function configureAndActivateCityCampaign({
         status: "ACTIVE",
     });
 
+    await Promise.all(adIds.map((adId) => graphPost(`${adId}`, { status: "ACTIVE" })));
     await graphPost(`${campaign.id}`, { status: "ACTIVE" });
 
     return {
         campaignId: campaign.id,
         adsetIds: [adsetId],
+        adIds,
         startDate: start,
         endDate: end,
         lifetimeBudget,
@@ -170,11 +177,21 @@ export async function validateCityCampaign(campaignId: string) {
         limit: "50",
     });
     const adsetIds = adsets.data?.map((item) => item.id).filter(Boolean) || [];
+    const ads =
+        adsetIds.length === 1
+            ? await graphGet<{ data?: Array<{ id: string; name?: string; status?: string }> }>(`${adsetIds[0]}/ads`, {
+                fields: "id,name,status",
+                limit: "50",
+            })
+            : { data: [] };
+    const adIds = ads.data?.map((item) => item.id).filter(Boolean) || [];
 
     return {
         ...campaign,
         adsetsCount: adsetIds.length,
         adsetIds,
+        adsCount: adIds.length,
+        adIds,
         ready: adsetIds.length === 1,
         warning:
             adsetIds.length === 1
