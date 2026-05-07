@@ -4,8 +4,8 @@ import { calculateCycleEnd } from "@/server/subscriptions/plans";
 const GRAPH_VERSION = "v19.0";
 
 function metaConfig() {
-    const token = process.env.META_ACCESS_TOKEN;
-    const adAccountId = process.env.META_AD_ACCOUNT_ID;
+    const token = process.env.META_ACCESS_TOKEN?.trim();
+    const adAccountId = process.env.META_AD_ACCOUNT_ID?.trim();
 
     if (!token || !adAccountId) {
         throw new ResponseError(
@@ -127,8 +127,8 @@ export async function validateMetaCampaign(baseCampaignId: string) {
         fields: "id,name,account_id,effective_status,status",
     });
 
-    const expectedAccount = metaConfig().adAccountId.replace(/^act_/, "");
-    const actualAccount = String(data.account_id || "").replace(/^act_/, "");
+    const expectedAccount = metaConfig().adAccountId.trim().replace(/^act_/, "");
+    const actualAccount = String(data.account_id || "").trim().replace(/^act_/, "");
 
     if (actualAccount && expectedAccount && actualAccount !== expectedAccount) {
         throw new ResponseError(
