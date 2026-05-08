@@ -54,6 +54,22 @@ function buildDisplayLabel(city, state) {
     return null;
 }
 
+/**
+ * Panama's Nominatim state field comes back as "Provincia de Panamá",
+ * "Departamento de X", etc. Strip the administrative prefix so the
+ * normalized value is just "panama" — matching what users store in geoCoverage.
+ */
+function stripAdminPrefixForPanama(value, marketCountry) {
+    const label = cleanupGeoLabel(value);
+    if (!label) return label;
+    if (String(marketCountry || "").toUpperCase() !== "PA") return label;
+    return label
+        .replace(/^Provincia de\s+/i, "")
+        .replace(/^Departamento de\s+/i, "")
+        .replace(/^Corregimiento de\s+/i, "")
+        .trim();
+}
+
 async function reverseGeoBrazil(lat, lng, now = Date.now(), options = {}) {
     const numLat = Number(lat);
     const numLng = Number(lng);
@@ -63,6 +79,7 @@ async function reverseGeoBrazil(lat, lng, now = Date.now(), options = {}) {
     }
 
     const acceptLanguage = safeString(options?.acceptLanguage || "pt-BR") || "pt-BR";
+    const marketCountry = safeString(options?.marketCountry || "");
 
     const url =
         `https://nominatim.openstreetmap.org/reverse` +
@@ -100,12 +117,13 @@ async function reverseGeoBrazil(lat, lng, now = Date.now(), options = {}) {
             "district",
         ]);
 
-        const state = pickFirstAddressValue(address, [
+        const rawState = pickFirstAddressValue(address, [
             "state",
             "region",
             "province",
             "county",
         ]);
+        const state = stripAdminPrefixForPanama(rawState, marketCountry);
 
         const country = pickFirstAddressValue(address, [
             "country",

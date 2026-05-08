@@ -470,6 +470,7 @@ function createUpsertLeadAsClient({
         const resolvedReverseGeo = hasValidCoords(lat, lng)
             ? await reverseGeoBrazil(lat, lng, now, {
                 acceptLanguage: marketFields.language === "es-PA" ? "es-PA" : "pt-BR",
+                marketCountry: marketFields.marketCountry,
             })
             : buildEmptyReverseGeoBrazil();
 

@@ -45,14 +45,14 @@ function getFinalParseStatusFactory({ hasUsefulName }) {
         const hasMaps = hasRequiredMapsForFlow(client);
         const hasName = hasUsefulName(client);
 
-        // Panama needs Maps + business type before assignment.
+        // Maps alone is enough for assignment in all markets.
+        // Business type is collected by the bot but is not a blocker.
         if (marketCountry === "PA") {
-            if (hasMaps && hasBusiness) return "ready";
-            if (hasMaps || hasBusiness || hasName) return "partial";
+            if (hasMaps) return "ready";
+            if (hasBusiness || hasName) return "partial";
             return "empty";
         }
 
-        // Brazil stays permissive: Maps alone is enough for initial assignment.
         if (hasMaps) return "ready";
         if (hasBusiness || hasName) return "partial";
         return "empty";

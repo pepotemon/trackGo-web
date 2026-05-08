@@ -255,6 +255,15 @@ export default function ClientDetailPage() {
         await assignLeadToUser(lead.id, userId);
     }
 
+    function closeQuickActionsForNavigation() {
+        if (typeof window !== "undefined" && window.history.state?.__trackgoModal) {
+            const nextState = { ...window.history.state };
+            delete nextState.__trackgoModal;
+            window.history.replaceState(nextState, "", window.location.href);
+        }
+        setQuickActionsOpen(false);
+    }
+
     return (
         <div className="mx-auto w-full max-w-[1220px]">
 
@@ -476,7 +485,7 @@ export default function ClientDetailPage() {
                                 <Link
                                     href={`/admin/leads/${clientId}?from=client`}
                                     className="flex flex-col items-center gap-2 rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] py-4 transition active:bg-[#f3f0ff]"
-                                    onClick={() => setQuickActionsOpen(false)}
+                                    onClick={closeQuickActionsForNavigation}
                                 >
                                     <AppIcon name="chat" tone="purple" size="sm" className="h-6 w-6 bg-transparent text-[#7C3AED] ring-0" />
                                     <span className="text-[10px] font-black text-[#66739A]">Chat</span>
@@ -489,7 +498,7 @@ export default function ClientDetailPage() {
                                         target="_blank"
                                         rel="noreferrer"
                                         className="flex flex-col items-center gap-2 rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] py-4 transition active:bg-[#f3f0ff]"
-                                        onClick={() => setQuickActionsOpen(false)}
+                                        onClick={closeQuickActionsForNavigation}
                                     >
                                         <AppIcon name="map" tone="green" size="sm" className="h-6 w-6 bg-transparent text-emerald-600 ring-0" />
                                         <span className="text-[10px] font-black text-[#66739A]">Maps</span>
@@ -502,7 +511,7 @@ export default function ClientDetailPage() {
                                         target="_blank"
                                         rel="noreferrer"
                                         className="flex flex-col items-center gap-2 rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] py-4 transition active:bg-[#f3f0ff]"
-                                        onClick={() => setQuickActionsOpen(false)}
+                                        onClick={closeQuickActionsForNavigation}
                                     >
                                         <AppIcon name="chat" tone="green" size="sm" className="h-6 w-6 bg-transparent text-emerald-600 ring-0" />
                                         <span className="text-[10px] font-black text-[#66739A]">WhatsApp</span>

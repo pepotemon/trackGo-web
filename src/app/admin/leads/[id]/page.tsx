@@ -97,7 +97,7 @@ export default function LeadChatPage() {
     const canAssign = useCan("leadsAssign");
     const canMaps = useCan("activityMaps");
     const canWhatsapp = useCan("leadsWhatsapp");
-    const canClientView = useCan("activityClientView");
+    const canClientView = useCan("activityClientView") || canChatView;
 
     const [lead, setLead] = useState<MetaLeadDoc | null>(null);
     const [messages, setMessages] = useState<LeadMessageDoc[]>([]);
@@ -213,6 +213,15 @@ export default function LeadChatPage() {
         if (Math.abs(delta) < 70) return;
         if (delta > 0 && prevId) router.push(`/admin/leads/${prevId}?from=${searchParams.get("from") ?? "leads"}`);
         if (delta < 0 && nextId) router.push(`/admin/leads/${nextId}?from=${searchParams.get("from") ?? "leads"}`);
+    }
+
+    function closeQuickActionsForNavigation() {
+        if (typeof window !== "undefined" && window.history.state?.__trackgoModal) {
+            const nextState = { ...window.history.state };
+            delete nextState.__trackgoModal;
+            window.history.replaceState(nextState, "", window.location.href);
+        }
+        setQuickActionsOpen(false);
     }
 
     const canSend = useMemo(() => {
@@ -460,7 +469,7 @@ export default function LeadChatPage() {
                                 <Link
                                     href={`/admin/clients/${clientId}`}
                                     className="flex flex-col items-center gap-2 rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] py-4 transition active:bg-[#f3f0ff]"
-                                    onClick={() => setQuickActionsOpen(false)}
+                                    onClick={closeQuickActionsForNavigation}
                                 >
                                     <AppIcon name="users" tone="purple" size="sm" className="h-6 w-6 bg-transparent text-[#7C3AED] ring-0" />
                                     <span className="text-[10px] font-black text-[#66739A]">Ver cliente</span>
@@ -472,7 +481,7 @@ export default function LeadChatPage() {
                                         target="_blank"
                                         rel="noreferrer"
                                         className="flex flex-col items-center gap-2 rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] py-4 transition active:bg-[#f3f0ff]"
-                                        onClick={() => setQuickActionsOpen(false)}
+                                        onClick={closeQuickActionsForNavigation}
                                     >
                                         <AppIcon name="map" tone="green" size="sm" className="h-6 w-6 bg-transparent text-emerald-600 ring-0" />
                                         <span className="text-[10px] font-black text-[#66739A]">Maps</span>
@@ -485,7 +494,7 @@ export default function LeadChatPage() {
                                         target="_blank"
                                         rel="noreferrer"
                                         className="flex flex-col items-center gap-2 rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] py-4 transition active:bg-[#f3f0ff]"
-                                        onClick={() => setQuickActionsOpen(false)}
+                                        onClick={closeQuickActionsForNavigation}
                                     >
                                         <AppIcon name="chat" tone="green" size="sm" className="h-6 w-6 bg-transparent text-emerald-600 ring-0" />
                                         <span className="text-[10px] font-black text-[#66739A]">WhatsApp</span>
