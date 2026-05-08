@@ -7,7 +7,6 @@ import { AppIcon } from "@/components/ui/AppIcon";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
-import { PageHeader } from "@/components/ui/PageHeader";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { usePermissions } from "@/features/auth/usePermissions";
 import type { SubscriptionCity } from "@/types/subscriptions";
@@ -102,6 +101,7 @@ export default function SubscriptionsAdminPage() {
     const [settingsSaving, setSettingsSaving] = useState(false);
     const [settingsError, setSettingsError] = useState("");
     const [detailCityId, setDetailCityId] = useState<string | null>(null);
+    const [sheetCityId, setSheetCityId] = useState<string | null>(null);
 
     const canView = permissions.subscriptionsView || permissions.subscriptionsEdit;
     const canManage = permissions.subscriptionsEdit || isSuperAdmin;
@@ -155,6 +155,15 @@ export default function SubscriptionsAdminPage() {
     const revenue = activeSubscriptions.reduce((sum, item) => sum + item.amount, 0);
     const operatingBase = activeSubscriptions.reduce((sum, item) => sum + item.adsBudget, 0);
     const failedCheckouts = overview?.checkouts.filter((item) => item.status === "failed" || item.activationStatus.includes("failed")).length ?? 0;
+
+    const sheetCity = useMemo(
+        () => sheetCityId ? (overview?.cities.find((c) => c.id === sheetCityId) ?? null) : null,
+        [sheetCityId, overview],
+    );
+    const sheetSub = useMemo(
+        () => sheetCityId ? (activeSubscriptions.find((s) => s.cityId === sheetCityId) ?? undefined) : undefined,
+        [sheetCityId, activeSubscriptions],
+    );
 
     const detailCity = useMemo(
         () => detailCityId ? (overview?.cities.find((c) => c.id === detailCityId) ?? null) : null,
@@ -320,44 +329,42 @@ export default function SubscriptionsAdminPage() {
 
     return (
         <div className="space-y-3 pb-4">
-            <div className="sticky top-0 z-20 -mx-3 bg-[#fbfaff]/92 px-3 pt-1 backdrop-blur-xl sm:-mx-5 sm:px-5 lg:-mx-7 lg:px-7">
-                <PageHeader
-                    title="Suscripciones"
-                    subtitle="Panel operativo de ciudades, pagos Pix y ciclos activos."
-                    icon={<AppIcon name="wallet" tone="purple" plain className="text-white" />}
-                    actions={
-                        <div className="flex items-center gap-2">
-                            {canManage ? (
-                                <>
-                                    <Button type="button" variant="secondary" onClick={() => setSettingsModalOpen(true)}>
-                                        <AppIcon name="settings" size="sm" plain className="h-4 w-4 text-current" />
-                                        Reglas
-                                    </Button>
-                                    <Button type="button" variant="primary" onClick={openCreateCity}>
-                                        <AppIcon name="plus" size="sm" plain className="h-4 w-4 text-current" />
-                                        Ciudad
-                                    </Button>
-                                </>
-                            ) : null}
-                            <Button type="button" variant="secondary" onClick={loadOverview} aria-label="Actualizar">
-                                <AppIcon name="refresh" size="sm" plain className="h-4 w-4 text-current" />
-                            </Button>
-                        </div>
-                    }
-                />
+            <div className="sticky top-0 z-20 -mx-3 bg-[#fbfaff]/95 px-3 pb-3 pt-3 backdrop-blur-md sm:-mx-5 sm:px-5 lg:-mx-7 lg:px-7">
+                <div className="flex items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                        <h1 className="truncate text-[20px] font-black tracking-[-0.03em] text-[#101936]">Suscripciones</h1>
+                        <p className="mt-0.5 truncate text-[11px] font-semibold text-[#66739a]">Ciudades · Pix · Ciclos activos</p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                        {canManage ? (
+                            <>
+                                <Button type="button" variant="secondary" onClick={() => setSettingsModalOpen(true)}>
+                                    <AppIcon name="settings" size="sm" plain className="h-4 w-4 text-current" />
+                                    <span className="hidden sm:inline">Reglas</span>
+                                </Button>
+                                <Button type="button" variant="primary" onClick={openCreateCity}>
+                                    <AppIcon name="plus" size="sm" plain className="h-4 w-4 text-current" />
+                                    <span className="hidden sm:inline">Ciudad</span>
+                                </Button>
+                            </>
+                        ) : null}
+                        <Button type="button" variant="secondary" onClick={loadOverview} aria-label="Actualizar">
+                            <AppIcon name="refresh" size="sm" plain className="h-4 w-4 text-current" />
+                        </Button>
+                    </div>
+                </div>
+                <div className="mt-3 grid grid-cols-5 gap-2">
+                    <StatCard label="Ciudades" value={cityStats.total} tone="purple" />
+                    <StatCard label="Libres" value={cityStats.available} tone="green" />
+                    <StatCard label="Ocupadas" value={cityStats.occupied} tone="blue" />
+                    <StatCard label="Reservas" value={cityStats.reserved} tone="orange" />
+                    <StatCard label="Alertas" value={failedCheckouts} tone={failedCheckouts ? "red" : "green"} />
+                </div>
             </div>
 
             {error ? <Notice tone="red">{error}</Notice> : null}
             {actionMessage ? <Notice tone={actionMessage.includes("correctamente") ? "green" : "red"}>{actionMessage}</Notice> : null}
-            {loading ? <Notice tone="violet">Cargando panel operativo...</Notice> : null}
-
-            <section className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-                <Metric label="Ciudades" value={cityStats.total} detail={`${cityStats.available} disponibles`} tone="purple" />
-                <Metric label="Ocupadas" value={cityStats.occupied} detail="Ciclos activos" tone="green" />
-                <Metric label="Reservas" value={cityStats.reserved} detail="Pix pendientes" tone="orange" />
-                <Metric label="Ingresos" value={currency.format(revenue)} detail="Suscripciones activas" tone="blue" />
-                <Metric label="Alertas" value={failedCheckouts} detail="Pagos o activaciones" tone={failedCheckouts ? "red" : "green"} />
-            </section>
+            {loading ? <Notice tone="violet">Cargando...</Notice> : null}
 
             <section className="grid gap-3 xl:grid-cols-[1.15fr_0.85fr]">
                 <Card>
@@ -368,15 +375,11 @@ export default function SubscriptionsAdminPage() {
                     />
                     <CardContent className="grid gap-2">
                         {(overview?.cities ?? []).map((city) => (
-                            <CityRow
+                            <CityCard
                                 key={city.id}
                                 city={city}
                                 subscription={activeSubscriptions.find((item) => item.cityId === city.id)}
-                                canEdit={canManage}
-                                busy={actionBusyId === city.id}
-                                onEdit={() => openEditCity(city)}
-                                onRelease={() => void releaseCity(city.id)}
-                                onDetail={() => setDetailCityId(city.id)}
+                                onSheet={() => setSheetCityId(city.id)}
                             />
                         ))}
                         {overview?.cities.length === 0 ? <EmptyInline text="Aun no hay ciudades configuradas." /> : null}
@@ -384,7 +387,7 @@ export default function SubscriptionsAdminPage() {
                 </Card>
 
                 <Card>
-                    <CardHeader title="Ciclos activos" subtitle="Usuarios con ciudad ocupada." action={<StatusBadge>{activeSubscriptions.length}</StatusBadge>} />
+                    <CardHeader title="Ciclos activos" subtitle={`${currency.format(revenue)} en ciclos activos`} action={<StatusBadge>{activeSubscriptions.length}</StatusBadge>} />
                     <CardContent className="space-y-2">
                         {activeSubscriptions.map((item) => <SubscriptionRow key={item.id} item={item} />)}
                         {activeSubscriptions.length === 0 ? <EmptyInline text="No hay ciclos activos." /> : null}
@@ -407,6 +410,19 @@ export default function SubscriptionsAdminPage() {
                     {overview?.checkouts.length === 0 ? <EmptyInline text="No hay pagos recientes." /> : null}
                 </CardContent>
             </Card>
+
+            {sheetCity ? (
+                <CityActionSheet
+                    city={sheetCity}
+                    subscription={sheetSub}
+                    canManage={canManage}
+                    busy={actionBusyId === sheetCityId}
+                    onDetail={() => { setDetailCityId(sheetCityId); setSheetCityId(null); }}
+                    onEdit={() => { openEditCity(sheetCity); setSheetCityId(null); }}
+                    onRelease={() => { void releaseCity(sheetCityId!); setSheetCityId(null); }}
+                    onClose={() => setSheetCityId(null)}
+                />
+            ) : null}
 
             <CityDetailModal
                 city={detailCity}
@@ -446,62 +462,130 @@ export default function SubscriptionsAdminPage() {
     );
 }
 
-function CityRow({
+function CityCard({
     city,
     subscription,
-    canEdit,
-    busy,
-    onEdit,
-    onRelease,
-    onDetail,
+    onSheet,
 }: {
     city: SubscriptionCity;
     subscription?: OverviewSubscription;
-    canEdit: boolean;
-    busy: boolean;
-    onEdit: () => void;
-    onRelease: () => void;
-    onDetail: () => void;
+    onSheet: () => void;
 }) {
-    const isOccupied = city.status === "occupied" || city.status === "reserved";
+    const dotColor =
+        city.status === "available"
+            ? "bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.15)]"
+            : city.status === "reserved"
+              ? "bg-amber-400"
+              : "bg-rose-400";
     return (
-        <div className="grid gap-3 rounded-2xl border border-[#eef1f5] bg-white p-3 transition hover:border-[#ded8ff] hover:bg-[#fbfaff] md:grid-cols-[1fr_auto] md:items-center">
-            <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-3 rounded-[16px] border border-[#eef1f5] bg-white p-3 transition hover:border-[#ded8ff] hover:bg-[#fbfaff]">
+            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${dotColor}`} />
+            <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-1.5">
                     <p className="truncate text-[14px] font-black text-[#101936]">{city.name}</p>
                     <StatusPill status={city.status} />
                 </div>
-                <p className="mt-0.5 text-[11px] font-semibold text-[#66739a]">{[city.state, city.country].filter(Boolean).join(" - ") || "Sin region"}</p>
-                <p className="mt-1 truncate font-mono text-[10px] font-bold text-[#98a2b3]">ID {city.campaignId || city.activeCampaignId || city.baseCampaignId || "sin configuracion"}</p>
+                <p className="mt-0.5 text-[11px] font-semibold text-[#66739a]">
+                    {[city.state, city.country].filter(Boolean).join(" · ") || "Sin region"}
+                </p>
                 {subscription ? (
                     <p className="mt-1 text-[11px] font-bold text-[#6d28d9]">
                         {subscription.userName} · fin {formatDate(subscription.endDate)}
+                        {formatCountdown(subscription.endDate) ? (
+                            <span className="ml-1.5 rounded-full bg-[#f4f0ff] px-1.5 py-0.5 text-[9px] font-black text-[#7c3aed]">
+                                {formatCountdown(subscription.endDate)}
+                            </span>
+                        ) : null}
                     </p>
                 ) : null}
             </div>
-            <div className="flex flex-wrap justify-end gap-2">
-                {isOccupied ? (
-                    <Button type="button" variant="secondary" onClick={onDetail}>
-                        <AppIcon name="search" size="sm" plain className="h-4 w-4 text-current" />
-                        Ver
-                    </Button>
-                ) : null}
-                {canEdit ? (
-                    <>
-                        <Button type="button" variant="secondary" onClick={onEdit}>
-                            <AppIcon name="edit" size="sm" plain className="h-4 w-4 text-current" />
-                            Editar
-                        </Button>
-                        {city.status !== "available" ? (
-                            <Button type="button" variant="danger" disabled={busy} onClick={onRelease}>
-                                <AppIcon name="unlock" size="sm" plain className="h-4 w-4 text-current" />
-                                {busy ? "..." : "Liberar"}
-                            </Button>
-                        ) : null}
-                    </>
-                ) : null}
-            </div>
+            <button
+                type="button"
+                onClick={onSheet}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-[#e8e7fb] bg-[#f8f7ff] transition active:bg-[#f3f0ff]"
+            >
+                <AppIcon name="more" tone="slate" size="sm" plain className="h-4 w-4 text-[#66739a]" />
+            </button>
         </div>
+    );
+}
+
+function CityActionSheet({
+    city,
+    subscription,
+    canManage,
+    busy,
+    onDetail,
+    onEdit,
+    onRelease,
+    onClose,
+}: {
+    city: SubscriptionCity;
+    subscription?: OverviewSubscription;
+    canManage: boolean;
+    busy: boolean;
+    onDetail: () => void;
+    onEdit: () => void;
+    onRelease: () => void;
+    onClose: () => void;
+}) {
+    const isOccupied = city.status === "occupied" || city.status === "reserved";
+    return (
+        <>
+            <button type="button" onClick={onClose} aria-label="Cerrar" className="fixed inset-0 z-40 bg-black/40" />
+            <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-[24px] bg-white px-4 pb-8 pt-4 shadow-[0_-8px_40px_rgba(0,0,0,0.18)]">
+                <div className="mx-auto mb-4 h-1 w-12 rounded-full bg-[#e8e7fb]" />
+                <div className="mb-4 min-w-0">
+                    <p className="truncate text-[15px] font-black text-[#101936]">{city.name}</p>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                        <StatusPill status={city.status} />
+                        {subscription ? (
+                            <span className="text-[11px] font-bold text-[#66739a]">{subscription.userName}</span>
+                        ) : null}
+                    </div>
+                </div>
+                <div className="grid gap-2">
+                    {isOccupied ? (
+                        <button
+                            type="button"
+                            onClick={onDetail}
+                            className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#f3f0ff] px-4 text-[14px] font-bold text-[#101936] transition active:bg-violet-200"
+                        >
+                            <AppIcon name="search" size="sm" plain className="h-5 w-5 text-[#7c3aed]" />
+                            Ver detalle del ciclo
+                        </button>
+                    ) : null}
+                    {canManage ? (
+                        <button
+                            type="button"
+                            onClick={onEdit}
+                            className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#f8f7ff] px-4 text-[14px] font-bold text-[#101936] transition active:bg-[#f3f0ff]"
+                        >
+                            <AppIcon name="edit" size="sm" plain className="h-5 w-5 text-[#66739a]" />
+                            Editar ciudad
+                        </button>
+                    ) : null}
+                    {canManage && city.status !== "available" ? (
+                        <button
+                            type="button"
+                            disabled={busy}
+                            onClick={onRelease}
+                            className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-red-50 px-4 text-[14px] font-bold text-red-700 transition active:bg-red-100 disabled:opacity-50"
+                        >
+                            <AppIcon name="unlock" size="sm" plain className="h-5 w-5 text-red-500" />
+                            {busy ? "Liberando..." : "Liberar ciudad"}
+                        </button>
+                    ) : null}
+                </div>
+                <button
+                    type="button"
+                    onClick={onClose}
+                    className="mt-3 min-h-[48px] w-full rounded-[14px] border border-[#e8e7fb] bg-[#f8f7ff] text-[14px] font-bold text-[#66739a] transition active:bg-[#f3f0ff]"
+                >
+                    Cancelar
+                </button>
+            </div>
+        </>
     );
 }
 
@@ -586,28 +670,26 @@ function CheckoutRow({
     );
 }
 
-function Metric({
+function StatCard({
     label,
     value,
-    detail,
     tone,
 }: {
     label: string;
     value: ReactNode;
-    detail: string;
-    tone: "purple" | "orange" | "green" | "blue" | "red";
+    tone: "purple" | "green" | "orange" | "blue" | "red";
 }) {
-    const iconName = tone === "green" ? "check" : tone === "orange" ? "clock" : tone === "blue" ? "wallet" : tone === "red" ? "alert" : "location";
+    const colorMap: Record<string, string> = {
+        purple: "text-[#7c3aed]",
+        green: "text-emerald-600",
+        orange: "text-amber-600",
+        blue: "text-blue-600",
+        red: "text-red-600",
+    };
     return (
-        <div className="rounded-2xl border border-[#e8e7fb] bg-white px-3 py-3 shadow-[0_12px_28px_rgba(91,33,255,0.06)]">
-            <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                    <p className="text-[10px] font-black uppercase tracking-[0.1em] text-[#7c70ba]">{label}</p>
-                    <p className="mt-1 truncate text-[21px] font-black tracking-[-0.05em] text-[#101936]">{value}</p>
-                </div>
-                <AppIcon name={iconName} tone={tone === "red" ? "red" : tone} size="sm" />
-            </div>
-            <p className="mt-1 truncate text-[11px] font-bold text-[#66739a]">{detail}</p>
+        <div className="rounded-[14px] border border-[#e8e7fb] bg-white px-1.5 py-2.5 text-center shadow-[0_4px_16px_rgba(91,33,255,0.06)]">
+            <p className={`text-[18px] font-black leading-none tracking-[-0.04em] ${colorMap[tone] ?? "text-[#101936]"}`}>{value}</p>
+            <p className="mt-1 text-[9px] font-black uppercase tracking-[0.06em] text-[#66739a]">{label}</p>
         </div>
     );
 }
