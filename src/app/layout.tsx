@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/features/auth/AuthProvider";
 import { InstallAppPrompt } from "@/components/pwa/InstallAppPrompt";
+import { NoContextMenu } from "@/components/pwa/NoContextMenu";
 
 export const metadata: Metadata = {
   title: "TrackGo",
@@ -48,6 +49,7 @@ export default function RootLayout({
       <body>
         <AuthProvider>{children}</AuthProvider>
         <InstallAppPrompt />
+        <NoContextMenu />
       </body>
     </html>
   );
