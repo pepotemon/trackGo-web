@@ -309,7 +309,11 @@ export default function UserIncompleteClientsPage() {
             if (actionLead.verificationStatus === "not_suitable") {
                 await takeNotSuitableClient(actionLead.id, userId);
             } else {
-                await takeIncompleteClient(actionLead.id, userId);
+                await takeIncompleteClient(actionLead.id, userId, {
+                    leadName: actionLead.name,
+                    leadPhone: actionLead.phone,
+                    leadBusiness: actionLead.business,
+                });
             }
             setToast("Cliente tomado. Lo encontraras en Prospectos para completar sus datos.");
             window.setTimeout(() => setToast(""), 2600);

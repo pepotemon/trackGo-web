@@ -1,4 +1,5 @@
 import {
+    addDoc,
     collection,
     doc,
     endAt,
@@ -210,7 +211,12 @@ export async function takeNotSuitableClient(clientId: string, userId: string): P
     });
 }
 
-export async function takeIncompleteClient(clientId: string, userId: string): Promise<void> {
+export async function takeIncompleteClient(clientId: string, userId: string, meta?: {
+    leadName?: string | null;
+    leadPhone?: string | null;
+    leadBusiness?: string | null;
+    userName?: string | null;
+}): Promise<void> {
     const now = Date.now();
     const dayKey = new Date(now).toISOString().slice(0, 10);
     const ref = doc(db, "clients", clientId);
@@ -242,4 +248,23 @@ export async function takeIncompleteClient(clientId: string, userId: string): Pr
             updatedAt: now,
         });
     });
+
+    // Write assign log so "hoy" counter in assignments modal includes self-assigned clients.
+    addDoc(collection(db, "autoAssignLogs"), {
+        leadId: clientId,
+        leadName: meta?.leadName ?? null,
+        leadPhone: meta?.leadPhone ?? null,
+        leadBusiness: meta?.leadBusiness ?? null,
+        leadGeoAdminDisplayLabel: null,
+        leadGeoAdminCityLabel: null,
+        leadGeoAdminStateLabel: null,
+        userId,
+        userName: meta?.userName ?? null,
+        userCoverageLabel: null,
+        matchType: null,
+        coverageKey: null,
+        createdAt: now,
+        dayKey,
+        mode: "self_assigned",
+    }).catch(() => {});
 }

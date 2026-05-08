@@ -11,7 +11,6 @@ import {
 import { listAccountingUsers } from "@/data/accountingRepo";
 import { assignLeadToUser, deleteLead, getClientCurrentStates } from "@/data/leadsRepo";
 import { listAllAutoAssignLogsForRange, writeManualAssignLog } from "@/data/autoAssignLogsRepo";
-import { AssignUserModal } from "@/features/leads/AssignUserModal";
 import { dayKeyFromDate, weekRangeKeysMonToSun } from "@/lib/date";
 import { buildWhatsAppUrl } from "@/lib/whatsapp";
 import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
@@ -28,6 +27,7 @@ import type { DailyEventDoc, UserDoc } from "@/types/accounting";
 import type { AutoAssignLogDoc } from "@/types/leads";
 import {
     ActionTile,
+    ActionTileButton,
     AppIcon,
     Badge,
     Button,
@@ -207,8 +207,7 @@ export default function ActivityPage() {
     const [earningsOpen, setEarningsOpen] = useState(false);
     const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
     const [mobileSheetRow, setMobileSheetRow] = useState<ActivityEventRow | null>(null);
-    const [mobileAssigningRow, setMobileAssigningRow] = useState<ActivityEventRow | null>(null);
-    const [mobileAssigning, setMobileAssigning] = useState(false);
+    const [quickAssignSaving, setQuickAssignSaving] = useState(false);
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
     const [err, setErr] = useState<string | null>(null);
@@ -666,7 +665,31 @@ export default function ActivityPage() {
                 </Card>
             </div>
 
-            <ActivityQuickActionsModal row={quickRow} onClose={() => setQuickRow(null)} />
+            <ActivityQuickActionsModal
+                row={quickRow}
+                users={visibleUsers}
+                saving={quickAssignSaving}
+                onClose={() => setQuickRow(null)}
+                onAssign={async (clientId, userId) => {
+                    setQuickAssignSaving(true);
+                    try {
+                        await assignLeadToUser(clientId, userId);
+                        const assignedUser = visibleUsers.find((u) => u.id === userId);
+                        const row = quickRow;
+                        writeManualAssignLog({
+                            leadId: clientId,
+                            leadName: row?.name,
+                            leadPhone: row?.phone,
+                            leadBusiness: row?.business,
+                            userId,
+                            userName: assignedUser?.name || assignedUser?.email || null,
+                        }).catch(() => {});
+                        setQuickRow(null);
+                    } finally {
+                        setQuickAssignSaving(false);
+                    }
+                }}
+            />
 
             <ActivityListModal
                 mode={listMode}
@@ -688,36 +711,10 @@ export default function ActivityPage() {
                 row={mobileSheetRow}
                 open={!!mobileSheetRow}
                 onClose={() => setMobileSheetRow(null)}
-                onOpenAssign={(row) => { setMobileSheetRow(null); setMobileAssigningRow(row); }}
+                onOpenAssign={(row) => { setMobileSheetRow(null); setQuickRow(row); }}
                 onDelete={(clientId) => {
                     setMobileSheetRow(null);
                     setEvents((prev) => prev.filter((e) => e.clientId !== clientId));
-                }}
-            />
-            <AssignUserModal
-                open={!!mobileAssigningRow}
-                onClose={() => setMobileAssigningRow(null)}
-                users={users}
-                title="Reasignar a usuario"
-                saving={mobileAssigning}
-                onAssign={async (userId) => {
-                    if (!mobileAssigningRow) return;
-                    setMobileAssigning(true);
-                    try {
-                        await assignLeadToUser(mobileAssigningRow.clientId, userId);
-                        const assignedUser = users.find((u) => u.id === userId);
-                        writeManualAssignLog({
-                            leadId: mobileAssigningRow.clientId,
-                            leadName: mobileAssigningRow.name,
-                            leadPhone: mobileAssigningRow.phone,
-                            leadBusiness: mobileAssigningRow.business,
-                            userId,
-                            userName: assignedUser?.name || assignedUser?.email || null,
-                        }).catch(() => {});
-                        setMobileAssigningRow(null);
-                    } finally {
-                        setMobileAssigning(false);
-                    }
                 }}
             />
         </div>
@@ -1430,15 +1427,27 @@ function ActivityTableState({
 
 function ActivityQuickActionsModal({
     row,
+    users,
+    saving,
     onClose,
+    onAssign,
 }: {
     row: ActivityEventRow | null;
+    users: ActivityUserOption[];
+    saving?: boolean;
     onClose: () => void;
+    onAssign?: (clientId: string, userId: string) => Promise<void>;
 }) {
     const canClientView = useCan("activityClientView");
     const canMaps = useCan("activityMaps");
     const canChat = useCan("activityChat");
     const canEdit = useCan("activityEdit");
+    const canAssign = useCan("leadsAssign");
+    const [step, setStep] = useState<"actions" | "assign">("actions");
+
+    useEffect(() => {
+        if (!row) setStep("actions");
+    }, [row]);
 
     if (!row) return null;
 
@@ -1446,39 +1455,82 @@ function ActivityQuickActionsModal({
         <Modal
             open={!!row}
             onClose={onClose}
-            title={eventTitle(row)}
-            subtitle={eventSubtitle(row)}
+            title={step === "assign" ? "Reasignar prospecto" : eventTitle(row)}
+            subtitle={step === "assign" ? eventTitle(row) : eventSubtitle(row)}
             size="sm"
         >
-            <div className="grid gap-2">
-                {canClientView ? (
-                    <ActionTile href={`/admin/clients/${row.clientId}`} label="Ver cliente" icon="users" tone="blue" />
-                ) : null}
-                {row.mapsUrl && canMaps ? (
-                    <ActionTile href={row.mapsUrl} label="Abrir Maps" icon="map" tone="green" external />
-                ) : null}
-                {(canChat || canEdit) ? (
-                    <ActionTile href={`/admin/leads/${row.clientId}?from=activity`} label={canChat && canEdit ? "Chat / Editar" : canChat ? "Chat" : "Editar"} icon={canChat ? "chat" : "edit"} tone="orange" />
-                ) : null}
-                {!canClientView && !canMaps && !canChat && !canEdit ? (
-                    <div className="rounded-xl border border-[#e5e7eb] bg-[#fafafa] p-4 text-center text-[12px] font-semibold text-[#667085]">
-                        No tienes permisos para acciones sobre este cliente.
-                    </div>
-                ) : null}
-            </div>
+            {step === "assign" ? (
+                <div className="grid gap-2">
+                    {users.length === 0 ? (
+                        <p className="rounded-2xl border border-dashed border-[#d0d5dd] bg-[#f9fafb] px-4 py-6 text-center text-[12px] font-semibold text-[#667085]">
+                            No hay usuarios disponibles.
+                        </p>
+                    ) : (
+                        users.map((user) => (
+                            <button
+                                key={user.id}
+                                type="button"
+                                disabled={saving}
+                                onClick={() => onAssign?.(row.clientId, user.id)}
+                                className="flex min-h-[48px] items-center gap-3 rounded-2xl border border-[#E8E7FB] bg-white px-3 text-left transition hover:bg-[#f8f7ff] disabled:opacity-60"
+                            >
+                                <AppIcon name="user" tone="purple" size="sm" />
+                                <span className="min-w-0 flex-1 truncate text-[13px] font-black text-[#101936]">
+                                    {user.name || user.email || "Usuario"}
+                                </span>
+                                {saving ? (
+                                    <svg className="tg-spin h-4 w-4 shrink-0 text-violet-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                                        <path d="M21 12a9 9 0 1 1-3.1-6.8" />
+                                    </svg>
+                                ) : null}
+                            </button>
+                        ))
+                    )}
+                    <button
+                        type="button"
+                        onClick={() => setStep("actions")}
+                        className="mt-1 min-h-[44px] w-full rounded-2xl border border-[#E8E7FB] bg-[#f8f7ff] text-[13px] font-bold text-[#66739A] transition hover:bg-[#f3f0ff]"
+                    >
+                        Volver
+                    </button>
+                </div>
+            ) : (
+                <div className="grid gap-2">
+                    {canClientView ? (
+                        <ActionTile href={`/admin/clients/${row.clientId}`} label="Ver cliente" icon="users" tone="blue" />
+                    ) : null}
+                    {row.mapsUrl && canMaps ? (
+                        <ActionTile href={row.mapsUrl} label="Abrir Maps" icon="map" tone="green" external />
+                    ) : null}
+                    {(canChat || canEdit) ? (
+                        <ActionTile href={`/admin/leads/${row.clientId}?from=activity`} label={canChat && canEdit ? "Chat / Editar" : canChat ? "Chat" : "Editar"} icon={canChat ? "chat" : "edit"} tone="orange" />
+                    ) : null}
+                    {canAssign && onAssign ? (
+                        <ActionTileButton onClick={() => setStep("assign")} label="Reasignar" icon="assign" tone="purple" />
+                    ) : null}
+                    {!canClientView && !canMaps && !canChat && !canEdit && !canAssign ? (
+                        <div className="rounded-xl border border-[#e5e7eb] bg-[#fafafa] p-4 text-center text-[12px] font-semibold text-[#667085]">
+                            No tienes permisos para acciones sobre este cliente.
+                        </div>
+                    ) : null}
+                </div>
+            )}
         </Modal>
     );
 }
 
-type ClientFollowUp = { status: string; assignedTo: string | null };
+type ClientFollowUp = { status: string; assignedTo: string | null; takenFromIncompleteAt?: number | null };
 
-function followUpBadge(state: ClientFollowUp | undefined, originalUserId: string) {
+function followUpBadge(state: ClientFollowUp | undefined, originalUserId: string, mode?: string | null) {
     if (!state) return null;
     if (state.status === "visited") {
         return <Badge tone="green">Visitado ✓</Badge>;
     }
     if (state.assignedTo && state.assignedTo !== originalUserId) {
         return <Badge tone="yellow">Reasignado</Badge>;
+    }
+    if (mode === "pending" && state.takenFromIncompleteAt) {
+        return <Badge tone="yellow">Tomado · Pendiente</Badge>;
     }
     if (state.status === "pending") {
         return <Badge tone="blue">Pendiente</Badge>;
@@ -1519,7 +1571,7 @@ function ActivityListModal({
     }, [mode]);
 
     useEffect(() => {
-        if (mode !== "rejected" || !rows.length) {
+        if ((mode !== "rejected" && mode !== "pending") || !rows.length) {
             setClientStates(new Map());
             return;
         }
@@ -1801,7 +1853,7 @@ function ActivityListModal({
                                                             <Badge tone={typeTone[row.type]}>
                                                                 {row.type === "rejected" ? rejectedReasonText(row) || "Sin motivo" : typeLabel[row.type]}
                                                             </Badge>
-                                                            {followUpBadge(clientStates.get(row.clientId), row.userId)}
+                                                            {followUpBadge(clientStates.get(row.clientId), row.userId, mode)}
                                                             {onOpenSheet ? (
                                                                 <button
                                                                     type="button"

@@ -466,19 +466,23 @@ function dayKeyFromMs(ms: number) {
 
 export async function getClientCurrentStates(
     clientIds: string[]
-): Promise<Map<string, { status: string; assignedTo: string | null }>> {
+): Promise<Map<string, { status: string; assignedTo: string | null; takenFromIncompleteAt?: number | null }>> {
     if (!clientIds.length) return new Map();
 
     const snapshots = await Promise.all(
         clientIds.map((id) => getDoc(doc(db, "clients", id)))
     );
 
-    const map = new Map<string, { status: string; assignedTo: string | null }>();
+    const map = new Map<string, { status: string; assignedTo: string | null; takenFromIncompleteAt?: number | null }>();
     for (const snap of snapshots) {
         if (snap.exists()) {
+            const d = snap.data();
+            const rawTs = d.takenFromIncompleteAt;
+            const takenAt = typeof rawTs === "number" && Number.isFinite(rawTs) ? rawTs : null;
             map.set(snap.id, {
-                status: String(snap.data().status ?? ""),
-                assignedTo: String(snap.data().assignedTo ?? "") || null,
+                status: String(d.status ?? ""),
+                assignedTo: String(d.assignedTo ?? "") || null,
+                takenFromIncompleteAt: takenAt,
             });
         }
     }

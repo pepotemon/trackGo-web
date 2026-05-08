@@ -1761,7 +1761,7 @@ function InvestmentContent({
             <Card className="overflow-hidden">
                 <CardHeader
                     title="Suscripciones"
-                    subtitle="Usuarios con modelo semanal. Solo las pagadas cuentan en inversion e ingresos."
+                    subtitle="Usuarios con modelo semanal. Solo las activas cuentan en inversion e ingresos."
                 />
 
                 <div className="border-t border-[#eef1f5] p-4">
@@ -1786,16 +1786,13 @@ function InvestmentContent({
                                         </div>
                                         <div className="flex items-center justify-between gap-2 sm:justify-end">
                                             <Badge tone={paid ? "green" : "yellow"}>
-                                                {paid ? "Pagada" : "Pendiente"}
+                                                {paid ? "Activa" : "Inactiva"}
                                             </Badge>
-                                            <button
-                                                type="button"
-                                                onClick={() => onToggleSubscriptionPayment(user)}
+                                            <SubscriptionSwitch
+                                                checked={paid}
                                                 disabled={isClosed}
-                                                className="rounded-full border border-[#e8e7fb] bg-white px-2.5 py-1 text-[10px] font-black text-[#7c3aed] transition hover:bg-[#f8f7ff] disabled:cursor-not-allowed disabled:opacity-50"
-                                            >
-                                                {paid ? "No pago" : "Pagar"}
-                                            </button>
+                                                onChange={() => onToggleSubscriptionPayment(user)}
+                                            />
                                         </div>
                                     </div>
                                 );
@@ -2088,6 +2085,43 @@ function MiniInvestmentStat({
                 {value}
             </div>
         </div>
+    );
+}
+
+function SubscriptionSwitch({
+    checked,
+    disabled,
+    onChange,
+}: {
+    checked: boolean;
+    disabled?: boolean;
+    onChange: () => void;
+}) {
+    return (
+        <button
+            type="button"
+            role="switch"
+            aria-checked={checked}
+            aria-label={checked ? "Desactivar suscripcion" : "Activar suscripcion"}
+            title={checked ? "Desactivar suscripcion" : "Activar suscripcion"}
+            onClick={onChange}
+            disabled={disabled}
+            className={[
+                "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border p-0.5 transition disabled:cursor-not-allowed disabled:opacity-50",
+                checked
+                    ? "border-[#7c3aed] bg-gradient-to-r from-[#7c3aed] to-[#4f46e5] shadow-[0_8px_18px_rgba(91,33,255,0.22)]"
+                    : "border-[#d0d5dd] bg-[#f2f4f7]",
+            ].join(" ")}
+        >
+            <span
+                className={[
+                    "flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-sm transition-transform",
+                    checked ? "translate-x-5 text-[#7c3aed]" : "translate-x-0 text-[#98a2b3]",
+                ].join(" ")}
+            >
+                <AppIcon name={checked ? "check" : "pause"} size="sm" plain className="h-3.5 w-3.5 text-current" />
+            </span>
+        </button>
     );
 }
 

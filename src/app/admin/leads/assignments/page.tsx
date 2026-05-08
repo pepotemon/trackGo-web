@@ -59,7 +59,11 @@ function safeMatchType(value: unknown): LeadAutoAssignMatchType | null {
 }
 
 function isManual(log: AutoAssignLogDoc) {
-    return log.mode === "manual";
+    return log.mode === "manual" || log.mode === "self_assigned";
+}
+
+function isSelfAssigned(log: AutoAssignLogDoc) {
+    return log.mode === "self_assigned";
 }
 
 function leadTitle(log: AutoAssignLogDoc) {
@@ -535,6 +539,7 @@ function AssignmentMobileCard({
 }) {
     const matchType = safeMatchType(log.matchType);
     const manual = isManual(log);
+    const selfAssigned = isSelfAssigned(log);
 
     return (
         <article className="min-w-0 max-w-full overflow-hidden rounded-[16px] border border-[#E8E7FB] bg-white p-3 shadow-[0_4px_18px_rgba(91,33,255,0.07)]">
@@ -551,8 +556,8 @@ function AssignmentMobileCard({
                 </div>
 
                 <div className="flex shrink-0 items-center gap-1.5">
-                    <Badge tone={manual ? "purple" : "blue"}>
-                        {manual ? "Manual" : "Auto"}
+                    <Badge tone={selfAssigned ? "yellow" : manual ? "purple" : "blue"}>
+                        {selfAssigned ? "Tomado" : manual ? "Manual" : "Auto"}
                     </Badge>
                     <button
                         type="button"
@@ -753,8 +758,8 @@ function AssignmentActionSheet({
                 <div className="mb-4 min-w-0">
                     <div className="flex items-center gap-2">
                         <p className="truncate text-[15px] font-black text-[#101936]">{leadTitle(log)}</p>
-                        <Badge tone={isManual(log) ? "purple" : "blue"}>
-                            {isManual(log) ? "Manual" : "Auto"}
+                        <Badge tone={isSelfAssigned(log) ? "yellow" : isManual(log) ? "purple" : "blue"}>
+                            {isSelfAssigned(log) ? "Tomado" : isManual(log) ? "Manual" : "Auto"}
                         </Badge>
                     </div>
                     <p className="mt-0.5 truncate text-[12px] font-semibold text-[#66739A]">
@@ -872,8 +877,8 @@ function AssignmentRow({
                 <div className="min-w-0">
                     <div className="flex items-center gap-2">
                         <span className="truncate text-[12px] font-semibold text-[#171717]">{leadTitle(log)}</span>
-                        <Badge tone={isManual(log) ? "purple" : "blue"}>
-                            {isManual(log) ? "Manual" : "Auto"}
+                        <Badge tone={isSelfAssigned(log) ? "yellow" : isManual(log) ? "purple" : "blue"}>
+                            {isSelfAssigned(log) ? "Tomado" : isManual(log) ? "Manual" : "Auto"}
                         </Badge>
                     </div>
                     <div className="mt-0.5 flex flex-wrap gap-x-2 text-[11px] font-medium text-[#9ca3af]">
