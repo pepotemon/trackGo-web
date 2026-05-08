@@ -33,6 +33,7 @@ const NAV_SETTINGS: { href: string; label: string; icon: NavIconName }[] = [
 ];
 
 const MOBILE_NAV: { href: string; label: string; icon: NavIconName }[] = [
+    { href: "/admin", label: "Inicio", icon: "dashboard" },
     { href: "/admin/leads", label: "Prospectos", icon: "inbox" },
     { href: "/admin/activity", label: "Actividad", icon: "activity" },
     { href: "/admin/accounting", label: "Conta", icon: "wallet" },
@@ -72,6 +73,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         return true;
     });
     const visibleMobileNav = MOBILE_NAV.filter((item) => {
+        if (item.href === "/admin") return true;
         if (item.href === "/admin/leads") return permissions.prospectos;
         if (item.href === "/admin/activity") return permissions.actividad;
         if (item.href === "/admin/accounting") return permissions.accountingView;
@@ -354,7 +356,9 @@ function MobileNavSection({
             </p>
             <div className="grid gap-2">
                 {items.map((item) => {
-                    const active = pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href));
+                    const active = item.href === "/admin"
+                        ? pathname === "/admin"
+                        : pathname === item.href || pathname.startsWith(item.href);
 
                     return (
                         <Link
@@ -441,7 +445,9 @@ function MobileBottomNav({ pathname, onLogout, navItems }: { pathname: string; o
                     ].join(" ")}
                 >
                     {navItems.map((item) => {
-                        const active = pathname === item.href || pathname.startsWith(item.href);
+                        const active = item.href === "/admin"
+                            ? pathname === "/admin"
+                            : pathname === item.href || pathname.startsWith(item.href);
 
                         return (
                             <Link

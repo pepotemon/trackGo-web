@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { getAdminDashboardSnapshot } from "@/data/adminDashboardRepo";
 import type { AdminDashboardRange, AdminDashboardSnapshot } from "@/types/dashboard";
 import type { AutoAssignLogDoc, LeadAutoAssignMatchType, MetaLeadDoc } from "@/types/leads";
 import { AppIcon, Badge, Button, Card, KpiCard, PageHeader } from "@/components/ui";
+import type { AppIconName } from "@/components/ui/AppIcon";
 import { usePermissions } from "@/features/auth/usePermissions";
+import { useAuth } from "@/features/auth/AuthProvider";
 
 const EMPTY_SNAPSHOT: AdminDashboardSnapshot = {
     stats: {
@@ -108,18 +109,14 @@ function assignmentLeadTitle(log: AutoAssignLogDoc) {
 }
 
 export default function AdminDashboardPage() {
-    const router = useRouter();
     const permissions = usePermissions();
+    const { firebaseUser } = useAuth();
     const [snapshot, setSnapshot] = useState<AdminDashboardSnapshot>(EMPTY_SNAPSHOT);
     const [queueRange, setQueueRange] = useState<AdminDashboardRange>("today");
     const [loading, setLoading] = useState(true);
     const [err, setErr] = useState<string | null>(null);
 
-    useEffect(() => {
-        if (window.innerWidth < 1280) {
-            router.replace("/admin/accounting");
-        }
-    }, [router]);
+    const adminLabel = firebaseUser?.displayName || firebaseUser?.email?.split("@")[0] || "Admin";
 
     async function loadDashboard(range = queueRange) {
         setLoading(true);
@@ -150,8 +147,130 @@ export default function AdminDashboardPage() {
         return snapshot.recentLeads.filter((lead) => lead.verificationStatus === "pending_review");
     }, [snapshot]);
 
+    const todayLabel = new Intl.DateTimeFormat("es", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+    }).format(new Date());
+
     return (
         <div className="mx-auto w-full max-w-[1220px]">
+
+            {/* ── MOBILE DASHBOARD ─────────────────────────────────── */}
+            <div className="xl:hidden">
+                {/* Greeting */}
+                <div className="mb-4 overflow-hidden rounded-[22px] bg-[linear-gradient(135deg,#7c3aed_0%,#4f46e5_100%)] px-5 py-5 shadow-[0_10px_36px_rgba(124,58,237,0.32)]">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/60">Dashboard</p>
+                    <p className="mt-1 text-[24px] font-black tracking-[-0.03em] text-white">Hola, {adminLabel}</p>
+                    <p className="mt-0.5 capitalize text-[12px] font-semibold text-white/65">{todayLabel}</p>
+                    <button
+                        type="button"
+                        onClick={() => loadDashboard()}
+                        disabled={loading}
+                        aria-label="Actualizar"
+                        className="mt-3 flex items-center gap-1.5 rounded-full border border-white/25 bg-white/15 px-3 py-1.5 text-[11px] font-bold text-white/90 transition active:bg-white/25 disabled:opacity-50"
+                    >
+                        <svg viewBox="0 0 24 24" className={["h-3 w-3 shrink-0", loading ? "tg-spin" : ""].join(" ")} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                            <path d="M21 12a9 9 0 1 1-3.1-6.8" />
+                        </svg>
+                        {loading ? "Actualizando…" : "Actualizar"}
+                    </button>
+                </div>
+
+                {/* Stat pills */}
+                <div className="mb-4 grid grid-cols-3 gap-2">
+                    <MobileStatPill label="Cola" value={snapshot.stats.queueTotal} tone="blue" />
+                    <MobileStatPill label="Por revisar" value={snapshot.stats.pendingReview} tone="purple" />
+                    {permissions.assignmentsView
+                        ? <MobileStatPill label="Hoy" value={snapshot.stats.autoAssignmentsToday} tone="green" />
+                        : <MobileStatPill label="Usuarios" value={snapshot.stats.activeUsers} tone="slate" />
+                    }
+                </div>
+
+                {/* Quick actions */}
+                <div className="mb-5 grid grid-cols-2 gap-2.5">
+                    {permissions.prospectos ? (
+                        <MobileActionCard href="/admin/leads" icon="lead" label="Prospectos" tone="purple" />
+                    ) : null}
+                    {permissions.actividad ? (
+                        <MobileActionCard href="/admin/activity" icon="activity" label="Actividad" tone="blue" />
+                    ) : null}
+                    {permissions.assignmentsView ? (
+                        <MobileActionCard href="/admin/leads/assignments" icon="assign" label="Asignaciones" tone="green" />
+                    ) : null}
+                    {permissions.accountingView ? (
+                        <MobileActionCard href="/admin/accounting" icon="wallet" label="Contabilidad" tone="slate" />
+                    ) : null}
+                    {permissions.usersView ? (
+                        <MobileActionCard href="/admin/settings/users" icon="users" label="Usuarios" tone="purple" />
+                    ) : null}
+                    <MobileActionCard href="/admin/settings" icon="settings" label="Configuración" tone="slate" />
+                </div>
+
+                {/* Recent assignments */}
+                {permissions.assignmentsView ? (
+                    <div className="mb-4">
+                        <div className="mb-2.5 flex items-center justify-between px-0.5">
+                            <p className="text-[11px] font-black uppercase tracking-[0.12em] text-[#7c70ba]">Últimas asignaciones</p>
+                            <Link href="/admin/leads/assignments" className="text-[11px] font-bold text-[#7c3aed]">
+                                Ver todas →
+                            </Link>
+                        </div>
+                        <div className="overflow-hidden rounded-[16px] border border-[#E8E7FB] bg-white shadow-[0_4px_18px_rgba(91,33,255,0.07)]">
+                            {loading ? (
+                                <div className="flex items-center justify-center py-8">
+                                    <svg className="tg-spin h-5 w-5 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                                        <path d="M21 12a9 9 0 1 1-3.1-6.8" />
+                                    </svg>
+                                </div>
+                            ) : snapshot.recentAssignments.length === 0 ? (
+                                <p className="px-4 py-6 text-center text-[12px] font-semibold text-[#98a2b3]">
+                                    Aún no hay asignaciones hoy.
+                                </p>
+                            ) : (
+                                <div className="divide-y divide-[#f0f1f2]">
+                                    {snapshot.recentAssignments.slice(0, 5).map((log) => (
+                                        <MobileAssignmentRow key={log.id} log={log} />
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                ) : null}
+
+                {/* Recent leads */}
+                {permissions.prospectos ? (
+                    <div className="mb-4">
+                        <div className="mb-2.5 flex items-center justify-between px-0.5">
+                            <p className="text-[11px] font-black uppercase tracking-[0.12em] text-[#7c70ba]">Cola reciente</p>
+                            <Link href="/admin/leads" className="text-[11px] font-bold text-[#7c3aed]">
+                                Ver todos →
+                            </Link>
+                        </div>
+                        <div className="overflow-hidden rounded-[16px] border border-[#E8E7FB] bg-white shadow-[0_4px_18px_rgba(91,33,255,0.07)]">
+                            {loading ? (
+                                <div className="flex items-center justify-center py-8">
+                                    <svg className="tg-spin h-5 w-5 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                                        <path d="M21 12a9 9 0 1 1-3.1-6.8" />
+                                    </svg>
+                                </div>
+                            ) : snapshot.recentLeads.length === 0 ? (
+                                <p className="px-4 py-6 text-center text-[12px] font-semibold text-[#98a2b3]">
+                                    No hay leads recientes en cola.
+                                </p>
+                            ) : (
+                                <div className="divide-y divide-[#f0f1f2]">
+                                    {snapshot.recentLeads.slice(0, 5).map((lead) => (
+                                        <MobileLeadRow key={lead.id} lead={lead} />
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                ) : null}
+            </div>
+
+            {/* ── DESKTOP DASHBOARD ─────────────────────────────────── */}
             <div className="hidden xl:block">
             <PageHeader
                 title="Dashboard"
@@ -276,6 +395,93 @@ export default function AdminDashboardPage() {
         </div>
     );
 }
+
+// ── Mobile helpers ───────────────────────────────────────────────────────────
+
+const STAT_TONE_MAP = {
+    blue: "bg-[#eff6ff] text-[#2563eb]",
+    purple: "bg-[#f3f0ff] text-[#7c3aed]",
+    green: "bg-[#ecfdf5] text-[#059669]",
+    slate: "bg-[#f8fafc] text-[#475569]",
+} as const;
+
+function MobileStatPill({ label, value, tone }: { label: string; value: number; tone: keyof typeof STAT_TONE_MAP }) {
+    return (
+        <div className={["rounded-[14px] px-3 py-3 text-center", STAT_TONE_MAP[tone]].join(" ")}>
+            <p className="text-[22px] font-black leading-none tracking-[-0.04em]">{value}</p>
+            <p className="mt-1 text-[10px] font-bold leading-tight opacity-75">{label}</p>
+        </div>
+    );
+}
+
+const ACTION_TONE_MAP = {
+    purple: { bg: "bg-[#f3f0ff]", icon: "text-[#7c3aed]", label: "text-[#4f46e5]" },
+    blue: { bg: "bg-[#eff6ff]", icon: "text-[#2563eb]", label: "text-[#1d4ed8]" },
+    green: { bg: "bg-[#ecfdf5]", icon: "text-[#059669]", label: "text-[#047857]" },
+    slate: { bg: "bg-[#f8fafc]", icon: "text-[#475569]", label: "text-[#334155]" },
+} as const;
+
+function MobileActionCard({ href, icon, label, tone }: {
+    href: string;
+    icon: AppIconName;
+    label: string;
+    tone: keyof typeof ACTION_TONE_MAP;
+}) {
+    const t = ACTION_TONE_MAP[tone];
+    const iconTone = (tone === "slate" ? "slate" : tone) as import("@/components/ui/AppIcon").AppIconTone;
+    return (
+        <Link
+            href={href}
+            className="flex items-center gap-3 rounded-[16px] border border-[#E8E7FB] bg-white px-4 py-3.5 shadow-[0_4px_18px_rgba(91,33,255,0.07)] transition active:scale-[0.98] active:bg-[#f8f7ff]"
+        >
+            <AppIcon name={icon} tone={iconTone} size="sm" className="h-9 w-9 shrink-0 rounded-[12px]" />
+            <span className={["text-[13px] font-black", t.label].join(" ")}>{label}</span>
+        </Link>
+    );
+}
+
+function MobileAssignmentRow({ log }: { log: AutoAssignLogDoc }) {
+    const matchType = safeMatchType(log.matchType);
+    return (
+        <Link
+            href={log.leadId ? `/admin/leads/${log.leadId}?from=assignments` : "/admin/leads/assignments"}
+            className="flex items-center gap-3 px-4 py-3 transition active:bg-[#f8f7ff]"
+        >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f3f0ff]">
+                <AppIcon name="user" tone="purple" size="sm" className="h-4 w-4 bg-transparent text-[#7c3aed] ring-0" />
+            </div>
+            <div className="min-w-0 flex-1">
+                <p className="truncate text-[13px] font-bold text-[#101936]">{assignmentLeadTitle(log)}</p>
+                <p className="truncate text-[11px] font-semibold text-[#66739A]">{log.userName || "Usuario"}</p>
+            </div>
+            {matchType ? (
+                <Badge tone={matchTone[matchType]}>{matchLabel[matchType]}</Badge>
+            ) : (
+                <Badge tone="gray">—</Badge>
+            )}
+        </Link>
+    );
+}
+
+function MobileLeadRow({ lead }: { lead: MetaLeadDoc }) {
+    return (
+        <Link
+            href={`/admin/leads/${lead.id}?from=leads`}
+            className="flex items-center gap-3 px-4 py-3 transition active:bg-[#f8f7ff]"
+        >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f3f0ff]">
+                <AppIcon name="lead" tone="purple" size="sm" className="h-4 w-4 bg-transparent text-[#7c3aed] ring-0" />
+            </div>
+            <div className="min-w-0 flex-1">
+                <p className="truncate text-[13px] font-bold text-[#101936]">{displayName(lead)}</p>
+                <p className="truncate text-[11px] font-semibold text-[#66739A]">{lead.business || cityLabel(lead) || "Sin datos"}</p>
+            </div>
+            <Badge tone={statusTone(lead.verificationStatus)}>{statusLabel(lead.verificationStatus)}</Badge>
+        </Link>
+    );
+}
+
+// ── Desktop helpers ───────────────────────────────────────────────────────────
 
 function QuickLink({
     href,
