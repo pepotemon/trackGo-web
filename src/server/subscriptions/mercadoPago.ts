@@ -51,6 +51,10 @@ function mercadoPagoToken() {
 }
 
 export async function createPixPayment(input: CreatePixPaymentInput) {
+    return createPixPaymentWithRetry(input, 0);
+}
+
+async function createPixPaymentWithRetry(input: CreatePixPaymentInput, attempt: number): Promise<MercadoPagoPayment> {
     const response = await fetch("https://api.mercadopago.com/v1/payments", {
         method: "POST",
         headers: {
@@ -80,6 +84,11 @@ export async function createPixPayment(input: CreatePixPaymentInput) {
     const data = (await response.json()) as MercadoPagoPayment & MercadoPagoErrorBody;
 
     if (!response.ok) {
+        if (shouldRetryMercadoPago(data, response.status) && attempt < 2) {
+            await wait(700 * (attempt + 1));
+            return createPixPaymentWithRetry(input, attempt + 1);
+        }
+
         console.error("[mercadopago:createPixPayment]", data);
         throw new ResponseError(
             "mercadopago_payment_error",
@@ -94,6 +103,20 @@ export async function createPixPayment(input: CreatePixPaymentInput) {
     }
 
     return data;
+}
+
+function shouldRetryMercadoPago(data: MercadoPagoErrorBody, status: number) {
+    const raw = JSON.stringify(data).toLowerCase();
+    return (
+        status >= 500 ||
+        raw.includes("communication_timeout") ||
+        raw.includes("internal_server_error") ||
+        raw.includes("api application fail")
+    );
+}
+
+function wait(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export async function getMercadoPagoPayment(paymentId: string) {
