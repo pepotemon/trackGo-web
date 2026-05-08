@@ -81,11 +81,13 @@ export async function configureAndActivateCityCampaign({
     cityName,
     userId,
     adsBudget,
+    cycleDays = 5,
 }: {
     campaignId: string;
     cityName: string;
     userId: string;
     adsBudget: number;
+    cycleDays?: number;
 }) {
     const campaign = await validateMetaCampaign(campaignId);
     const adsets = await graphGet<{ data?: Array<{ id: string; name?: string; status?: string }> }>(`${campaign.id}/adsets`, {
@@ -107,7 +109,7 @@ export async function configureAndActivateCityCampaign({
     }
 
     const start = new Date();
-    const end = calculateCycleEnd(start);
+    const end = calculateCycleEnd(start, cycleDays);
     const lifetimeBudget = Math.round(adsBudget * 100);
     const adsetId = adsetIds[0];
     const ads = await graphGet<{ data?: Array<{ id: string; name?: string; status?: string }> }>(`${adsetId}/ads`, {

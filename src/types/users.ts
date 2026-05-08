@@ -52,6 +52,10 @@ export type AdminPermissions = {
     accountingInvestmentView: boolean;
     /** Can modify Configuración de inversión (manual adjust, groups, etc.). */
     accountingInvestmentEdit: boolean;
+    /** Can view the subscriptions operations panel in read-only mode. */
+    subscriptionsView: boolean;
+    /** Can configure subscription cities, rules and operational actions. */
+    subscriptionsEdit: boolean;
     /** Can view the Usuarios screen (filtered to assigned users). */
     usersView: boolean;
     /** Can create a new user. */
@@ -81,6 +85,8 @@ export function defaultAdminPermissions(): AdminPermissions {
         accountingClose: false,
         accountingInvestmentView: false,
         accountingInvestmentEdit: false,
+        subscriptionsView: false,
+        subscriptionsEdit: false,
         usersView: false,
         usersCreate: false,
         usersEdit: false,
@@ -98,14 +104,16 @@ export type UserPermissions = {
     canSeeChat: boolean;
     /** Can reply from TrackGo chat to any assigned pending prospect. */
     canChatWithProspects: boolean;
+    /** Can access subscription purchase/settings screens. */
+    canSeeSubscriptions: boolean;
 };
 
 export function defaultUserPermissions(): UserPermissions {
-    return { canSeeMap: true, canSeeHistory: true, canSeeChat: true, canChatWithProspects: false };
+    return { canSeeMap: true, canSeeHistory: true, canSeeChat: true, canChatWithProspects: false, canSeeSubscriptions: true };
 }
 
 export function fullUserPermissions(): UserPermissions {
-    return { canSeeMap: true, canSeeHistory: true, canSeeChat: true, canChatWithProspects: true };
+    return { canSeeMap: true, canSeeHistory: true, canSeeChat: true, canChatWithProspects: true, canSeeSubscriptions: true };
 }
 
 /** Returns a permissions object with everything enabled (used for superadmin). */
@@ -127,6 +135,8 @@ export function fullAdminPermissions(): AdminPermissions {
         accountingClose: true,
         accountingInvestmentView: true,
         accountingInvestmentEdit: true,
+        subscriptionsView: true,
+        subscriptionsEdit: true,
         usersView: true,
         usersCreate: true,
         usersEdit: true,

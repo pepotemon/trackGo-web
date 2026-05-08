@@ -16,12 +16,14 @@ export function sanitizeCustomAmount(amount?: number) {
     return Math.round(value * 100) / 100;
 }
 
-export function calculateAdsBudget(amount: number) {
-    return Math.round(amount * 0.5 * 100) / 100;
+export function calculateAdsBudget(amount: number, adsShare = 0.5) {
+    const safeShare = Number.isFinite(adsShare) ? Math.min(Math.max(adsShare, 0), 1) : 0.5;
+    return Math.round(amount * safeShare * 100) / 100;
 }
 
-export function calculateCycleEnd(startDate = new Date()) {
+export function calculateCycleEnd(startDate = new Date(), cycleDays = 5) {
+    const safeDays = Number.isFinite(cycleDays) ? Math.max(1, Math.round(cycleDays)) : 5;
     const end = new Date(startDate);
-    end.setDate(end.getDate() + 5);
+    end.setDate(end.getDate() + safeDays);
     return end;
 }

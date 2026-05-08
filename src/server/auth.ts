@@ -1,5 +1,6 @@
 import type { DecodedIdToken } from "firebase-admin/auth";
 import { adminAuth, adminDb } from "@/server/firebaseAdmin";
+import type { AdminPermissions, UserPermissions } from "@/types/users";
 
 export type ServerUser = {
     token: DecodedIdToken;
@@ -7,6 +8,8 @@ export type ServerUser = {
     role?: string | null;
     active?: boolean;
     isSuperAdmin?: boolean;
+    permissions?: Partial<AdminPermissions> | null;
+    userPermissions?: Partial<UserPermissions> | null;
 };
 
 export async function requireServerUser(request: Request): Promise<ServerUser> {
@@ -31,11 +34,47 @@ export async function requireServerUser(request: Request): Promise<ServerUser> {
         role: typeof user?.role === "string" ? user.role : null,
         active: user?.active === true,
         isSuperAdmin: user?.isSuperAdmin === true,
+        permissions: (user?.permissions ?? null) as Partial<AdminPermissions> | null,
+        userPermissions: (user?.userPermissions ?? null) as Partial<UserPermissions> | null,
     };
 }
 
 export function canManageSubscriptionCheckout(user: ServerUser, userId: string) {
-    return user.uid === userId || user.isSuperAdmin === true || user.role === "admin";
+    if (user.uid === userId) {
+        return user.role === "user" ? user.userPermissions?.canSeeSubscriptions !== false : true;
+    }
+    return user.isSuperAdmin === true || user.role === "admin";
+}
+
+export function canViewSubscriptions(user: ServerUser) {
+    return user.isSuperAdmin === true || user.permissions?.subscriptionsView === true;
+}
+
+export function canEditSubscriptions(user: ServerUser) {
+    return user.isSuperAdmin === true || user.permissions?.subscriptionsEdit === true;
+}
+
+export function requireSubscriptionsView(user: ServerUser) {
+    if (!canViewSubscriptions(user) && !canEditSubscriptions(user)) {
+        throw new ResponseError("subscriptions_view_required", "No tienes permiso para ver suscripciones.", 403);
+    }
+}
+
+export function requireSubscriptionReadAccess(user: ServerUser) {
+    if (user.role === "user") {
+        if (user.userPermissions?.canSeeSubscriptions === false) {
+            throw new ResponseError("subscriptions_user_required", "No tienes permiso para acceder a suscripciones.", 403);
+        }
+        return;
+    }
+
+    requireSubscriptionsView(user);
+}
+
+export function requireSubscriptionsEdit(user: ServerUser) {
+    if (!canEditSubscriptions(user)) {
+        throw new ResponseError("subscriptions_edit_required", "No tienes permiso para configurar suscripciones.", 403);
+    }
 }
 
 export function requireSuperAdmin(user: ServerUser) {

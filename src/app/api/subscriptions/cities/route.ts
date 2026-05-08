@@ -1,9 +1,10 @@
-import { errorResponse, requireServerUser, requireSuperAdmin } from "@/server/auth";
+import { errorResponse, requireServerUser, requireSubscriptionReadAccess, requireSubscriptionsEdit } from "@/server/auth";
 import { listSubscriptionCities, saveSubscriptionCity } from "@/server/subscriptions/subscriptionService";
 
 export async function GET(request: Request) {
     try {
-        await requireServerUser(request);
+        const user = await requireServerUser(request);
+        requireSubscriptionReadAccess(user);
         const cities = await listSubscriptionCities();
         return Response.json({ ok: true, cities });
     } catch (error) {
@@ -14,7 +15,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
     try {
         const user = await requireServerUser(request);
-        requireSuperAdmin(user);
+        requireSubscriptionsEdit(user);
         const body = await request.json();
         const city = await saveSubscriptionCity({
             id: typeof body.id === "string" ? body.id : undefined,
@@ -33,7 +34,7 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
     try {
         const user = await requireServerUser(request);
-        requireSuperAdmin(user);
+        requireSubscriptionsEdit(user);
         const body = await request.json();
         const city = await saveSubscriptionCity({
             id: String(body.id || ""),

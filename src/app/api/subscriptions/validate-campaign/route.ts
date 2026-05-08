@@ -1,10 +1,10 @@
-import { errorResponse, requireServerUser, requireSuperAdmin, ResponseError } from "@/server/auth";
+import { errorResponse, requireServerUser, requireSubscriptionsEdit, ResponseError } from "@/server/auth";
 import { validateCityCampaign } from "@/server/subscriptions/metaAds";
 
 export async function POST(request: Request) {
     try {
         const user = await requireServerUser(request);
-        requireSuperAdmin(user);
+        requireSubscriptionsEdit(user);
         const body = await request.json();
         const campaignId = String(body.campaignId || body.baseCampaignId || "");
         if (!campaignId) throw new ResponseError("campaign_required", "Pega el ID de campana Meta.");

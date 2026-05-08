@@ -16,6 +16,7 @@ type NavIconName =
     | "inbox"
     | "more"
     | "search"
+    | "settings"
     | "users"
     | "wallet"
     | "logOut";
@@ -28,15 +29,14 @@ const NAV_MAIN: { href: string; label: string; icon: NavIconName }[] = [
 ];
 
 const NAV_SETTINGS: { href: string; label: string; icon: NavIconName }[] = [
-    { href: "/admin/settings/users", label: "Usuarios", icon: "users" },
-    { href: "/admin/settings/subscriptions", label: "Suscripciones", icon: "wallet" },
+    { href: "/admin/settings", label: "Configuración", icon: "settings" },
 ];
 
 const MOBILE_NAV: { href: string; label: string; icon: NavIconName }[] = [
     { href: "/admin/leads", label: "Prospectos", icon: "inbox" },
     { href: "/admin/activity", label: "Actividad", icon: "activity" },
     { href: "/admin/accounting", label: "Conta", icon: "wallet" },
-    { href: "/admin/settings/users", label: "Usuarios", icon: "users" },
+    { href: "/admin/settings", label: "Config.", icon: "settings" },
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
@@ -68,15 +68,14 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         return true;
     });
     const visibleSettingsNav = NAV_SETTINGS.filter((item) => {
-        if (item.href === "/admin/settings/users") return permissions.usersView;
-        if (item.href === "/admin/settings/subscriptions") return permissions.accountingInvestmentView;
+        if (item.href === "/admin/settings") return true;
         return true;
     });
     const visibleMobileNav = MOBILE_NAV.filter((item) => {
         if (item.href === "/admin/leads") return permissions.prospectos;
         if (item.href === "/admin/activity") return permissions.actividad;
         if (item.href === "/admin/accounting") return permissions.accountingView;
-        if (item.href === "/admin/settings/users") return permissions.usersView;
+        if (item.href === "/admin/settings") return true;
         return true;
     });
     const routeAllowed = isAdminRouteAllowed(pathname, permissions);
@@ -396,8 +395,10 @@ function isDetailPage(pathname: string) {
 
 function isAdminRouteAllowed(pathname: string, permissions: AdminPermissions) {
     if (pathname === "/admin") return true;
+    if (pathname === "/admin/settings") return true;
+    if (pathname.startsWith("/admin/settings/notifications")) return true;
     if (pathname.startsWith("/admin/settings/users")) return permissions.usersView;
-    if (pathname.startsWith("/admin/settings/subscriptions")) return permissions.accountingInvestmentView;
+    if (pathname.startsWith("/admin/settings/subscriptions")) return permissions.subscriptionsView || permissions.subscriptionsEdit;
     if (pathname.startsWith("/admin/accounting")) return permissions.accountingView;
     if (pathname.startsWith("/admin/activity")) return permissions.actividad;
     if (pathname.startsWith("/admin/leads/assignments")) return permissions.assignmentsView;
@@ -541,6 +542,12 @@ function NavIcon({ name, size = "sm" }: { name: NavIconName; size?: "sm" | "md" 
             ) : null}
 
             {name === "search" ? <path {...common} d="m21 21-4.3-4.3M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16Z" /> : null}
+            {name === "settings" ? (
+                <>
+                    <circle {...common} cx="12" cy="12" r="3" />
+                    <path {...common} d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1A2 2 0 0 1 4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1A2 2 0 0 1 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 0 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.1a2 2 0 0 1 0 4H21a1.7 1.7 0 0 0-1.6 1Z" />
+                </>
+            ) : null}
         </svg>
     );
 }

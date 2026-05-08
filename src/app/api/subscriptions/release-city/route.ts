@@ -1,14 +1,14 @@
 import { errorResponse, requireServerUser, requireSubscriptionsEdit, ResponseError } from "@/server/auth";
-import { retryMetaActivation } from "@/server/subscriptions/subscriptionService";
+import { releaseSubscriptionCity } from "@/server/subscriptions/subscriptionService";
 
 export async function POST(request: Request) {
     try {
         const user = await requireServerUser(request);
         requireSubscriptionsEdit(user);
         const body = await request.json();
-        const checkoutId = String(body.checkoutId || "");
-        if (!checkoutId) throw new ResponseError("checkout_required", "Indica el checkout a reintentar.");
-        const result = await retryMetaActivation(checkoutId);
+        const cityId = String(body.cityId || "");
+        if (!cityId) throw new ResponseError("city_required", "Indica la ciudad a liberar.");
+        const result = await releaseSubscriptionCity(cityId);
         return Response.json(result);
     } catch (error) {
         return errorResponse(error);

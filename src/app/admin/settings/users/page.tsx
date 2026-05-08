@@ -1700,6 +1700,7 @@ function EditUserModal({
                                         { key: "canSeeHistory" as keyof UserPermissions, label: "Ver Historial de visitas" },
                                         { key: "canSeeChat" as keyof UserPermissions, label: "Ver Chat de clientes incompletos" },
                                         { key: "canChatWithProspects" as keyof UserPermissions, label: "Responder por chat a prospectos pendientes" },
+                                        { key: "canSeeSubscriptions" as keyof UserPermissions, label: "Acceder a suscripciones" },
                                     ]).map(({ key, label }) => (
                                         <PermissionToggle
                                             key={key}
@@ -1721,7 +1722,7 @@ function EditUserModal({
                             </button>
                             <button
                                 type="button"
-                                onClick={() => setUserPermissions({ canSeeMap: false, canSeeHistory: false, canSeeChat: false, canChatWithProspects: false })}
+                                onClick={() => setUserPermissions({ canSeeMap: false, canSeeHistory: false, canSeeChat: false, canChatWithProspects: false, canSeeSubscriptions: false })}
                                 className="flex-1 rounded-lg border border-red-200 bg-red-50 py-2 text-[12px] font-semibold text-red-600 transition hover:bg-red-100"
                             >
                                 Revocar todo
@@ -1803,6 +1804,23 @@ function EditUserModal({
                                         { key: "accountingClose", label: "Cerrar y reabrir semana" },
                                         { key: "accountingInvestmentView", label: "Ver configuración de inversión" },
                                         { key: "accountingInvestmentEdit", label: "Editar configuración de inversión" },
+                                    ] as { key: keyof AdminPermissions; label: string }[]).map(({ key, label }) => (
+                                        <PermissionToggle
+                                            key={key}
+                                            label={label}
+                                            value={permissions[key]}
+                                            onChange={(val) => setPermissions((prev) => ({ ...prev, [key]: val }))}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div>
+                                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.06em] text-[#98A2B3]">Suscripciones</p>
+                                <div className="space-y-1.5">
+                                    {([
+                                        { key: "subscriptionsView", label: "Ver panel de suscripciones" },
+                                        { key: "subscriptionsEdit", label: "Configurar ciudades, reglas y acciones" },
                                     ] as { key: keyof AdminPermissions; label: string }[]).map(({ key, label }) => (
                                         <PermissionToggle
                                             key={key}

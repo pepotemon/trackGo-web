@@ -9,13 +9,14 @@ import { PullToRefresh } from "@/components/mobile/PullToRefresh";
 import { ResumeRefresh } from "@/components/mobile/ResumeRefresh";
 import { VendorPushPrompt } from "@/components/mobile/VendorPushPrompt";
 
-type NavIconName = "leads" | "map" | "history" | "chat" | "logOut";
+type NavIconName = "leads" | "map" | "history" | "chat" | "settings" | "logOut";
 
-const BASE_NAV: { href: string; label: string; icon: NavIconName; permKey?: "canSeeMap" | "canSeeHistory" | "canSeeChat" }[] = [
+const BASE_NAV: { href: string; label: string; icon: NavIconName; permKey?: "canSeeMap" | "canSeeHistory" | "canSeeChat" | "canSeeSubscriptions" }[] = [
     { href: "/user/leads", label: "Prospectos", icon: "leads" },
     { href: "/user/map", label: "Mapa", icon: "map", permKey: "canSeeMap" },
     { href: "/user/history", label: "Historial", icon: "history", permKey: "canSeeHistory" },
     { href: "/user/chat", label: "Incompl.", icon: "chat", permKey: "canSeeChat" },
+    { href: "/user/settings", label: "Config.", icon: "settings" },
 ];
 
 export default function UserLayout({ children }: { children: ReactNode }) {
@@ -66,7 +67,7 @@ export default function UserLayout({ children }: { children: ReactNode }) {
     const userName = profile?.name?.split(" ")[0] ?? "Vendedor";
     const userInitial = userName.slice(0, 1).toUpperCase();
 
-    const colsClass = (["grid-cols-1", "grid-cols-2", "grid-cols-3", "grid-cols-4"] as const)[Math.min(MOBILE_NAV.length, 4) - 1] ?? "grid-cols-4";
+    const colsClass = (["grid-cols-1", "grid-cols-2", "grid-cols-3", "grid-cols-4", "grid-cols-5"] as const)[Math.min(MOBILE_NAV.length, 5) - 1] ?? "grid-cols-5";
 
     return (
         <div className="min-h-screen bg-[#fbfaff] text-[#172033]">
@@ -223,6 +224,12 @@ function NavIcon({ name, size = "sm" }: { name: NavIconName; size?: "sm" | "md" 
                     <path {...common} d="M10 17l5-5-5-5" />
                     <path {...common} d="M15 12H3" />
                     <path {...common} d="M21 19V5a2 2 0 0 0-2-2h-6" />
+                </>
+            ) : null}
+            {name === "settings" ? (
+                <>
+                    <circle {...common} cx="12" cy="12" r="3" />
+                    <path {...common} d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1A2 2 0 0 1 4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1A2 2 0 0 1 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 0 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.1a2 2 0 0 1 0 4H21a1.7 1.7 0 0 0-1.6 1Z" />
                 </>
             ) : null}
         </svg>

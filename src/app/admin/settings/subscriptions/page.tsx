@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { auth } from "@/lib/firebase";
 import { onAuthStateChanged, type User } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 import { AppIcon } from "@/components/ui/AppIcon";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
@@ -10,96 +10,7 @@ import { Modal } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { usePermissions } from "@/features/auth/usePermissions";
-import type { PixCheckoutResponse, SubscriptionCity, SubscriptionPlanId } from "@/types/subscriptions";
-import { estimateLeadRange, SUBSCRIPTION_PLANS } from "@/lib/subscriptionPlans";
-
-type UiPlan = {
-    id: SubscriptionPlanId;
-    name: string;
-    price: number;
-    campaignBudget: number;
-    estimatedLeads: string;
-    tone: "blue" | "purple" | "green";
-    badge?: string;
-    description: string;
-    features: string[];
-};
-
-const PLANS: UiPlan[] = [
-    {
-        id: "base",
-        name: "Base",
-        price: 300,
-        campaignBudget: 150,
-        estimatedLeads: "10-35",
-        tone: "blue",
-        description: "Para validar una ciudad o una zona sin invertir demasiado.",
-        features: [
-            "Campana de 5 dias operativos",
-            "Acceso a incompletos con negocio",
-            "Reporte semanal por usuario",
-        ],
-    },
-    {
-        id: "crecimiento",
-        name: "Crecimiento",
-        price: 400,
-        campaignBudget: 200,
-        estimatedLeads: "20-50",
-        tone: "purple",
-        badge: "Recomendado",
-        description: "El punto mas equilibrado entre volumen, riesgo y margen.",
-        features: [
-            "Mayor presupuesto para Meta",
-            "Auto-asignacion por cobertura",
-            "Prioridad de optimizacion semanal",
-        ],
-    },
-    {
-        id: "dominio",
-        name: "Dominio",
-        price: 600,
-        campaignBudget: 300,
-        estimatedLeads: "35-80",
-        tone: "green",
-        description: "Para usuarios con cobertura activa y capacidad de atender mas demanda.",
-        features: [
-            "Presupuesto ampliado",
-            "Lectura de conversion por zona",
-            "Base incompleta como respaldo comercial",
-        ],
-    },
-];
-
-const cycleItems = [
-    {
-        title: "Ciclo TrackGo",
-        value: "5 dias",
-        detail: "Lunes a sabado de madrugada, con cierre operativo al terminar viernes.",
-        icon: "clock" as const,
-        tone: "purple" as const,
-    },
-    {
-        title: "Distribucion",
-        value: "50 / 50",
-        detail: "Mitad para anuncios Meta, mitad margen operativo TrackGo.",
-        icon: "wallet" as const,
-        tone: "green" as const,
-    },
-    {
-        title: "Activacion",
-        value: "Pix -> Meta",
-        detail: "Pago aprobado, ciudad reservada y campana activada desde backend.",
-        icon: "play" as const,
-        tone: "blue" as const,
-    },
-];
-
-const currency = new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    maximumFractionDigits: 0,
-});
+import type { SubscriptionCity } from "@/types/subscriptions";
 
 type CityFormState = {
     id: string;
@@ -108,6 +19,48 @@ type CityFormState = {
     country: string;
     status: "available" | "reserved" | "occupied";
     campaignId: string;
+};
+
+type SubscriptionSettings = {
+    adsShare: number;
+    cycleDays: number;
+    updatedAt?: number | null;
+};
+
+type OverviewSubscription = {
+    id: string;
+    userName: string;
+    userEmail?: string;
+    cityId?: string | null;
+    city?: string | null;
+    plan?: string | null;
+    amount: number;
+    adsBudget: number;
+    status: string;
+    campaignId?: string | null;
+    startDate?: number | null;
+    endDate?: number | null;
+};
+
+type OverviewCheckout = {
+    id: string;
+    cityId?: string | null;
+    userName: string;
+    cityName?: string | null;
+    amount: number;
+    adsBudget: number;
+    status: string;
+    activationStatus: string;
+    failureReason?: string | null;
+    paymentId?: string;
+    updatedAt?: number | null;
+};
+
+type Overview = {
+    settings: SubscriptionSettings;
+    cities: SubscriptionCity[];
+    subscriptions: OverviewSubscription[];
+    checkouts: OverviewCheckout[];
 };
 
 const emptyCityForm: CityFormState = {
@@ -119,161 +72,96 @@ const emptyCityForm: CityFormState = {
     campaignId: "",
 };
 
-export default function SubscriptionsPage() {
+const currency = new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    maximumFractionDigits: 0,
+});
+const inputClass = "h-11 w-full rounded-2xl border border-[#e8e7fb] bg-white px-3 text-[13px] font-bold text-[#101936] outline-none disabled:bg-[#f8f7ff] disabled:text-[#98a2b3]";
+
+const dateTime = new Intl.DateTimeFormat("es", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+});
+
+export default function SubscriptionsAdminPage() {
     const permissions = usePermissions();
     const { isSuperAdmin } = useAuth();
-    const [customAmount, setCustomAmount] = useState("350");
-    const [selectedPlan, setSelectedPlan] = useState<UiPlan | null>(null);
-    const [customModalOpen, setCustomModalOpen] = useState(false);
-    const [selectedCityId, setSelectedCityId] = useState("");
-    const [cities, setCities] = useState<SubscriptionCity[]>([]);
-    const [loadingCities, setLoadingCities] = useState(true);
-    const [citiesError, setCitiesError] = useState("");
-    const [pixResult, setPixResult] = useState<PixCheckoutResponse | null>(null);
-    const [checkoutError, setCheckoutError] = useState("");
-    const [checkoutLoading, setCheckoutLoading] = useState(false);
-    const [copied, setCopied] = useState(false);
+    const [overview, setOverview] = useState<Overview | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState("");
     const [cityModalOpen, setCityModalOpen] = useState(false);
+    const [editingCityId, setEditingCityId] = useState<string | null>(null);
     const [cityForm, setCityForm] = useState<CityFormState>(emptyCityForm);
     const [citySaving, setCitySaving] = useState(false);
     const [citySaveError, setCitySaveError] = useState("");
-    const [campaignValidation, setCampaignValidation] = useState<{
-        loading: boolean;
-        ok: boolean;
-        message: string;
-    }>({ loading: false, ok: false, message: "" });
-    const [editingCityId, setEditingCityId] = useState<string | null>(null);
+    const [campaignValidation, setCampaignValidation] = useState({ loading: false, ok: false, message: "" });
+    const [settingsDraft, setSettingsDraft] = useState<SubscriptionSettings>({ adsShare: 0.5, cycleDays: 5 });
+    const [settingsSaving, setSettingsSaving] = useState(false);
+    const [settingsError, setSettingsError] = useState("");
+    const [actionMessage, setActionMessage] = useState("");
+    const [actionBusyId, setActionBusyId] = useState("");
 
-    const customSimulation = useMemo(() => {
-        const amount = Math.max(0, Number(customAmount.replace(",", ".")) || 0);
-        const campaignBudget = Math.round(amount * 0.5);
-        const trackGoMargin = amount - campaignBudget;
-        return {
-            amount,
-            campaignBudget,
-            trackGoMargin,
-            estimatedLeads: estimateLeadRange(campaignBudget),
-        };
-    }, [customAmount]);
+    const canView = permissions.subscriptionsView || permissions.subscriptionsEdit;
+    const canManageCities = permissions.subscriptionsEdit || isSuperAdmin;
 
-    const canEdit = permissions.accountingInvestmentEdit;
-    const canManageCities = isSuperAdmin;
-    const selectedCity = cities.find((city) => city.id === selectedCityId) || null;
-
-    const loadCities = useCallback(async () => {
-        setLoadingCities(true);
-        setCitiesError("");
+    const loadOverview = useCallback(async () => {
+        setLoading(true);
+        setError("");
         try {
-            const user = await waitForAuthUser();
-            const token = await user.getIdToken();
-            const response = await fetch("/api/subscriptions/cities", {
+            const token = await getAuthToken();
+            const response = await fetch("/api/subscriptions/overview", {
                 cache: "no-store",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
+                headers: { Authorization: `Bearer ${token}` },
             });
             const data = await response.json();
-            if (!response.ok || !data.ok) {
-                throw new Error(data.message || "No se pudieron cargar las ciudades.");
-            }
-            setCities(data.cities || []);
-        } catch (error) {
-            setCitiesError(error instanceof Error ? error.message : "No se pudieron cargar las ciudades.");
+            if (!response.ok || !data.ok) throw new Error(data.message || "No se pudo cargar suscripciones.");
+            const next: Overview = {
+                settings: data.settings,
+                cities: data.cities || [],
+                subscriptions: data.subscriptions || [],
+                checkouts: data.checkouts || [],
+            };
+            setOverview(next);
+            setSettingsDraft(next.settings);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "No se pudo cargar suscripciones.");
         } finally {
-            setLoadingCities(false);
+            setLoading(false);
         }
     }, []);
 
     useEffect(() => {
-        loadCities();
-    }, [loadCities]);
+        loadOverview();
+    }, [loadOverview]);
 
-    useEffect(() => {
-        if (!selectedCityId && cities.length) {
-            const firstAvailable = cities.find((city) => city.status === "available");
-            setSelectedCityId(firstAvailable?.id || cities[0].id);
-        }
-    }, [cities, selectedCityId]);
+    const activeSubscriptions = useMemo(
+        () => overview?.subscriptions.filter((item) => item.status === "active" || item.status === "expiring") ?? [],
+        [overview],
+    );
+    const cityStats = useMemo(() => {
+        const cities = overview?.cities ?? [];
+        return {
+            total: cities.length,
+            available: cities.filter((city) => city.status === "available").length,
+            occupied: cities.filter((city) => city.status === "occupied").length,
+            reserved: cities.filter((city) => city.status === "reserved").length,
+        };
+    }, [overview]);
+    const revenue = activeSubscriptions.reduce((sum, item) => sum + item.amount, 0);
+    const adsBudget = activeSubscriptions.reduce((sum, item) => sum + item.adsBudget, 0);
 
-    const resetCheckout = () => {
-        setPixResult(null);
-        setCheckoutError("");
-        setCopied(false);
-    };
-
-    const createCheckout = async ({
-        plan,
-        amount,
-    }: {
-        plan: SubscriptionPlanId;
-        amount?: number;
-    }) => {
-        if (!auth.currentUser) {
-            setCheckoutError("Debes iniciar sesion para generar Pix.");
-            return;
-        }
-
-        if (!selectedCity) {
-            setCheckoutError("Selecciona una ciudad.");
-            return;
-        }
-
-        if (selectedCity.status !== "available") {
-            setCheckoutError("Esta ciudad no esta disponible para venta.");
-            return;
-        }
-
-        setCheckoutLoading(true);
-        setCheckoutError("");
-        setPixResult(null);
-
-        try {
-            const token = await auth.currentUser.getIdToken();
-            const response = await fetch("/api/subscriptions/create-pix", {
-                method: "POST",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    userId: auth.currentUser.uid,
-                    email: auth.currentUser.email,
-                    cityId: selectedCity.id,
-                    plan,
-                    amount,
-                }),
-            });
-
-            const data = await response.json();
-            if (!response.ok || !data.ok) {
-                throw new Error(data.message || "No se pudo crear el Pix.");
-            }
-
-            setPixResult(data.pix);
-            await loadCities();
-        } catch (error) {
-            setCheckoutError(error instanceof Error ? error.message : "No se pudo crear el Pix.");
-        } finally {
-            setCheckoutLoading(false);
-        }
-    };
-
-    const copyPix = async () => {
-        if (!pixResult?.qrCode) return;
-        await navigator.clipboard.writeText(pixResult.qrCode);
-        setCopied(true);
-        window.setTimeout(() => setCopied(false), 1400);
-    };
-
-    const openCreateCity = () => {
+    function openCreateCity() {
         setEditingCityId(null);
         setCityForm(emptyCityForm);
         setCitySaveError("");
         setCampaignValidation({ loading: false, ok: false, message: "" });
         setCityModalOpen(true);
-    };
+    }
 
-    const openEditCity = (city: SubscriptionCity) => {
+    function openEditCity(city: SubscriptionCity) {
         setEditingCityId(city.id);
         setCityForm({
             id: city.id,
@@ -286,60 +174,40 @@ export default function SubscriptionsPage() {
         setCitySaveError("");
         setCampaignValidation({ loading: false, ok: false, message: "" });
         setCityModalOpen(true);
-    };
+    }
 
-    const saveCity = async () => {
+    async function saveCity() {
         try {
-            const user = await waitForAuthUser();
-            const token = await user.getIdToken();
             setCitySaving(true);
             setCitySaveError("");
-
+            const token = await getAuthToken();
             const response = await fetch("/api/subscriptions/cities", {
                 method: editingCityId ? "PATCH" : "POST",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/json",
-                },
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
                 body: JSON.stringify(cityForm),
             });
             const data = await response.json();
-
-            if (!response.ok || !data.ok) {
-                throw new Error(data.message || "No se pudo guardar la ciudad.");
-            }
-
+            if (!response.ok || !data.ok) throw new Error(data.message || "No se pudo guardar la ciudad.");
             setCityModalOpen(false);
-            setEditingCityId(null);
-            setCityForm(emptyCityForm);
-            await loadCities();
-        } catch (error) {
-            setCitySaveError(error instanceof Error ? error.message : "No se pudo guardar la ciudad.");
+            await loadOverview();
+        } catch (err) {
+            setCitySaveError(err instanceof Error ? err.message : "No se pudo guardar la ciudad.");
         } finally {
             setCitySaving(false);
         }
-    };
+    }
 
-    const validateCampaign = async () => {
+    async function validateCampaign() {
         try {
-            const user = await waitForAuthUser();
-            const token = await user.getIdToken();
             setCampaignValidation({ loading: true, ok: false, message: "" });
-
+            const token = await getAuthToken();
             const response = await fetch("/api/subscriptions/validate-campaign", {
                 method: "POST",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/json",
-                },
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
                 body: JSON.stringify({ campaignId: cityForm.campaignId }),
             });
             const data = await response.json();
-
-            if (!response.ok || !data.ok) {
-                throw new Error(data.message || "No se pudo validar la campana.");
-            }
-
+            if (!response.ok || !data.ok) throw new Error(data.message || "No se pudo validar la campana.");
             setCampaignValidation({
                 loading: false,
                 ok: data.campaign.ready !== false,
@@ -349,312 +217,203 @@ export default function SubscriptionsPage() {
                     `${data.campaign.adsetsCount ?? 0} ad set`,
                     `${data.campaign.adsCount ?? 0} anuncio`,
                     data.campaign.warning || "",
-                ]
-                    .filter(Boolean)
-                    .join(" · "),
+                ].filter(Boolean).join(" · "),
             });
-        } catch (error) {
+        } catch (err) {
             setCampaignValidation({
                 loading: false,
                 ok: false,
-                message: error instanceof Error ? error.message : "No se pudo validar la campana.",
+                message: err instanceof Error ? err.message : "No se pudo validar la campana.",
             });
         }
-    };
+    }
+
+    async function saveSettings() {
+        try {
+            setSettingsSaving(true);
+            setSettingsError("");
+            const token = await getAuthToken();
+            const response = await fetch("/api/subscriptions/settings", {
+                method: "PATCH",
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify(settingsDraft),
+            });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.message || "No se pudo guardar la configuracion.");
+            await loadOverview();
+        } catch (err) {
+            setSettingsError(err instanceof Error ? err.message : "No se pudo guardar la configuracion.");
+        } finally {
+            setSettingsSaving(false);
+        }
+    }
+
+    async function retryCheckout(checkoutId: string) {
+        try {
+            setActionBusyId(checkoutId);
+            setActionMessage("");
+            const token = await getAuthToken();
+            const response = await fetch("/api/subscriptions/retry-meta", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ checkoutId }),
+            });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.message || "No se pudo reintentar Meta.");
+            setActionMessage("Activacion Meta reintentada correctamente.");
+            await loadOverview();
+        } catch (err) {
+            setActionMessage(err instanceof Error ? humanizeError(err.message) : "No se pudo reintentar Meta.");
+        } finally {
+            setActionBusyId("");
+        }
+    }
+
+    async function releaseCity(cityId: string) {
+        const ok = window.confirm("Esto pausa la campana activa/reservada y libera la ciudad. Continuar?");
+        if (!ok) return;
+
+        try {
+            setActionBusyId(cityId);
+            setActionMessage("");
+            const token = await getAuthToken();
+            const response = await fetch("/api/subscriptions/release-city", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ cityId }),
+            });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.message || "No se pudo liberar la ciudad.");
+            setActionMessage("Ciudad liberada correctamente.");
+            await loadOverview();
+        } catch (err) {
+            setActionMessage(err instanceof Error ? humanizeError(err.message) : "No se pudo liberar la ciudad.");
+        } finally {
+            setActionBusyId("");
+        }
+    }
+
+    if (!canView) {
+        return <EmptyState title="Sin permiso" body="No tienes permiso para ver suscripciones." />;
+    }
 
     return (
         <div className="space-y-4">
             <PageHeader
-                title="Suscripciones Pix"
-                subtitle="Prueba controlada para reservar ciudad, cobrar por Pix y activar campana Meta despues del pago."
+                title="Suscripciones"
+                subtitle="Panel operativo para ciudades, campañas Meta, pagos Pix y ciclos activos."
                 icon={<AppIcon name="wallet" tone="purple" plain className="text-white" />}
                 actions={
                     <div className="flex items-center gap-2">
                         {canManageCities ? (
-                            <Button variant="primary" className="gap-2" type="button" onClick={openCreateCity}>
+                            <Button type="button" variant="primary" onClick={openCreateCity}>
                                 <AppIcon name="plus" size="sm" plain className="h-4 w-4 text-current" />
                                 Ciudad
                             </Button>
                         ) : null}
-                        <Button variant="secondary" className="gap-2" type="button" onClick={loadCities}>
+                        <Button type="button" variant="secondary" onClick={loadOverview}>
                             <AppIcon name="refresh" size="sm" plain className="h-4 w-4 text-current" />
-                            Ciudades
+                            Actualizar
                         </Button>
                     </div>
                 }
             />
 
-            <section className="grid gap-3 lg:grid-cols-3">
-                {cycleItems.map((item) => (
-                    <Card key={item.title} className="overflow-hidden">
-                        <div className="flex items-start gap-3 p-4">
-                            <AppIcon name={item.icon} tone={item.tone} size="md" />
-                            <div className="min-w-0">
-                                <p className="text-[11px] font-black uppercase tracking-[0.12em] text-[#66739a]">
-                                    {item.title}
-                                </p>
-                                <p className="mt-1 text-[22px] font-black tracking-[-0.04em] text-[#101936]">
-                                    {item.value}
-                                </p>
-                                <p className="mt-1 text-[12px] font-semibold leading-snug text-[#66739a]">
-                                    {item.detail}
-                                </p>
-                            </div>
-                        </div>
-                    </Card>
-                ))}
-            </section>
+            {error ? <Notice tone="red">{error}</Notice> : null}
+            {actionMessage ? <Notice tone={actionMessage.includes("correctamente") ? "green" : "red"}>{actionMessage}</Notice> : null}
+            {loading ? <Notice tone="violet">Cargando panel operativo...</Notice> : null}
 
-            <section className="grid gap-3 xl:grid-cols-[360px_1fr]">
-                <Card>
-                    <CardHeader
-                        title="Selecciona ciudad"
-                        subtitle="Regla activa: una ciudad solo puede tener un usuario activo."
-                    />
-                    <CardContent className="space-y-3">
-                        {loadingCities ? (
-                            <p className="rounded-2xl border border-[#eef1f5] bg-[#fbfaff] p-3 text-[12px] font-bold text-[#66739a]">
-                                Cargando ciudades...
-                            </p>
-                        ) : null}
-
-                        {citiesError ? (
-                            <p className="rounded-2xl border border-red-100 bg-red-50 p-3 text-[12px] font-bold text-red-700">
-                                {citiesError}
-                            </p>
-                        ) : null}
-
-                        {!loadingCities && cities.length === 0 ? (
-                            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-[12px] font-semibold leading-snug text-amber-800">
-                                No hay ciudades configuradas. Crea documentos en <span className="font-mono">cities</span> con nombre,
-                                estado <span className="font-mono">available</span> y <span className="font-mono">campaignId</span>.
-                            </div>
-                        ) : null}
-
-                        <div className="grid gap-2">
-                            {cities.map((city) => (
-                                <div
-                                    key={city.id}
-                                    className={[
-                                        "flex items-center justify-between gap-3 rounded-2xl border p-3 text-left transition",
-                                        selectedCityId === city.id
-                                            ? "border-[#7c3aed] bg-[#f7f3ff] shadow-[0_14px_28px_rgba(91,33,255,0.12)]"
-                                            : "border-[#eef1f5] bg-white hover:border-[#ded8ff]",
-                                        city.status !== "available" ? "opacity-80" : "",
-                                    ].join(" ")}
-                                >
-                                    <button
-                                        type="button"
-                                        disabled={city.status !== "available"}
-                                        onClick={() => setSelectedCityId(city.id)}
-                                        className="min-w-0 flex-1 text-left disabled:cursor-not-allowed"
-                                    >
-                                        <span className="block text-[13px] font-black text-[#101936]">
-                                            {city.name}
-                                        </span>
-                                        <span className="mt-0.5 block text-[11px] font-semibold text-[#66739a]">
-                                            {[city.state, city.country].filter(Boolean).join(" · ") || "Sin region"}
-                                        </span>
-                                        <span className="mt-1 block truncate font-mono text-[10px] font-bold text-[#98a2b3]">
-                                            {city.campaignId || city.baseCampaignId ? `Meta ${city.campaignId || city.baseCampaignId}` : "Sin campana Meta"}
-                                        </span>
-                                    </button>
-                                    <div className="flex shrink-0 items-center gap-2">
-                                        <CityStatusPill city={city} />
-                                        {canManageCities ? (
-                                            <button
-                                                type="button"
-                                                aria-label={`Editar ${city.name}`}
-                                                onClick={() => openEditCity(city)}
-                                                className="flex h-8 w-8 items-center justify-center rounded-xl border border-[#ded8ff] bg-white text-[#6d28d9] shadow-sm"
-                                            >
-                                                <AppIcon name="edit" size="sm" plain className="h-4 w-4 text-current" />
-                                            </button>
-                                        ) : null}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader
-                        title="Planes semanales"
-                        subtitle="El Pix real se genera contra la ciudad seleccionada y queda pendiente hasta webhook."
-                    />
-                    <CardContent className="grid gap-3 lg:grid-cols-3">
-                        {PLANS.map((plan) => (
-                            <PlanCard
-                                key={plan.id}
-                                plan={plan}
-                                disabled={!canEdit || !selectedCity || selectedCity.status !== "available"}
-                                onSelect={() => {
-                                    resetCheckout();
-                                    setSelectedPlan(plan);
-                                }}
-                            />
-                        ))}
-                    </CardContent>
-                </Card>
+            <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <Metric label="Ciudades" value={cityStats.total} detail={`${cityStats.available} disponibles · ${cityStats.occupied} ocupadas`} tone="purple" />
+                <Metric label="Reservas" value={cityStats.reserved} detail="Pix iniciados aun no aprobados" tone="orange" />
+                <Metric label="Activas" value={activeSubscriptions.length} detail="Suscripciones en curso" tone="green" />
+                <Metric label="Ingresos activos" value={currency.format(revenue)} detail={`${currency.format(adsBudget)} en anuncios`} tone="blue" />
             </section>
 
             <section className="grid gap-3 xl:grid-cols-[1fr_360px]">
                 <Card>
-                    <CardHeader
-                        title="Flujo de activacion"
-                        subtitle="El backend valida monto, ciudad y pago antes de tocar Meta."
-                    />
-                    <CardContent>
-                        <div className="grid gap-3 md:grid-cols-2">
-                            {[
-                                ["1", "Reserva temporal", "Al generar Pix la ciudad queda reservada 30 minutos para evitar doble venta."],
-                                ["2", "Pago aprobado", "Mercado Pago llama al webhook y TrackGo valida monto exacto e idempotencia."],
-                                ["3", "Campana Meta", "Se configura el presupuesto del ciclo en la campana fija de la ciudad y se activa."],
-                                ["4", "Suscripcion activa", "La ciudad queda ocupada y se guarda la suscripcion con fechas del ciclo."],
-                            ].map(([step, title, body]) => (
-                                <div key={step} className="flex gap-3 rounded-2xl border border-[#eef1f5] bg-[#fbfaff] p-3">
-                                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#f3f0ff] text-[12px] font-black text-[#6d28d9] ring-1 ring-[#ded8ff]">
-                                        {step}
-                                    </span>
-                                    <div>
-                                        <p className="text-[13px] font-black text-[#101936]">{title}</p>
-                                        <p className="mt-0.5 text-[12px] font-semibold leading-snug text-[#66739a]">{body}</p>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
+                    <CardHeader title="Ciudades y campanas" subtitle="Cada ciudad apunta a una campana fija de Meta." />
+                    <CardContent className="grid gap-2">
+                        {(overview?.cities ?? []).map((city) => (
+                            <CityRow
+                                key={city.id}
+                                city={city}
+                                subscription={activeSubscriptions.find((item) => item.cityId === city.id)}
+                                canEdit={canManageCities}
+                                busy={actionBusyId === city.id}
+                                onEdit={() => openEditCity(city)}
+                                onRelease={() => releaseCity(city.id)}
+                            />
+                        ))}
+                        {overview?.cities.length === 0 ? <EmptyInline text="Aun no hay ciudades configuradas." /> : null}
                     </CardContent>
                 </Card>
 
-                <Card className="overflow-hidden">
-                    <CardHeader
-                        title="Presupuesto personalizado"
-                        subtitle="Calcula volumen aproximado y genera Pix con valor libre."
-                    />
-                    <CardContent className="space-y-4">
-                        <label className="block">
-                            <span className="text-[11px] font-black uppercase tracking-[0.12em] text-[#66739a]">
-                                Valor de suscripcion
-                            </span>
-                            <div className="mt-2 flex items-center rounded-2xl border border-[#ded8ff] bg-[#fbfaff] px-3 py-2.5 shadow-inner">
-                                <span className="text-[13px] font-black text-[#7c3aed]">R$</span>
+                <Card>
+                    <CardHeader title="Reglas comerciales" subtitle="Configuracion global para nuevos ciclos." />
+                    <CardContent className="space-y-3">
+                        <Field label="Porcentaje para anuncios">
+                            <div className="flex items-center gap-3">
                                 <input
-                                    value={customAmount}
-                                    onChange={(e) => setCustomAmount(e.target.value)}
-                                    inputMode="decimal"
-                                    className="ml-2 w-full bg-transparent text-[24px] font-black tracking-[-0.04em] text-[#101936] outline-none"
-                                    placeholder="350"
+                                    type="range"
+                                    min={10}
+                                    max={90}
+                                    value={Math.round(settingsDraft.adsShare * 100)}
+                                    disabled={!canManageCities}
+                                    onChange={(e) => setSettingsDraft((current) => ({ ...current, adsShare: Number(e.target.value) / 100 }))}
+                                    className="w-full accent-[#7c3aed]"
                                 />
+                                <span className="w-12 text-right text-[13px] font-black text-[#101936]">{Math.round(settingsDraft.adsShare * 100)}%</span>
                             </div>
-                        </label>
-
+                        </Field>
+                        <Field label="Duracion del ciclo">
+                            <input
+                                type="number"
+                                min={1}
+                                max={30}
+                                value={settingsDraft.cycleDays}
+                                disabled={!canManageCities}
+                                onChange={(e) => setSettingsDraft((current) => ({ ...current, cycleDays: Number(e.target.value) }))}
+                                className="h-11 w-full rounded-2xl border border-[#e8e7fb] bg-white px-3 text-[13px] font-bold outline-none disabled:bg-[#f8f7ff]"
+                            />
+                        </Field>
                         <div className="grid grid-cols-2 gap-2">
-                            <MoneyTile label="Anuncios Meta" value={customSimulation.campaignBudget} tone="green" />
-                            <MoneyTile label="TrackGo" value={customSimulation.trackGoMargin} tone="purple" />
+                            <MoneyTile label="Anuncios" value={settingsDraft.adsShare * 100} suffix="%" />
+                            <MoneyTile label="TrackGo" value={(1 - settingsDraft.adsShare) * 100} suffix="%" />
                         </div>
-
-                        <div className="rounded-2xl border border-[#e8e7fb] bg-white p-3">
-                            <p className="text-[11px] font-black uppercase tracking-[0.12em] text-[#66739a]">
-                                Estimacion
-                            </p>
-                            <p className="mt-1 text-[28px] font-black tracking-[-0.05em] text-[#101936]">
-                                {customSimulation.estimatedLeads} leads
-                            </p>
-                            <p className="mt-1 text-[12px] font-semibold leading-snug text-[#66739a]">
-                                Puede variar por ciudad, competencia, aceptacion de Meta, calidad del publico y hora de entrega.
-                            </p>
-                        </div>
-
-                        <Button
-                            type="button"
-                            variant="primary"
-                            className="w-full"
-                            disabled={!canEdit || customSimulation.amount < 100 || !selectedCity || selectedCity.status !== "available"}
-                            onClick={() => {
-                                resetCheckout();
-                                setCustomModalOpen(true);
-                            }}
-                        >
-                            Generar Pix personalizado
+                        {settingsError ? <Notice tone="red">{settingsError}</Notice> : null}
+                        <Button type="button" variant="primary" className="w-full" disabled={!canManageCities || settingsSaving} onClick={saveSettings}>
+                            {settingsSaving ? "Guardando..." : "Guardar reglas"}
                         </Button>
                     </CardContent>
                 </Card>
             </section>
 
-            <section className="grid gap-3 xl:grid-cols-[0.9fr_1.1fr]">
+            <section className="grid gap-3 xl:grid-cols-[1fr_1fr]">
                 <Card>
-                    <CardHeader
-                        title="Planes configurados"
-                        subtitle="Referencia compartida entre frontend y backend."
-                    />
+                    <CardHeader title="Suscripciones activas" subtitle="Quien compro, cuando termina y cuanto invirtio." />
                     <CardContent className="space-y-2">
-                        {SUBSCRIPTION_PLANS.map((plan) => (
-                            <div key={plan.id} className="flex items-center justify-between rounded-2xl border border-[#eef1f5] bg-white p-3">
-                                <div>
-                                    <p className="text-[13px] font-black text-[#101936]">{plan.name}</p>
-                                    <p className="text-[11px] font-semibold text-[#66739a]">{plan.description}</p>
-                                </div>
-                                <span className="text-[13px] font-black text-[#6d28d9]">{currency.format(plan.amount)}</span>
-                            </div>
-                        ))}
+                        {activeSubscriptions.map((item) => <SubscriptionRow key={item.id} item={item} />)}
+                        {activeSubscriptions.length === 0 ? <EmptyInline text="No hay suscripciones activas." /> : null}
                     </CardContent>
                 </Card>
-
                 <Card>
-                    <CardHeader
-                        title="Pendiente antes de produccion"
-                        subtitle="No es bloqueo para probar, pero si para cobrar con tranquilidad."
-                    />
-                    <CardContent>
-                        <div className="grid gap-2 md:grid-cols-2">
-                            <StrategyNote title="Webhook publico" body="En Vercel configura MERCADOPAGO_WEBHOOK_URL con https://trackgo.co/api/webhook/mercadopago." />
-                            <StrategyNote title="Credenciales" body="Las llaves deben vivir en Vercel Environment Variables, nunca en el repo." />
-                            <StrategyNote title="Reembolso" body="Define flujo manual si alguien paga y Meta falla o la ciudad se ocupó por carrera." />
-                            <StrategyNote title="Campana fija" body="Cada ciudad necesita campaignId apuntando a su campana fija de Meta. No duplicamos: configuramos presupuesto y fechas." />
-                        </div>
+                    <CardHeader title="Pagos recientes" subtitle="Checkouts Pix, errores y activaciones Meta." />
+                    <CardContent className="space-y-2">
+                        {(overview?.checkouts ?? []).slice(0, 12).map((item) => (
+                            <CheckoutRow
+                                key={item.id}
+                                item={item}
+                                canRetry={canManageCities}
+                                busy={actionBusyId === item.id}
+                                onRetry={() => retryCheckout(item.id)}
+                            />
+                        ))}
+                        {overview?.checkouts.length === 0 ? <EmptyInline text="No hay pagos recientes." /> : null}
                     </CardContent>
                 </Card>
             </section>
 
-            <CheckoutModal
-                open={Boolean(selectedPlan)}
-                title={selectedPlan ? `Plan ${selectedPlan.name}` : ""}
-                amount={selectedPlan?.price ?? 0}
-                campaignBudget={selectedPlan?.campaignBudget ?? 0}
-                estimatedLeads={selectedPlan?.estimatedLeads ?? ""}
-                city={selectedCity}
-                canEdit={canEdit}
-                loading={checkoutLoading}
-                error={checkoutError}
-                pixResult={pixResult}
-                copied={copied}
-                onCopy={copyPix}
-                onCreate={() => selectedPlan && createCheckout({ plan: selectedPlan.id })}
-                onClose={() => {
-                    setSelectedPlan(null);
-                    resetCheckout();
-                }}
-            />
-            <CheckoutModal
-                open={customModalOpen}
-                title="Pix personalizado"
-                amount={customSimulation.amount}
-                campaignBudget={customSimulation.campaignBudget}
-                estimatedLeads={customSimulation.estimatedLeads}
-                city={selectedCity}
-                canEdit={canEdit}
-                loading={checkoutLoading}
-                error={checkoutError}
-                pixResult={pixResult}
-                copied={copied}
-                onCopy={copyPix}
-                onCreate={() => createCheckout({ plan: "custom", amount: customSimulation.amount })}
-                onClose={() => {
-                    setCustomModalOpen(false);
-                    resetCheckout();
-                }}
-            />
             <CityConfigModal
                 open={cityModalOpen}
                 form={cityForm}
@@ -665,270 +424,149 @@ export default function SubscriptionsPage() {
                 onChange={(patch) => setCityForm((current) => ({ ...current, ...patch }))}
                 onValidateCampaign={validateCampaign}
                 onSave={saveCity}
-                onClose={() => {
-                    setCityModalOpen(false);
-                    setEditingCityId(null);
-                    setCitySaveError("");
-                    setCampaignValidation({ loading: false, ok: false, message: "" });
-                }}
+                onClose={() => setCityModalOpen(false)}
             />
         </div>
     );
 }
 
-function waitForAuthUser() {
-    if (auth.currentUser) return Promise.resolve(auth.currentUser);
-
-    return new Promise<User>((resolve, reject) => {
-        const timeout = window.setTimeout(() => {
-            unsubscribe();
-            reject(new Error("No se pudo confirmar la sesion activa."));
-        }, 8000);
-
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
-            if (!user) return;
-            window.clearTimeout(timeout);
-            unsubscribe();
-            resolve(user);
-        });
-    });
-}
-
-function CityStatusPill({ city }: { city: SubscriptionCity }) {
-    const styles = {
-        available: "bg-emerald-50 text-emerald-700 ring-emerald-100",
-        reserved: "bg-amber-50 text-amber-700 ring-amber-100",
-        occupied: "bg-rose-50 text-rose-700 ring-rose-100",
-    };
-    const labels = {
-        available: "Disponible",
-        reserved: "Reservada",
-        occupied: "Ocupada",
-    };
-
-    return (
-        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] ring-1 ${styles[city.status]}`}>
-            {labels[city.status]}
-        </span>
-    );
-}
-
-function PlanCard({
-    plan,
-    disabled,
-    onSelect,
-}: {
-    plan: UiPlan;
-    disabled: boolean;
-    onSelect: () => void;
-}) {
-    return (
-        <article className="relative flex min-h-[340px] flex-col rounded-3xl border border-[#e8e7fb] bg-[linear-gradient(180deg,#ffffff_0%,#fbfaff_100%)] p-4 shadow-[0_16px_34px_rgba(91,33,255,0.07)]">
-            {plan.badge ? (
-                <span className="absolute right-3 top-3 rounded-full bg-[#f3f0ff] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] text-[#6d28d9] ring-1 ring-[#ded8ff]">
-                    {plan.badge}
-                </span>
-            ) : null}
-
-            <AppIcon name="wallet" tone={plan.tone} size="lg" />
-            <div className="mt-4">
-                <h2 className="text-[20px] font-black tracking-[-0.04em] text-[#101936]">{plan.name}</h2>
-                <p className="mt-1 min-h-10 text-[12px] font-semibold leading-snug text-[#66739a]">{plan.description}</p>
-            </div>
-
-            <div className="mt-4 rounded-2xl border border-[#eef1f5] bg-white p-3">
-                <p className="text-[11px] font-black uppercase tracking-[0.12em] text-[#66739a]">
-                    Suscripcion
-                </p>
-                <p className="mt-1 text-[30px] font-black tracking-[-0.06em] text-[#101936]">
-                    {currency.format(plan.price)}
-                </p>
-                <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] font-bold">
-                    <span className="rounded-xl bg-emerald-50 px-2 py-2 text-emerald-700">
-                        {currency.format(plan.campaignBudget)} Meta
-                    </span>
-                    <span className="rounded-xl bg-violet-50 px-2 py-2 text-violet-700">
-                        {plan.estimatedLeads} leads
-                    </span>
-                </div>
-            </div>
-
-            <ul className="mt-4 space-y-2">
-                {plan.features.map((feature) => (
-                    <li key={feature} className="flex gap-2 text-[12px] font-semibold leading-snug text-[#52607a]">
-                        <AppIcon name="check" tone="green" size="sm" className="h-5 w-5 rounded-lg" />
-                        <span>{feature}</span>
-                    </li>
-                ))}
-            </ul>
-
-            <Button type="button" variant="primary" className="mt-auto w-full" disabled={disabled} onClick={onSelect}>
-                Generar Pix
-            </Button>
-        </article>
-    );
-}
-
-function MoneyTile({ label, value, tone }: { label: string; value: number; tone: "green" | "purple" }) {
-    return (
-        <div className={tone === "green" ? "rounded-2xl bg-emerald-50 p-3" : "rounded-2xl bg-violet-50 p-3"}>
-            <p className={tone === "green" ? "text-[10px] font-black uppercase tracking-[0.1em] text-emerald-700" : "text-[10px] font-black uppercase tracking-[0.1em] text-violet-700"}>
-                {label}
-            </p>
-            <p className="mt-1 text-[18px] font-black tracking-[-0.04em] text-[#101936]">{currency.format(value)}</p>
-        </div>
-    );
-}
-
-function StrategyNote({ title, body }: { title: string; body: string }) {
-    return (
-        <div className="rounded-2xl border border-[#eef1f5] bg-[#fbfaff] p-3">
-            <p className="text-[13px] font-black text-[#101936]">{title}</p>
-            <p className="mt-1 text-[12px] font-semibold leading-snug text-[#66739a]">{body}</p>
-        </div>
-    );
-}
-
-function CheckoutModal({
-    open,
-    title,
-    amount,
-    campaignBudget,
-    estimatedLeads,
+function CityRow({
     city,
+    subscription,
     canEdit,
-    loading,
-    error,
-    pixResult,
-    copied,
-    onCopy,
-    onCreate,
-    onClose,
+    busy,
+    onEdit,
+    onRelease,
 }: {
-    open: boolean;
-    title: string;
-    amount: number;
-    campaignBudget: number;
-    estimatedLeads: string;
-    city: SubscriptionCity | null;
+    city: SubscriptionCity;
+    subscription?: OverviewSubscription;
     canEdit: boolean;
-    loading: boolean;
-    error: string;
-    pixResult: PixCheckoutResponse | null;
-    copied: boolean;
-    onCopy: () => void;
-    onCreate: () => void;
-    onClose: () => void;
+    busy: boolean;
+    onEdit: () => void;
+    onRelease: () => void;
 }) {
-    const operation = Math.max(0, amount - campaignBudget);
-
     return (
-        <Modal
-            open={open}
-            title={title}
-            subtitle={city ? `${city.name} · Pix real via Mercado Pago` : "Selecciona una ciudad disponible"}
-            size="md"
-            onClose={onClose}
-        >
-            <div className="grid gap-4 sm:grid-cols-[190px_1fr]">
-                <div className="rounded-3xl border border-[#ded8ff] bg-[linear-gradient(135deg,#f8f7ff,#ffffff)] p-4">
-                    {pixResult?.qrCodeBase64 ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                            src={`data:image/png;base64,${pixResult.qrCodeBase64}`}
-                            alt="QR Pix"
-                            className="aspect-square w-full rounded-2xl bg-white object-contain p-2 shadow-inner"
-                        />
-                    ) : (
-                        <div className="grid aspect-square grid-cols-5 gap-1 rounded-2xl bg-white p-3 shadow-inner">
-                            {Array.from({ length: 25 }).map((_, index) => (
-                                <span
-                                    key={index}
-                                    className={[
-                                        "rounded-[4px]",
-                                        index % 2 === 0 || index % 7 === 0 ? "bg-[#6d28d9]" : "bg-[#ede9fe]",
-                                    ].join(" ")}
-                                />
-                            ))}
-                        </div>
-                    )}
-                    <p className="mt-3 text-center text-[10px] font-black uppercase tracking-[0.12em] text-[#7c70ba]">
-                        {pixResult ? "Pix listo" : "QR pendiente"}
-                    </p>
+        <div className="grid gap-3 rounded-2xl border border-[#eef1f5] bg-white p-3 md:grid-cols-[1fr_auto] md:items-center">
+            <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-[14px] font-black text-[#101936]">{city.name}</p>
+                    <StatusPill status={city.status} />
                 </div>
-
-                <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-2">
-                        <MoneyTile label="Total Pix" value={amount} tone="purple" />
-                        <MoneyTile label="Campana" value={campaignBudget} tone="green" />
-                    </div>
-                    <div className="rounded-2xl border border-[#eef1f5] bg-[#fbfaff] p-3">
-                        <p className="text-[11px] font-black uppercase tracking-[0.12em] text-[#66739a]">
-                            Entrega esperada
-                        </p>
-                        <p className="mt-1 text-[22px] font-black tracking-[-0.04em] text-[#101936]">
-                            {estimatedLeads} leads
-                        </p>
-                        <p className="mt-1 text-[12px] font-semibold leading-snug text-[#66739a]">
-                            Operacion TrackGo: {currency.format(operation)}. El webhook valida el pago antes de activar Meta.
-                        </p>
-                    </div>
-                    <div className="rounded-2xl border border-dashed border-[#c7bfff] bg-[#f8f7ff] p-3">
-                        <p className="text-[11px] font-black uppercase tracking-[0.12em] text-[#6d28d9]">
-                            Pix copia y pega
-                        </p>
-                        <p className="mt-2 max-h-28 overflow-y-auto break-all rounded-xl bg-white p-2 font-mono text-[10px] font-bold text-[#52607a]">
-                            {pixResult?.qrCode || "Genera el checkout para recibir el codigo real de Mercado Pago."}
-                        </p>
-                        {pixResult?.qrCode ? (
-                            <Button type="button" variant="secondary" className="mt-2 w-full" onClick={onCopy}>
-                                {copied ? "Copiado" : "Copiar Pix"}
-                            </Button>
-                        ) : null}
-                    </div>
-                    {pixResult?.ticketUrl ? (
-                        <a
-                            href={pixResult.ticketUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="block rounded-2xl border border-[#ded8ff] bg-white p-3 text-center text-[12px] font-black text-[#6d28d9]"
-                        >
-                            Abrir checkout Mercado Pago
-                        </a>
+                <p className="mt-0.5 text-[11px] font-semibold text-[#66739a]">{[city.state, city.country].filter(Boolean).join(" · ") || "Sin region"}</p>
+                <p className="mt-1 truncate font-mono text-[10px] font-bold text-[#98a2b3]">Meta {city.campaignId || city.baseCampaignId || "sin campaignId"}</p>
+                {subscription ? (
+                    <p className="mt-1 text-[11px] font-bold text-[#6d28d9]">
+                        Ocupada por {subscription.userName} hasta {formatDate(subscription.endDate)}
+                    </p>
+                ) : null}
+            </div>
+            {canEdit ? (
+                <div className="flex flex-wrap justify-end gap-2">
+                    <Button type="button" variant="secondary" onClick={onEdit}>
+                        <AppIcon name="edit" size="sm" plain className="h-4 w-4 text-current" />
+                        Editar
+                    </Button>
+                    {city.status !== "available" ? (
+                        <Button type="button" variant="danger" disabled={busy} onClick={onRelease}>
+                            <AppIcon name="unlock" size="sm" plain className="h-4 w-4 text-current" />
+                            {busy ? "..." : "Liberar"}
+                        </Button>
                     ) : null}
                 </div>
-            </div>
-
-            {error ? (
-                <div className="mt-4 rounded-2xl border border-red-100 bg-red-50 p-3 text-[12px] font-semibold leading-snug text-red-700">
-                    {error}
-                </div>
             ) : null}
+        </div>
+    );
+}
 
-            {pixResult ? (
-                <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50 p-3 text-[12px] font-semibold leading-snug text-emerald-800">
-                    Pix creado. Cuando Mercado Pago confirme el pago, el webhook intentara ocupar la ciudad y activar la campana.
+function SubscriptionRow({ item }: { item: OverviewSubscription }) {
+    return (
+        <div className="rounded-2xl border border-[#eef1f5] bg-[#fbfaff] p-3">
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <p className="truncate text-[13px] font-black text-[#101936]">{item.userName}</p>
+                    <p className="text-[11px] font-semibold text-[#66739a]">{item.city || item.cityId} · {item.plan}</p>
                 </div>
-            ) : (
-                <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-[12px] font-semibold leading-snug text-amber-800">
-                    La ciudad se reservara por 30 minutos al crear el Pix. Si el pago no se aprueba, podras liberarla manualmente o esperar expiracion.
-                </div>
-            )}
-
-            <div className="mt-4 flex justify-end gap-2">
-                <Button type="button" variant="ghost" onClick={onClose}>
-                    Cerrar
-                </Button>
-                <Button
-                    type="button"
-                    variant="primary"
-                    disabled={!canEdit || loading || !city || city.status !== "available" || Boolean(pixResult)}
-                    onClick={onCreate}
-                >
-                    {loading ? "Generando..." : "Crear Pix"}
-                </Button>
+                <span className="text-[13px] font-black text-[#6d28d9]">{currency.format(item.amount)}</span>
             </div>
-        </Modal>
+            <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] font-bold text-[#66739a]">
+                <span>Ads {currency.format(item.adsBudget)}</span>
+                <span className="text-right">Fin {formatDate(item.endDate)}</span>
+            </div>
+        </div>
+    );
+}
+
+function CheckoutRow({
+    item,
+    canRetry,
+    busy,
+    onRetry,
+}: {
+    item: OverviewCheckout;
+    canRetry: boolean;
+    busy: boolean;
+    onRetry: () => void;
+}) {
+    const failed = item.status === "failed" || item.activationStatus.includes("failed");
+    const canRetryMeta = canRetry && item.status === "approved" && item.activationStatus === "meta_failed";
+    return (
+        <div className="rounded-2xl border border-[#eef1f5] bg-white p-3">
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <p className="truncate text-[13px] font-black text-[#101936]">{item.cityName || "Ciudad"}</p>
+                    <p className="text-[11px] font-semibold text-[#66739a]">{item.userName} · {formatDate(item.updatedAt)}</p>
+                </div>
+                <StatusPill status={item.activationStatus} />
+            </div>
+            <p className="mt-1 text-[12px] font-black text-[#101936]">{currency.format(item.amount)} · ads {currency.format(item.adsBudget)}</p>
+            {failed && item.failureReason ? (
+                <p className="mt-1 line-clamp-2 text-[10px] font-bold text-red-600">{humanizeError(item.failureReason)}</p>
+            ) : null}
+            {canRetryMeta ? (
+                <Button type="button" variant="secondary" disabled={busy} onClick={onRetry} className="mt-2 w-full">
+                    <AppIcon name="refresh" size="sm" plain className="h-4 w-4 text-current" />
+                    {busy ? "Reintentando..." : "Reintentar Meta"}
+                </Button>
+            ) : null}
+        </div>
+    );
+}
+
+function Metric({ label, value, detail, tone }: { label: string; value: ReactNode; detail: string; tone: "purple" | "orange" | "green" | "blue" }) {
+    const toneClass = {
+        purple: "from-violet-50 to-white text-violet-700",
+        orange: "from-orange-50 to-white text-orange-700",
+        green: "from-emerald-50 to-white text-emerald-700",
+        blue: "from-blue-50 to-white text-blue-700",
+    }[tone];
+    return (
+        <div className={`rounded-3xl border border-[#e8e7fb] bg-gradient-to-br ${toneClass} p-4 shadow-[0_16px_34px_rgba(91,33,255,0.06)]`}>
+            <p className="text-[10px] font-black uppercase tracking-[0.12em] opacity-75">{label}</p>
+            <p className="mt-2 text-[28px] font-black tracking-[-0.05em] text-[#101936]">{value}</p>
+            <p className="mt-1 text-[11px] font-bold text-[#66739a]">{detail}</p>
+        </div>
+    );
+}
+
+function StatusPill({ status }: { status: string }) {
+    const normalized = status || "unknown";
+    const classes =
+        normalized === "available" || normalized === "active" || normalized === "approved"
+            ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
+            : normalized === "occupied" || normalized === "reserved" || normalized === "processing" || normalized === "waiting_payment"
+                ? "bg-amber-50 text-amber-700 ring-amber-100"
+                : normalized.includes("failed") || normalized === "meta_failed"
+                    ? "bg-red-50 text-red-700 ring-red-100"
+                    : "bg-slate-50 text-slate-700 ring-slate-100";
+    return <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] ring-1 ${classes}`}>{normalized}</span>;
+}
+
+function MoneyTile({ label, value, suffix }: { label: string; value: number; suffix: string }) {
+    return (
+        <div className="rounded-2xl bg-[#f8f7ff] p-3">
+            <p className="text-[10px] font-black uppercase tracking-[0.1em] text-[#66739a]">{label}</p>
+            <p className="mt-1 text-[20px] font-black tracking-[-0.04em] text-[#101936]">{Math.round(value)}{suffix}</p>
+        </div>
     );
 }
 
@@ -956,112 +594,45 @@ function CityConfigModal({
     onClose: () => void;
 }) {
     return (
-        <Modal
-            open={open}
-            title={editing ? "Editar ciudad" : "Nueva ciudad"}
-            subtitle="Configura la ciudad y la campana plantilla que TrackGo duplicara despues del Pix."
-            size="md"
-            onClose={onClose}
-        >
+        <Modal open={open} title={editing ? "Editar ciudad" : "Nueva ciudad"} subtitle="Configura ciudad y campana fija de Meta." size="md" onClose={onClose}>
             <div className="space-y-4">
-                <div className="rounded-2xl border border-[#ded8ff] bg-[#fbfaff] p-3 text-[12px] font-semibold leading-snug text-[#52607a]">
-                    <span className="font-black text-[#101936]">campaignId</span> es el ID de la campana fija de esa ciudad en Meta Ads.
-                    TrackGo no duplica campanas: configura presupuesto, fechas y activa esa campana durante el ciclo.
-                </div>
-
+                <Notice tone="violet">
+                    <span className="font-black text-[#101936]">campaignId</span> es la campana fija de esa ciudad. TrackGo ajusta presupuesto/fecha y activa la campana cuando el Pix se aprueba.
+                </Notice>
                 <div className="grid gap-3 sm:grid-cols-2">
                     <Field label="ID interno">
-                        <input
-                            value={form.id}
-                            disabled={editing}
-                            onChange={(e) => onChange({ id: e.target.value })}
-                            placeholder="manaus"
-                            className="h-11 w-full rounded-2xl border border-[#e8e7fb] bg-white px-3 text-[13px] font-bold text-[#101936] outline-none disabled:bg-[#f8f7ff] disabled:text-[#98a2b3]"
-                        />
+                        <input value={form.id} disabled={editing} onChange={(e) => onChange({ id: e.target.value })} placeholder="belem" className={inputClass} />
                     </Field>
                     <Field label="Ciudad">
-                        <input
-                            value={form.name}
-                            onChange={(e) => onChange({ name: e.target.value })}
-                            placeholder="Manaus"
-                            className="h-11 w-full rounded-2xl border border-[#e8e7fb] bg-white px-3 text-[13px] font-bold text-[#101936] outline-none"
-                        />
+                        <input value={form.name} onChange={(e) => onChange({ name: e.target.value })} placeholder="Belém" className={inputClass} />
                     </Field>
                     <Field label="Estado">
-                        <input
-                            value={form.state}
-                            onChange={(e) => onChange({ state: e.target.value })}
-                            placeholder="Amazonas"
-                            className="h-11 w-full rounded-2xl border border-[#e8e7fb] bg-white px-3 text-[13px] font-bold text-[#101936] outline-none"
-                        />
+                        <input value={form.state} onChange={(e) => onChange({ state: e.target.value })} placeholder="Pará" className={inputClass} />
                     </Field>
                     <Field label="Pais">
-                        <input
-                            value={form.country}
-                            onChange={(e) => onChange({ country: e.target.value })}
-                            placeholder="Brasil"
-                            className="h-11 w-full rounded-2xl border border-[#e8e7fb] bg-white px-3 text-[13px] font-bold text-[#101936] outline-none"
-                        />
+                        <input value={form.country} onChange={(e) => onChange({ country: e.target.value })} placeholder="Brasil" className={inputClass} />
                     </Field>
                     <Field label="Estado comercial">
-                        <select
-                            value={form.status}
-                            onChange={(e) => onChange({ status: e.target.value as CityFormState["status"] })}
-                            className="h-11 w-full rounded-2xl border border-[#e8e7fb] bg-white px-3 text-[13px] font-bold text-[#101936] outline-none"
-                        >
+                        <select value={form.status} onChange={(e) => onChange({ status: e.target.value as CityFormState["status"] })} className={inputClass}>
                             <option value="available">Disponible</option>
                             <option value="reserved">Reservada</option>
                             <option value="occupied">Ocupada</option>
                         </select>
                     </Field>
-                    <Field label="ID campana Meta de la ciudad">
+                    <Field label="ID campana Meta">
                         <div className="flex gap-2">
-                            <input
-                                value={form.campaignId}
-                                onChange={(e) => {
-                                    onChange({ campaignId: e.target.value });
-                                }}
-                                placeholder="120215934567890123"
-                                className="h-11 min-w-0 flex-1 rounded-2xl border border-[#e8e7fb] bg-white px-3 font-mono text-[13px] font-bold text-[#101936] outline-none"
-                            />
-                            <button
-                                type="button"
-                                onClick={onValidateCampaign}
-                                disabled={campaignValidation.loading || !form.campaignId.trim()}
-                                className="h-11 shrink-0 rounded-2xl border border-[#ded8ff] bg-[#f7f3ff] px-3 text-[11px] font-black text-[#6d28d9] disabled:opacity-50"
-                            >
+                            <input value={form.campaignId} onChange={(e) => onChange({ campaignId: e.target.value })} placeholder="120..." className={`${inputClass} min-w-0 flex-1 font-mono`} />
+                            <button type="button" onClick={onValidateCampaign} disabled={campaignValidation.loading || !form.campaignId.trim()} className="h-11 rounded-2xl border border-[#ded8ff] bg-[#f7f3ff] px-3 text-[11px] font-black text-[#6d28d9] disabled:opacity-50">
                                 {campaignValidation.loading ? "..." : "Validar"}
                             </button>
                         </div>
                     </Field>
                 </div>
-
-                {campaignValidation.message ? (
-                    <div
-                        className={[
-                            "rounded-2xl border p-3 text-[12px] font-semibold leading-snug",
-                            campaignValidation.ok
-                                ? "border-emerald-100 bg-emerald-50 text-emerald-800"
-                                : "border-red-100 bg-red-50 text-red-700",
-                        ].join(" ")}
-                    >
-                        {campaignValidation.message}
-                    </div>
-                ) : null}
-
-                {error ? (
-                    <div className="rounded-2xl border border-red-100 bg-red-50 p-3 text-[12px] font-semibold text-red-700">
-                        {error}
-                    </div>
-                ) : null}
-
+                {campaignValidation.message ? <Notice tone={campaignValidation.ok ? "green" : "red"}>{campaignValidation.message}</Notice> : null}
+                {error ? <Notice tone="red">{error}</Notice> : null}
                 <div className="flex justify-end gap-2">
-                    <Button type="button" variant="ghost" onClick={onClose}>
-                        Cerrar
-                    </Button>
-                    <Button type="button" variant="primary" disabled={saving} onClick={onSave}>
-                        {saving ? "Guardando..." : "Guardar ciudad"}
-                    </Button>
+                    <Button type="button" variant="ghost" onClick={onClose}>Cerrar</Button>
+                    <Button type="button" variant="primary" disabled={saving} onClick={onSave}>{saving ? "Guardando..." : "Guardar ciudad"}</Button>
                 </div>
             </div>
         </Modal>
@@ -1071,10 +642,55 @@ function CityConfigModal({
 function Field({ label, children }: { label: string; children: ReactNode }) {
     return (
         <label className="block">
-            <span className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.12em] text-[#66739a]">
-                {label}
-            </span>
+            <span className="mb-1.5 block text-[10px] font-black uppercase tracking-[0.12em] text-[#66739a]">{label}</span>
             {children}
         </label>
     );
+}
+
+function Notice({ tone, children }: { tone: "violet" | "red" | "green"; children: ReactNode }) {
+    const cls = tone === "red" ? "border-red-100 bg-red-50 text-red-700" : tone === "green" ? "border-emerald-100 bg-emerald-50 text-emerald-800" : "border-[#ded8ff] bg-[#fbfaff] text-[#52607a]";
+    return <div className={`rounded-2xl border p-3 text-[12px] font-semibold leading-snug ${cls}`}>{children}</div>;
+}
+
+function EmptyInline({ text }: { text: string }) {
+    return <div className="rounded-2xl border border-dashed border-[#ded8ff] bg-[#fbfaff] p-4 text-center text-[12px] font-bold text-[#66739a]">{text}</div>;
+}
+
+function EmptyState({ title, body }: { title: string; body: string }) {
+    return <div className="rounded-3xl border border-[#e8e7fb] bg-white p-6 text-center"><p className="text-[16px] font-black text-[#101936]">{title}</p><p className="mt-1 text-[13px] font-semibold text-[#66739a]">{body}</p></div>;
+}
+
+function formatDate(value?: number | null) {
+    return value ? dateTime.format(new Date(value)) : "sin fecha";
+}
+
+function humanizeError(message: string) {
+    if (!message) return "No se pudo completar la operacion.";
+    if (message.includes("WhatsApp")) {
+        return "Meta requiere que el conjunto de anuncios tenga el numero de WhatsApp correctamente conectado.";
+    }
+    if (message.includes("Invalid parameter")) {
+        return message.split("|").map((part) => part.trim()).filter(Boolean).slice(1, 3).join(" · ") || "Meta rechazo algun parametro de la campana.";
+    }
+    if (message.includes("city_reserved_by_you")) {
+        return "Ya existe un Pix pendiente para esta ciudad.";
+    }
+    return message.length > 180 ? `${message.slice(0, 180)}...` : message;
+}
+
+function getAuthToken() {
+    if (auth.currentUser) return auth.currentUser.getIdToken();
+    return new Promise<string>((resolve, reject) => {
+        const timeout = window.setTimeout(() => {
+            unsubscribe();
+            reject(new Error("No se pudo confirmar la sesion activa."));
+        }, 8000);
+        const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
+            if (!user) return;
+            window.clearTimeout(timeout);
+            unsubscribe();
+            user.getIdToken().then(resolve, reject);
+        });
+    });
 }

@@ -1,8 +1,8 @@
 "use client";
 
-import { getMessaging, getToken, isSupported, onMessage, type Messaging } from "firebase/messaging";
+import { deleteToken, getMessaging, getToken, isSupported, onMessage, type Messaging } from "firebase/messaging";
 import { app } from "@/lib/firebase";
-import { saveWebPushToken } from "@/data/webPushTokensRepo";
+import { removeWebPushToken, saveWebPushToken } from "@/data/webPushTokensRepo";
 
 const TOKEN_ID_PREFIX = "trackgo_web_push_token_id_";
 
@@ -31,6 +31,11 @@ async function sha256(input: string) {
 
 function tokenIdStorageKey(userId: string) {
     return `${TOKEN_ID_PREFIX}${userId}`;
+}
+
+export function getSavedWebPushTokenId(userId: string) {
+    if (typeof window === "undefined") return null;
+    return window.localStorage.getItem(tokenIdStorageKey(userId));
 }
 
 function platformLabel() {
@@ -72,6 +77,22 @@ export async function enableWebPushForUser(userId: string) {
     });
 
     return tokenId;
+}
+
+export async function disableWebPushForUser(userId: string) {
+    const tokenId = getSavedWebPushTokenId(userId);
+
+    try {
+        if ((await getWebPushState()) === "granted") {
+            const messaging = await messagingInstance();
+            await deleteToken(messaging).catch(() => false);
+        }
+    } finally {
+        if (tokenId) await removeWebPushToken(userId, tokenId);
+        if (typeof window !== "undefined") {
+            window.localStorage.removeItem(tokenIdStorageKey(userId));
+        }
+    }
 }
 
 export async function refreshWebPushTokenForUser(userId: string) {
