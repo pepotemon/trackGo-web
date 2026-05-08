@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { AppIcon, type AppIconName, type AppIconTone } from "@/components/ui/AppIcon";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { useAuth } from "@/features/auth/AuthProvider";
+import { db } from "@/lib/firebase";
 import { SUBSCRIPTION_PLANS } from "@/lib/subscriptionPlans";
 import type { SubscriptionCity, SubscriptionPlanId } from "@/types/subscriptions";
 
@@ -174,8 +176,6 @@ export default function UserSubscriptionsPage() {
             const nextCities = (data.cities || []) as SubscriptionCity[];
             setCities(nextCities);
             setSettings(data.settings || { adsShare: 0.5, cycleDays: 5 });
-            setSubscriptions(data.subscriptions || []);
-            setCheckouts(data.checkouts || []);
             setSelectedCityId((current) => {
                 if (current && nextCities.some((city) => city.id === current)) return current;
                 return nextCities.find((city) => city.status === "available")?.id || "";
@@ -190,6 +190,65 @@ export default function UserSubscriptionsPage() {
     useEffect(() => {
         void loadData();
     }, [loadData]);
+
+    // Real-time listeners: subscriptions + checkouts update instantly when payment is confirmed
+    useEffect(() => {
+        if (!firebaseUser) return;
+
+        const subsQ = query(collection(db, "subscriptions"), where("userId", "==", firebaseUser.uid));
+        const unsubSubs = onSnapshot(subsQ, (snap) => {
+            const items: PortalSubscription[] = snap.docs
+                .map((doc) => {
+                    const d = doc.data();
+                    return {
+                        id: doc.id,
+                        cityId: d.cityId || null,
+                        city: d.city || null,
+                        plan: d.plan || null,
+                        amount: Number(d.amount || 0),
+                        adsBudget: Number(d.adsBudget || 0),
+                        status: String(d.status || "unknown"),
+                        startDate: (d.startDate as { toMillis?: () => number } | null)?.toMillis?.() ?? null,
+                        endDate: (d.endDate as { toMillis?: () => number } | null)?.toMillis?.() ?? null,
+                    };
+                })
+                .sort((a, b) => Number(b.endDate || 0) - Number(a.endDate || 0));
+            setSubscriptions(items);
+        });
+
+        const checkQ = query(collection(db, "subscriptionCheckouts"), where("userId", "==", firebaseUser.uid));
+        const unsubChecks = onSnapshot(checkQ, (snap) => {
+            const items: PortalCheckout[] = snap.docs
+                .map((doc) => {
+                    const d = doc.data();
+                    return {
+                        id: doc.id,
+                        cityId: d.cityId || null,
+                        cityName: d.cityName || null,
+                        plan: d.plan || null,
+                        amount: Number(d.amount || 0),
+                        adsBudget: Number(d.adsBudget || 0),
+                        paymentId: String(d.paymentId || ""),
+                        status: String(d.status || "unknown"),
+                        activationStatus: String(d.activationStatus || "unknown"),
+                        qrCode: String(d.qrCode || ""),
+                        qrCodeBase64: String(d.qrCodeBase64 || ""),
+                        ticketUrl: d.ticketUrl || null,
+                        expiresAt: d.expiresAt || null,
+                        failureReason: d.failureReason || null,
+                        createdAt: Number(d.createdAt || 0) || null,
+                        updatedAt: Number(d.updatedAt || 0) || null,
+                    };
+                })
+                .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
+            setCheckouts(items);
+        });
+
+        return () => {
+            unsubSubs();
+            unsubChecks();
+        };
+    }, [firebaseUser]);
 
     function requestPixConfirmation() {
         if (!selectedCityId) {

@@ -511,7 +511,14 @@ function SubscriptionRow({ item }: { item: OverviewSubscription }) {
         <div className={`rounded-2xl border p-3 ${isActive ? "border-emerald-100 bg-white" : "border-[#eef1f5] bg-[#fbfaff]"}`}>
             <div className="mb-2 flex items-center justify-between gap-2">
                 <StatusPill status={item.status} />
-                <span className="text-[10px] font-bold text-[#98a2b3]">fin {formatDate(item.endDate)}</span>
+                <div className="flex items-center gap-1.5 text-right">
+                    <span className="text-[10px] font-bold text-[#98a2b3]">{formatDate(item.endDate)}</span>
+                    {formatCountdown(item.endDate) ? (
+                        <span className="rounded-full bg-[#f4f0ff] px-2 py-0.5 text-[9px] font-black text-[#7c3aed]">
+                            {formatCountdown(item.endDate)}
+                        </span>
+                    ) : null}
+                </div>
             </div>
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
@@ -921,6 +928,18 @@ function EmptyState({ title, body }: { title: string; body: string }) {
 
 function formatDate(value?: number | null) {
     return value ? dateTime.format(new Date(value)) : "sin fecha";
+}
+
+function formatCountdown(endDate?: number | null): string {
+    if (!endDate) return "";
+    const msLeft = endDate - Date.now();
+    if (msLeft <= 0) return "Expirado";
+    const totalHours = Math.floor(msLeft / (1000 * 60 * 60));
+    if (totalHours < 1) return "menos de 1h";
+    if (totalHours < 24) return `en ${totalHours}h`;
+    const days = Math.floor(totalHours / 24);
+    const hours = totalHours % 24;
+    return hours > 0 ? `en ${days}d ${hours}h` : `en ${days}d`;
 }
 
 function labelStatus(status: string) {
