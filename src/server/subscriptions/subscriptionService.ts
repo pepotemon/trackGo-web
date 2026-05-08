@@ -173,16 +173,41 @@ export async function createPixSubscriptionCheckout(input: {
         };
     });
 
-    const payment = await createPixPayment({
-        checkoutId,
-        userId: input.userId,
-        cityId: input.cityId,
-        cityName: cityData.name,
-        plan: input.plan,
-        amount,
-        email: input.email,
-        notificationUrl: input.notificationUrl,
-    });
+    let payment;
+    try {
+        payment = await createPixPayment({
+            checkoutId,
+            userId: input.userId,
+            cityId: input.cityId,
+            cityName: cityData.name,
+            plan: input.plan,
+            amount,
+            email: input.email,
+            notificationUrl: input.notificationUrl,
+        });
+    } catch (error) {
+        await Promise.all([
+            checkoutRef.set(
+                {
+                    status: "failed",
+                    activationStatus: "waiting_payment",
+                    failureReason: error instanceof Error ? error.message : "pix_creation_failed",
+                    updatedAt: nowMs(),
+                },
+                { merge: true },
+            ),
+            cityRef.set(
+                {
+                    status: "available",
+                    reservedByCheckoutId: FieldValue.delete(),
+                    reservationExpiresAt: FieldValue.delete(),
+                    updatedAt: nowMs(),
+                },
+                { merge: true },
+            ),
+        ]);
+        throw error;
+    }
 
     await checkoutRef.set(
         {

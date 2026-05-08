@@ -27,8 +27,19 @@ export type MercadoPagoPayment = {
     date_of_expiration?: string;
 };
 
+type MercadoPagoErrorBody = {
+    message?: string;
+    error?: string;
+    status?: number;
+    cause?: Array<{
+        code?: string | number;
+        description?: string;
+        data?: string;
+    }>;
+};
+
 function mercadoPagoToken() {
-    const token = process.env.MERCADOPAGO_ACCESS_TOKEN;
+    const token = process.env.MERCADOPAGO_ACCESS_TOKEN?.trim();
     if (!token) {
         throw new ResponseError(
             "mercadopago_missing_token",
@@ -66,13 +77,13 @@ export async function createPixPayment(input: CreatePixPaymentInput) {
         }),
     });
 
-    const data = (await response.json()) as MercadoPagoPayment & { message?: string; error?: string };
+    const data = (await response.json()) as MercadoPagoPayment & MercadoPagoErrorBody;
 
     if (!response.ok) {
         console.error("[mercadopago:createPixPayment]", data);
         throw new ResponseError(
             "mercadopago_payment_error",
-            data.message || "Mercado Pago no pudo crear el Pix.",
+            formatMercadoPagoError(data) || "Mercado Pago no pudo crear el Pix.",
             502,
         );
     }
@@ -92,11 +103,22 @@ export async function getMercadoPagoPayment(paymentId: string) {
         },
     });
 
-    const data = (await response.json()) as MercadoPagoPayment & { message?: string };
+    const data = (await response.json()) as MercadoPagoPayment & MercadoPagoErrorBody;
     if (!response.ok) {
         console.error("[mercadopago:getPayment]", data);
-        throw new ResponseError("mercadopago_lookup_error", data.message || "No se pudo consultar el pago.", 502);
+        throw new ResponseError("mercadopago_lookup_error", formatMercadoPagoError(data) || "No se pudo consultar el pago.", 502);
     }
 
     return data;
+}
+
+function formatMercadoPagoError(data: MercadoPagoErrorBody) {
+    const cause = data.cause
+        ?.map((item) => [item.code ? `code=${item.code}` : "", item.description, item.data].filter(Boolean).join(" · "))
+        .filter(Boolean)
+        .join(" | ");
+
+    return [data.message, data.error, cause, data.status ? `status=${data.status}` : ""]
+        .filter(Boolean)
+        .join(" | ");
 }
