@@ -29,27 +29,37 @@ type SubscriptionSettings = {
 
 type OverviewSubscription = {
     id: string;
+    userId?: string | null;
     userName: string;
+    userEmail?: string;
     cityId?: string | null;
     city?: string | null;
     plan?: string | null;
     amount: number;
     adsBudget: number;
     status: string;
+    startDate?: number | null;
     endDate?: number | null;
 };
 
 type OverviewCheckout = {
     id: string;
+    userId?: string | null;
     cityId?: string | null;
     cityName?: string | null;
     userName: string;
+    userEmail?: string;
+    plan?: string | null;
     amount: number;
     adsBudget: number;
+    paymentId?: string;
+    ticketUrl?: string | null;
     status: string;
     activationStatus: string;
     failureReason?: string | null;
+    createdAt?: number | null;
     updatedAt?: number | null;
+    paymentApprovedAt?: number | null;
 };
 
 type Overview = {
@@ -91,6 +101,7 @@ export default function SubscriptionsAdminPage() {
     const [settingsDraft, setSettingsDraft] = useState<SubscriptionSettings>({ adsShare: 0.5, cycleDays: 5 });
     const [settingsSaving, setSettingsSaving] = useState(false);
     const [settingsError, setSettingsError] = useState("");
+    const [detailCityId, setDetailCityId] = useState<string | null>(null);
 
     const canView = permissions.subscriptionsView || permissions.subscriptionsEdit;
     const canManage = permissions.subscriptionsEdit || isSuperAdmin;
@@ -144,6 +155,23 @@ export default function SubscriptionsAdminPage() {
     const revenue = activeSubscriptions.reduce((sum, item) => sum + item.amount, 0);
     const operatingBase = activeSubscriptions.reduce((sum, item) => sum + item.adsBudget, 0);
     const failedCheckouts = overview?.checkouts.filter((item) => item.status === "failed" || item.activationStatus.includes("failed")).length ?? 0;
+
+    const detailCity = useMemo(
+        () => detailCityId ? (overview?.cities.find((c) => c.id === detailCityId) ?? null) : null,
+        [detailCityId, overview],
+    );
+    const detailSubscription = useMemo(
+        () => detailCityId
+            ? (overview?.subscriptions.find((s) => s.cityId === detailCityId && ["active", "provisioning", "payment_approved_meta_failed"].includes(s.status)) ?? null)
+            : null,
+        [detailCityId, overview],
+    );
+    const detailCheckout = useMemo(
+        () => detailCityId
+            ? ([...(overview?.checkouts.filter((c) => c.cityId === detailCityId) ?? [])].sort((a, b) => Number(b.updatedAt ?? 0) - Number(a.updatedAt ?? 0))[0] ?? null)
+            : null,
+        [detailCityId, overview],
+    );
 
     function openCreateCity() {
         setEditingCityId(null);
@@ -348,6 +376,7 @@ export default function SubscriptionsAdminPage() {
                                 busy={actionBusyId === city.id}
                                 onEdit={() => openEditCity(city)}
                                 onRelease={() => void releaseCity(city.id)}
+                                onDetail={() => setDetailCityId(city.id)}
                             />
                         ))}
                         {overview?.cities.length === 0 ? <EmptyInline text="Aun no hay ciudades configuradas." /> : null}
@@ -378,6 +407,17 @@ export default function SubscriptionsAdminPage() {
                     {overview?.checkouts.length === 0 ? <EmptyInline text="No hay pagos recientes." /> : null}
                 </CardContent>
             </Card>
+
+            <CityDetailModal
+                city={detailCity}
+                subscription={detailSubscription}
+                checkout={detailCheckout}
+                canManage={canManage}
+                busy={actionBusyId === detailCityId}
+                onRelease={() => { if (detailCityId) void releaseCity(detailCityId); }}
+                onRetry={() => { if (detailCheckout) void retryCheckout(detailCheckout.id); }}
+                onClose={() => setDetailCityId(null)}
+            />
 
             <CityConfigModal
                 open={cityModalOpen}
@@ -413,6 +453,7 @@ function CityRow({
     busy,
     onEdit,
     onRelease,
+    onDetail,
 }: {
     city: SubscriptionCity;
     subscription?: OverviewSubscription;
@@ -420,7 +461,9 @@ function CityRow({
     busy: boolean;
     onEdit: () => void;
     onRelease: () => void;
+    onDetail: () => void;
 }) {
+    const isOccupied = city.status === "occupied" || city.status === "reserved";
     return (
         <div className="grid gap-3 rounded-2xl border border-[#eef1f5] bg-white p-3 transition hover:border-[#ded8ff] hover:bg-[#fbfaff] md:grid-cols-[1fr_auto] md:items-center">
             <div className="min-w-0">
@@ -432,41 +475,54 @@ function CityRow({
                 <p className="mt-1 truncate font-mono text-[10px] font-bold text-[#98a2b3]">ID {city.campaignId || city.activeCampaignId || city.baseCampaignId || "sin configuracion"}</p>
                 {subscription ? (
                     <p className="mt-1 text-[11px] font-bold text-[#6d28d9]">
-                        {subscription.userName} hasta {formatDate(subscription.endDate)}
+                        {subscription.userName} · fin {formatDate(subscription.endDate)}
                     </p>
                 ) : null}
             </div>
-            {canEdit ? (
-                <div className="flex flex-wrap justify-end gap-2">
-                    <Button type="button" variant="secondary" onClick={onEdit}>
-                        <AppIcon name="edit" size="sm" plain className="h-4 w-4 text-current" />
-                        Editar
+            <div className="flex flex-wrap justify-end gap-2">
+                {isOccupied ? (
+                    <Button type="button" variant="secondary" onClick={onDetail}>
+                        <AppIcon name="search" size="sm" plain className="h-4 w-4 text-current" />
+                        Ver
                     </Button>
-                    {city.status !== "available" ? (
-                        <Button type="button" variant="danger" disabled={busy} onClick={onRelease}>
-                            <AppIcon name="unlock" size="sm" plain className="h-4 w-4 text-current" />
-                            {busy ? "..." : "Liberar"}
+                ) : null}
+                {canEdit ? (
+                    <>
+                        <Button type="button" variant="secondary" onClick={onEdit}>
+                            <AppIcon name="edit" size="sm" plain className="h-4 w-4 text-current" />
+                            Editar
                         </Button>
-                    ) : null}
-                </div>
-            ) : null}
+                        {city.status !== "available" ? (
+                            <Button type="button" variant="danger" disabled={busy} onClick={onRelease}>
+                                <AppIcon name="unlock" size="sm" plain className="h-4 w-4 text-current" />
+                                {busy ? "..." : "Liberar"}
+                            </Button>
+                        ) : null}
+                    </>
+                ) : null}
+            </div>
         </div>
     );
 }
 
 function SubscriptionRow({ item }: { item: OverviewSubscription }) {
+    const isActive = item.status === "active";
     return (
-        <div className="rounded-2xl border border-[#eef1f5] bg-[#fbfaff] p-3">
-            <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                    <p className="truncate text-[13px] font-black text-[#101936]">{item.userName}</p>
-                    <p className="text-[11px] font-semibold text-[#66739a]">{item.city || item.cityId} - {item.plan || "plan"}</p>
-                </div>
-                <span className="text-[13px] font-black text-[#6d28d9]">{currency.format(item.amount)}</span>
+        <div className={`rounded-2xl border p-3 ${isActive ? "border-emerald-100 bg-white" : "border-[#eef1f5] bg-[#fbfaff]"}`}>
+            <div className="mb-2 flex items-center justify-between gap-2">
+                <StatusPill status={item.status} />
+                <span className="text-[10px] font-bold text-[#98a2b3]">fin {formatDate(item.endDate)}</span>
             </div>
-            <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] font-bold text-[#66739a]">
-                <span>Base {currency.format(item.adsBudget)}</span>
-                <span className="text-right">Fin {formatDate(item.endDate)}</span>
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                    <p className="truncate text-[14px] font-black text-[#101936]">{item.city || item.cityId}</p>
+                    <p className="mt-0.5 truncate text-[11px] font-bold text-[#66739a]">{item.userName}</p>
+                    {item.userEmail ? <p className="truncate text-[10px] font-semibold text-[#98a2b3]">{item.userEmail}</p> : null}
+                </div>
+                <div className="shrink-0 text-right">
+                    <p className="text-[18px] font-black tracking-[-0.04em] text-[#6d28d9]">{currency.format(item.amount)}</p>
+                    <p className="mt-0.5 text-[10px] font-bold text-[#66739a]">base {currency.format(item.adsBudget)}</p>
+                </div>
             </div>
         </div>
     );
@@ -484,19 +540,34 @@ function CheckoutRow({
     onRetry: () => void;
 }) {
     const failed = item.status === "failed" || item.activationStatus.includes("failed");
+    const isPending = item.status === "pending";
+    const isApproved = item.status === "approved" && !item.activationStatus.includes("failed");
     const canRetryActivation = canRetry && item.status === "approved" && item.activationStatus === "meta_failed";
+
+    const borderCls = failed
+        ? "border-red-100 bg-red-50/40"
+        : isPending
+          ? "border-amber-100 bg-amber-50/40"
+          : isApproved
+            ? "border-emerald-100 bg-white"
+            : "border-[#eef1f5] bg-white";
+
     return (
-        <div className="rounded-2xl border border-[#eef1f5] bg-white p-3">
+        <div className={`rounded-2xl border p-3 ${borderCls}`}>
             <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                    <p className="truncate text-[13px] font-black text-[#101936]">{item.cityName || "Ciudad"}</p>
-                    <p className="text-[11px] font-semibold text-[#66739a]">{item.userName} - {formatDate(item.updatedAt)}</p>
+                <div className="min-w-0 flex-1">
+                    <p className="truncate text-[14px] font-black text-[#101936]">{item.cityName || "Ciudad"}</p>
+                    <p className="mt-0.5 truncate text-[11px] font-bold text-[#66739a]">{item.userName}</p>
+                    <p className="text-[10px] font-semibold text-[#98a2b3]">{formatDate(item.updatedAt)}</p>
                 </div>
-                <StatusPill status={item.activationStatus || item.status} />
+                <div className="shrink-0 text-right">
+                    <StatusPill status={item.activationStatus || item.status} />
+                    <p className="mt-1.5 text-[16px] font-black tracking-[-0.04em] text-[#6d28d9]">{currency.format(item.amount)}</p>
+                    <p className="text-[10px] font-bold text-[#66739a]">base {currency.format(item.adsBudget)}</p>
+                </div>
             </div>
-            <p className="mt-1 text-[12px] font-black text-[#101936]">{currency.format(item.amount)} - base {currency.format(item.adsBudget)}</p>
             {failed && item.failureReason ? (
-                <p className="mt-1 line-clamp-2 text-[10px] font-bold text-red-600">{humanizeError(item.failureReason)}</p>
+                <p className="mt-2 line-clamp-2 rounded-xl bg-red-100 px-2.5 py-1.5 text-[10px] font-bold text-red-700">{humanizeError(item.failureReason)}</p>
             ) : null}
             {canRetryActivation ? (
                 <Button type="button" variant="secondary" disabled={busy} onClick={onRetry} className="mt-2 w-full">
@@ -673,6 +744,120 @@ function CityConfigModal({
                 </div>
             </div>
         </Modal>
+    );
+}
+
+function CityDetailModal({
+    city,
+    subscription,
+    checkout,
+    canManage,
+    busy,
+    onRelease,
+    onRetry,
+    onClose,
+}: {
+    city: SubscriptionCity | null;
+    subscription: OverviewSubscription | null;
+    checkout: OverviewCheckout | null;
+    canManage: boolean;
+    busy: boolean;
+    onRelease: () => void;
+    onRetry: () => void;
+    onClose: () => void;
+}) {
+    if (!city) return null;
+    const canRetry = canManage && checkout?.status === "approved" && checkout?.activationStatus === "meta_failed";
+    const canRelease = canManage && city.status !== "available";
+
+    return (
+        <Modal open title={city.name} subtitle={[city.state, city.country].filter(Boolean).join(" - ") || "Sin region"} size="md" onClose={onClose}>
+            <div className="space-y-4">
+                {/* Estado de la ciudad */}
+                <div className="flex items-center gap-2">
+                    <StatusPill status={city.status} />
+                    {subscription ? <StatusPill status={subscription.status} /> : null}
+                </div>
+
+                {/* Vendedor y compra */}
+                {subscription ? (
+                    <DetailSection title="Compra activa">
+                        <DetailRow label="Vendedor" value={subscription.userName} />
+                        {subscription.userEmail ? <DetailRow label="Email" value={subscription.userEmail} /> : null}
+                        <DetailRow label="Plan" value={subscription.plan || "sin plan"} />
+                        <DetailRow label="Monto" value={currency.format(subscription.amount)} />
+                        <DetailRow label="Base operativa" value={currency.format(subscription.adsBudget)} />
+                        {subscription.startDate ? <DetailRow label="Inicio" value={dateTime.format(new Date(subscription.startDate))} /> : null}
+                        <DetailRow label="Fin del ciclo" value={formatDate(subscription.endDate)} />
+                    </DetailSection>
+                ) : (
+                    <Notice tone="violet">Sin suscripcion activa registrada para esta ciudad.</Notice>
+                )}
+
+                {/* Pago */}
+                {checkout ? (
+                    <DetailSection title="Pago">
+                        <DetailRow label="Estado del pago" value={<StatusPill status={checkout.status} />} />
+                        <DetailRow label="Activacion" value={<StatusPill status={checkout.activationStatus} />} />
+                        {checkout.paymentId ? <DetailRow label="ID pago" value={<span className="font-mono text-[11px]">{checkout.paymentId}</span>} /> : null}
+                        {checkout.paymentApprovedAt ? <DetailRow label="Aprobado" value={dateTime.format(new Date(checkout.paymentApprovedAt))} /> : null}
+                        {checkout.createdAt ? <DetailRow label="Creado" value={dateTime.format(new Date(checkout.createdAt))} /> : null}
+                        {checkout.failureReason ? (
+                            <div className="rounded-2xl border border-red-100 bg-red-50 px-3 py-2">
+                                <p className="text-[10px] font-black uppercase tracking-[0.1em] text-red-700">Error</p>
+                                <p className="mt-1 text-[11px] font-semibold text-red-700">{humanizeError(checkout.failureReason)}</p>
+                            </div>
+                        ) : null}
+                        {checkout.ticketUrl ? (
+                            <a
+                                href={checkout.ticketUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="mt-1 block rounded-xl border border-[#ded8ff] bg-[#f8f7ff] px-3 py-2 text-[11px] font-black text-[#6d28d9]"
+                            >
+                                Ver comprobante MercadoPago
+                            </a>
+                        ) : null}
+                    </DetailSection>
+                ) : null}
+
+                {/* Acciones */}
+                {(canRetry || canRelease) ? (
+                    <div className="flex flex-wrap justify-end gap-2 pt-1">
+                        {canRetry ? (
+                            <Button type="button" variant="secondary" disabled={busy} onClick={onRetry}>
+                                <AppIcon name="refresh" size="sm" plain className="h-4 w-4 text-current" />
+                                {busy ? "Reintentando..." : "Reintentar activacion"}
+                            </Button>
+                        ) : null}
+                        {canRelease ? (
+                            <Button type="button" variant="danger" disabled={busy} onClick={onRelease}>
+                                <AppIcon name="unlock" size="sm" plain className="h-4 w-4 text-current" />
+                                {busy ? "Liberando..." : "Liberar ciudad"}
+                            </Button>
+                        ) : null}
+                    </div>
+                ) : null}
+            </div>
+        </Modal>
+    );
+}
+
+function DetailSection({ title, children }: { title: string; children: ReactNode }) {
+    return (
+        <div className="rounded-2xl border border-[#eef1f5] bg-[#faf9ff] p-3">
+            <p className="mb-2 text-[10px] font-black uppercase tracking-[0.12em] text-[#7c70ba]">{title}</p>
+            <div className="space-y-1.5">{children}</div>
+        </div>
+    );
+}
+
+function DetailRow({ label, value }: { label: string; value: ReactNode }) {
+    return (
+        <div className="flex items-center justify-between gap-3">
+            <span className="text-[11px] font-bold text-[#66739a]">{label}</span>
+            <span className="text-right text-[12px] font-black text-[#101936]">{value}</span>
+        </div>
     );
 }
 
