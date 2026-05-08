@@ -12,19 +12,19 @@ export type SubscriptionPlanDefinition = {
 export const SUBSCRIPTION_PLANS: SubscriptionPlanDefinition[] = [
     {
         id: "base",
-        name: "Base",
-        amount: 300,
-        adsBudget: 150,
-        estimatedLeads: "10-35",
-        description: "Entrada controlada para validar una ciudad sin sobrecargar al vendedor.",
+        name: "Acesso",
+        amount: 200,
+        adsBudget: 100,
+        estimatedLeads: "10-25",
+        description: "Acceso inicial para recibir clientes durante 5 dias y gestionarlos por 7 dias.",
     },
     {
         id: "crecimiento",
-        name: "Crecimiento",
+        name: "Impulso",
         amount: 400,
         adsBudget: 200,
         estimatedLeads: "20-50",
-        description: "El balance recomendado entre volumen, margen y capacidad operativa.",
+        description: "Plan recomendado para trabajar una ciudad con mayor volumen de oportunidades.",
     },
     {
         id: "dominio",
@@ -32,12 +32,13 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlanDefinition[] = [
         amount: 600,
         adsBudget: 300,
         estimatedLeads: "35-80",
-        description: "Mayor exposicion para ciudades con capacidad real de atencion.",
+        description: "Mayor volumen para ciudades con alta capacidad de atencion.",
     },
 ];
 
 export function estimateLeadRange(adsBudget: number) {
     if (adsBudget <= 0) return "0-0";
+    if (adsBudget <= 100) return "10-25";
     if (adsBudget <= 150) return "10-35";
     if (adsBudget <= 200) return "20-50";
     const min = Math.round(adsBudget * 0.115);
