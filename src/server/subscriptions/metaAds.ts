@@ -123,7 +123,6 @@ export async function configureAndActivateCityCampaign({
         status: "ACTIVE",
     });
 
-    await Promise.all(adIds.map((adId) => graphPost(`${adId}`, { status: "ACTIVE" })));
     await graphPost(`${campaign.id}`, { status: "ACTIVE" });
 
     return {
