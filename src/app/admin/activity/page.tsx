@@ -1481,9 +1481,9 @@ function followUpBadge(state: ClientFollowUp | undefined, originalUserId: string
         return <Badge tone="yellow">Reasignado</Badge>;
     }
     if (mode === "pending" && state.takenFromIncompleteAt) {
-        return <Badge tone="blue">Tomado</Badge>;
+        return <Badge tone="yellow">Tomado</Badge>;
     }
-    if (state.status === "pending") {
+    if (mode !== "pending" && state.status === "pending") {
         return <Badge tone="blue">Pendiente</Badge>;
     }
     return null;
