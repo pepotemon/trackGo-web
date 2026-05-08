@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AppIcon } from "@/components/ui/AppIcon";
 import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { SUBSCRIPTION_PLANS } from "@/lib/subscriptionPlans";
 import type { PixCheckoutResponse, SubscriptionCity, SubscriptionPlanId } from "@/types/subscriptions";
@@ -46,7 +47,9 @@ export default function UserSubscriptionsPage() {
     const [subscriptions, setSubscriptions] = useState<PortalSubscription[]>([]);
     const [checkouts, setCheckouts] = useState<PortalCheckout[]>([]);
     const [selectedCityId, setSelectedCityId] = useState("");
-    const [selectedPlan, setSelectedPlan] = useState<Exclude<SubscriptionPlanId, "custom" | "dominio">>("crecimiento");
+    const [selectedPlan, setSelectedPlan] = useState<Exclude<SubscriptionPlanId, "dominio">>("crecimiento");
+    const [customAmount, setCustomAmount] = useState(500);
+    const [confirmOpen, setConfirmOpen] = useState(false);
     const [pix, setPix] = useState<PixCheckoutResponse | null>(null);
     const [loading, setLoading] = useState(true);
     const [creating, setCreating] = useState(false);
@@ -54,10 +57,10 @@ export default function UserSubscriptionsPage() {
     const [copied, setCopied] = useState(false);
 
     const selectedPlanInfo = useMemo(
-        () => visiblePlans.find((plan) => plan.id === selectedPlan) || visiblePlans[1] || visiblePlans[0],
+        () => visiblePlans.find((plan) => plan.id === selectedPlan) || null,
         [selectedPlan],
     );
-    const selectedAmount = selectedPlanInfo?.amount || 0;
+    const selectedAmount = selectedPlan === "custom" ? customAmount : selectedPlanInfo?.amount || 0;
     const operatingBase = Math.round(selectedAmount * settings.adsShare * 100) / 100;
     const estimatedClients = estimateClientRange(operatingBase);
     const selectedCity = useMemo(() => cities.find((city) => city.id === selectedCityId) || null, [cities, selectedCityId]);
@@ -93,7 +96,10 @@ export default function UserSubscriptionsPage() {
             setSettings(data.settings || { adsShare: 0.5, cycleDays: 5 });
             setSubscriptions(data.subscriptions || []);
             setCheckouts(data.checkouts || []);
-            setSelectedCityId((current) => current || nextCities.find((city) => city.status === "available")?.id || "");
+            setSelectedCityId((current) => {
+                if (current && nextCities.some((city) => city.id === current)) return current;
+                return nextCities.find((city) => city.status === "available")?.id || "";
+            });
         } catch (error) {
             setMessage(error instanceof Error ? error.message : "No se pudieron cargar las suscripciones.");
         } finally {
@@ -119,10 +125,22 @@ export default function UserSubscriptionsPage() {
         }
     }, [pendingCheckout]);
 
+    function requestPixConfirmation() {
+        if (!selectedCityId) {
+            setMessage("Selecciona una ciudad disponible dentro de tu cobertura.");
+            return;
+        }
+        if (selectedAmount < 300) {
+            setMessage("El valor minimo para presupuesto personalizado es R$300.");
+            return;
+        }
+        setConfirmOpen(true);
+    }
+
     async function createPix() {
         if (!firebaseUser) return;
         if (!selectedCityId) {
-            setMessage("Selecciona una ciudad disponible.");
+            setMessage("Selecciona una ciudad disponible dentro de tu cobertura.");
             return;
         }
 
@@ -142,6 +160,7 @@ export default function UserSubscriptionsPage() {
                     userId: firebaseUser.uid,
                     cityId: selectedCityId,
                     plan: selectedPlan,
+                    amount: selectedPlan === "custom" ? customAmount : undefined,
                     email: firebaseUser.email || profile?.email,
                 }),
             });
@@ -150,6 +169,7 @@ export default function UserSubscriptionsPage() {
                 throw new Error(data.message || "No se pudo generar el Pix.");
             }
             setPix(data.pix);
+            setConfirmOpen(false);
             await loadData();
             setMessage("Pix generado. Cuando el pago sea confirmado, tu acceso se activa automaticamente.");
         } catch (error) {
@@ -226,10 +246,10 @@ export default function UserSubscriptionsPage() {
                 ) : null}
 
                 <section className="grid gap-3 lg:grid-cols-[0.95fr_1.05fr]">
-                    <Panel title="Elige tu ciudad" subtitle={`${availableCities.length} disponibles de ${cities.length || 0}`}>
+                    <Panel title="Elige tu ciudad" subtitle={`${availableCities.length} disponibles en tu cobertura`}>
                         <div className="grid gap-2">
                             {loading ? <EmptyLine text="Cargando ciudades..." /> : null}
-                            {!loading && cities.length === 0 ? <EmptyLine text="Todavia no hay ciudades disponibles." /> : null}
+                            {!loading && cities.length === 0 ? <EmptyLine text="No hay ciudades de suscripcion habilitadas para tu cobertura geografica." /> : null}
                             {cities.map((city) => {
                                 const disabled = city.status !== "available";
                                 const selected = selectedCityId === city.id;
@@ -263,7 +283,7 @@ export default function UserSubscriptionsPage() {
                         </div>
                     </Panel>
 
-                    <Panel title="Escoge tu acceso" subtitle="Dos opciones simples para empezar.">
+                    <Panel title="Escoge tu acceso" subtitle="Dos opciones simples o un valor personalizado.">
                         <div className="grid gap-2">
                             {visiblePlans.map((plan) => (
                                 <PlanCard
@@ -277,7 +297,33 @@ export default function UserSubscriptionsPage() {
                                     onClick={() => setSelectedPlan(plan.id as Exclude<SubscriptionPlanId, "custom" | "dominio">)}
                                 />
                             ))}
+                            <PlanCard
+                                active={selectedPlan === "custom"}
+                                title="Personalizado"
+                                amount={customAmount}
+                                clients={estimatedClients}
+                                cycleDays={settings.cycleDays}
+                                onClick={() => setSelectedPlan("custom")}
+                            />
                         </div>
+
+                        {selectedPlan === "custom" ? (
+                            <label className="mt-3 block rounded-2xl border border-[#e8e7fb] bg-[#fbfaff] p-3">
+                                <span className="text-[10px] font-black uppercase tracking-[0.12em] text-[#7c70ba]">Valor personalizado</span>
+                                <div className="mt-2 flex items-center gap-2">
+                                    <span className="text-[13px] font-black text-[#66739a]">R$</span>
+                                    <input
+                                        type="number"
+                                        min={300}
+                                        step={10}
+                                        value={customAmount}
+                                        onChange={(event) => setCustomAmount(Number(event.target.value))}
+                                        className="h-11 min-w-0 flex-1 rounded-2xl border border-[#ded8ff] bg-white px-3 text-[16px] font-black text-[#101936] outline-none focus:border-[#8b5cf6] focus:ring-4 focus:ring-[#ede9fe]"
+                                    />
+                                </div>
+                                <p className="mt-1 text-[11px] font-bold text-[#66739a]">Minimo R$300. El calculo de clientes se ajusta automaticamente.</p>
+                            </label>
+                        ) : null}
 
                         <div className="mt-3 grid gap-2 sm:grid-cols-2">
                             <Benefit icon="users" title="Clientes diarios" body="Nuevas oportunidades durante los primeros 5 dias." />
@@ -300,8 +346,8 @@ export default function UserSubscriptionsPage() {
                     <Button
                         type="button"
                         variant="primary"
-                        onClick={createPix}
-                        disabled={creating || Boolean(pendingCheckout) || !selectedCityId || selectedAmount < 100}
+                        onClick={requestPixConfirmation}
+                        disabled={creating || Boolean(pendingCheckout) || !selectedCityId || selectedAmount < 300}
                         className="mt-4 w-full !min-h-12 !rounded-2xl"
                     >
                         {creating ? "Generando Pix..." : pendingCheckout ? "Pix pendiente" : "Generar Pix"}
@@ -341,6 +387,18 @@ export default function UserSubscriptionsPage() {
                         ) : null}
                     </section>
                 ) : null}
+
+                <ConfirmPixModal
+                    open={confirmOpen}
+                    city={selectedCity}
+                    planName={selectedPlan === "custom" ? "Personalizado" : selectedPlanInfo?.name || "Acceso"}
+                    amount={selectedAmount}
+                    clients={estimatedClients}
+                    cycleDays={settings.cycleDays}
+                    creating={creating}
+                    onConfirm={createPix}
+                    onClose={() => setConfirmOpen(false)}
+                />
             </section>
         </main>
     );
@@ -438,11 +496,75 @@ function EmptyLine({ text }: { text: string }) {
     return <p className="rounded-2xl bg-[#f8f7ff] p-4 text-[12px] font-bold text-[#66739a]">{text}</p>;
 }
 
+function ConfirmPixModal({
+    open,
+    city,
+    planName,
+    amount,
+    clients,
+    cycleDays,
+    creating,
+    onConfirm,
+    onClose,
+}: {
+    open: boolean;
+    city: SubscriptionCity | null;
+    planName: string;
+    amount: number;
+    clients: string;
+    cycleDays: number;
+    creating: boolean;
+    onConfirm: () => void;
+    onClose: () => void;
+}) {
+    const start = new Date();
+    const receptionEnd = new Date(start);
+    receptionEnd.setDate(receptionEnd.getDate() + cycleDays);
+    const managementEnd = new Date(receptionEnd);
+    managementEnd.setDate(managementEnd.getDate() + 2);
+
+    return (
+        <Modal open={open} title="Confirmar suscripcion" subtitle="Revisa los datos antes de generar el Pix." size="sm" onClose={onClose}>
+            <div className="space-y-3">
+                <div className="rounded-2xl border border-[#e8e7fb] bg-[#fbfaff] p-3">
+                    <p className="text-[11px] font-black uppercase tracking-[0.1em] text-[#7c70ba]">Resumen</p>
+                    <div className="mt-3 grid gap-2 text-[12px] font-bold text-[#66739a]">
+                        <ConfirmRow label="Ciudad" value={city ? [city.name, city.state].filter(Boolean).join(" - ") : "sin seleccionar"} />
+                        <ConfirmRow label="Plan" value={`${planName} - ${currency.format(amount)}`} />
+                        <ConfirmRow label="Clientes" value={`${clients} estimados`} />
+                        <ConfirmRow label="Empieza" value={dateTime.format(start)} />
+                        <ConfirmRow label="Recepcion hasta" value={dateTime.format(receptionEnd)} />
+                        <ConfirmRow label="Gestion hasta" value={dateTime.format(managementEnd)} />
+                    </div>
+                </div>
+                <p className="text-[11px] font-semibold leading-snug text-[#66739a]">
+                    La cantidad puede variar por ciudad, demanda y actividad de la zona. El pago reserva la ciudad mientras el Pix este pendiente.
+                </p>
+                <div className="flex justify-end gap-2">
+                    <Button type="button" variant="ghost" onClick={onClose}>Cerrar</Button>
+                    <Button type="button" variant="primary" disabled={creating} onClick={onConfirm}>
+                        {creating ? "Generando..." : "Generar pago QR"}
+                    </Button>
+                </div>
+            </div>
+        </Modal>
+    );
+}
+
+function ConfirmRow({ label, value }: { label: string; value: string }) {
+    return (
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2">
+            <span>{label}</span>
+            <span className="text-right font-black text-[#101936]">{value}</span>
+        </div>
+    );
+}
+
 function estimateClientRange(operatingBase: number) {
     if (operatingBase <= 0) return "0-0";
     if (operatingBase <= 100) return "10-25";
     if (operatingBase <= 150) return "10-35";
-    if (operatingBase <= 200) return "20-50";
+    if (operatingBase <= 200) return "25-50";
     const min = Math.round(operatingBase * 0.115);
     const max = Math.round(operatingBase * 0.27);
     return `${min}-${max}`;

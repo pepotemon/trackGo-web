@@ -223,6 +223,64 @@ function normalizeCityId(value: string) {
         .slice(0, 80);
 }
 
+function normalizeCoverageText(value: unknown) {
+    return String(value ?? "")
+        .trim()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+}
+
+type CoverageItem = {
+    type?: unknown;
+    countryLabel?: unknown;
+    countryNormalized?: unknown;
+    stateLabel?: unknown;
+    stateNormalized?: unknown;
+    cityLabel?: unknown;
+    cityNormalized?: unknown;
+    active?: unknown;
+};
+
+function cityMatchesCoverage(city: { id: string; name?: unknown; state?: unknown; country?: unknown }, coverage: CoverageItem[]) {
+    const activeCoverage = coverage.filter((item) => item && item.active !== false);
+    if (!activeCoverage.length) return false;
+
+    const cityName = normalizeCoverageText(city.name || city.id);
+    const cityId = normalizeCoverageText(city.id);
+    const cityState = normalizeCoverageText(city.state);
+    const cityCountry = normalizeCoverageText(city.country || "Brasil");
+
+    return activeCoverage.some((item) => {
+        const type = String(item.type || "city");
+        const coverageCountry = normalizeCoverageText(item.countryNormalized || item.countryLabel || "Brasil");
+        const coverageState = normalizeCoverageText(item.stateNormalized || item.stateLabel);
+        const coverageCity = normalizeCoverageText(item.cityNormalized || item.cityLabel);
+
+        if (type === "country") {
+            return Boolean(coverageCountry) && coverageCountry === cityCountry;
+        }
+
+        if (type === "state") {
+            if (!coverageState || coverageState !== cityState) return false;
+            return !coverageCountry || coverageCountry === cityCountry;
+        }
+
+        if (!coverageCity || (coverageCity !== cityName && coverageCity !== cityId)) return false;
+        if (coverageState && cityState && coverageState !== cityState) return false;
+        if (coverageCountry && cityCountry && coverageCountry !== cityCountry) return false;
+        return true;
+    });
+}
+
+async function getUserGeoCoverage(userId: string) {
+    const snap = await adminDb.collection("users").doc(userId).get();
+    const data = snap.data() || {};
+    return Array.isArray(data.geoCoverage) ? (data.geoCoverage as CoverageItem[]) : [];
+}
+
 export async function createPixSubscriptionCheckout(input: {
     userId: string;
     cityId: string;
@@ -246,6 +304,17 @@ export async function createPixSubscriptionCheckout(input: {
         }
 
         const city = citySnap.data() || {};
+        const userSnap = await tx.get(adminDb.collection("users").doc(input.userId));
+        const userData = userSnap.data() || {};
+        const userCoverage = Array.isArray(userData.geoCoverage) ? (userData.geoCoverage as CoverageItem[]) : [];
+        if (!cityMatchesCoverage({ id: citySnap.id, name: city.name, state: city.state, country: city.country }, userCoverage)) {
+            throw new ResponseError(
+                "city_outside_coverage",
+                "Esta ciudad no esta habilitada en tu cobertura geografica.",
+                403,
+            );
+        }
+
         const cityStatus = city.status || "available";
         const currentReservationExpiresAt = Number(city.reservationExpiresAt || 0);
         const reservedByThisCheckout = city.reservedByCheckoutId === checkoutId;
@@ -374,7 +443,7 @@ export async function createPixSubscriptionCheckout(input: {
 }
 
 export async function getUserSubscriptionPortal(userId: string) {
-    const [cities, settings, subscriptionsSnap, checkoutsSnap] = await Promise.all([
+    const [cities, settings, subscriptionsSnap, checkoutsSnap, userCoverage] = await Promise.all([
         listSubscriptionCities(),
         getSubscriptionSettings(),
         adminDb
@@ -387,11 +456,13 @@ export async function getUserSubscriptionPortal(userId: string) {
             .where("userId", "==", userId)
             .limit(10)
             .get(),
+        getUserGeoCoverage(userId),
     ]);
+    const coveredCities = cities.filter((city) => cityMatchesCoverage(city, userCoverage));
 
     return {
         settings,
-        cities,
+        cities: coveredCities,
         subscriptions: subscriptionsSnap.docs.map((doc) => {
             const data = doc.data();
             return {

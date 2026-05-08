@@ -12,7 +12,7 @@ export function getPlanAmount(planId: SubscriptionPlanId, customAmount?: number)
 
 export function sanitizeCustomAmount(amount?: number) {
     const value = Number(amount || 0);
-    if (!Number.isFinite(value) || value < 100) throw new Error("invalid_amount");
+    if (!Number.isFinite(value) || value < 300) throw new Error("invalid_amount");
     return Math.round(value * 100) / 100;
 }
 

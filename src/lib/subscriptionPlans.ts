@@ -13,9 +13,9 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlanDefinition[] = [
     {
         id: "base",
         name: "Acesso",
-        amount: 200,
-        adsBudget: 100,
-        estimatedLeads: "10-25",
+        amount: 300,
+        adsBudget: 150,
+        estimatedLeads: "10-35",
         description: "Acceso inicial para recibir clientes durante 5 dias y gestionarlos por 7 dias.",
     },
     {
@@ -23,7 +23,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlanDefinition[] = [
         name: "Impulso",
         amount: 400,
         adsBudget: 200,
-        estimatedLeads: "20-50",
+        estimatedLeads: "25-50",
         description: "Plan recomendado para trabajar una ciudad con mayor volumen de oportunidades.",
     },
     {
@@ -40,7 +40,7 @@ export function estimateLeadRange(adsBudget: number) {
     if (adsBudget <= 0) return "0-0";
     if (adsBudget <= 100) return "10-25";
     if (adsBudget <= 150) return "10-35";
-    if (adsBudget <= 200) return "20-50";
+    if (adsBudget <= 200) return "25-50";
     const min = Math.round(adsBudget * 0.115);
     const max = Math.round(adsBudget * 0.27);
     return `${min}-${max}`;
