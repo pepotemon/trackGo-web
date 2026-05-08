@@ -135,6 +135,32 @@ export async function configureAndActivateCityCampaign({
     };
 }
 
+export async function pauseCityCampaign({
+    campaignId,
+    adsetIds,
+}: {
+    campaignId: string;
+    adsetIds?: string[];
+}) {
+    const campaign = await validateMetaCampaign(campaignId);
+    const ids = adsetIds?.filter(Boolean).length
+        ? adsetIds.filter(Boolean)
+        : (
+            await graphGet<{ data?: Array<{ id: string }> }>(`${campaign.id}/adsets`, {
+                fields: "id",
+                limit: "50",
+            })
+        ).data?.map((item) => item.id).filter(Boolean) || [];
+
+    await Promise.all(ids.map((adsetId) => graphPost(`${adsetId}`, { status: "PAUSED" })));
+    await graphPost(`${campaign.id}`, { status: "PAUSED" });
+
+    return {
+        campaignId: campaign.id,
+        adsetIds: ids,
+    };
+}
+
 export async function validateMetaCampaign(campaignId: string) {
     if (!campaignId.trim()) {
         throw new ResponseError("campaign_required", "El ID de campana Meta es obligatorio.");

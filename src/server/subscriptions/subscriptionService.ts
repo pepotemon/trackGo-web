@@ -4,7 +4,7 @@ import { ResponseError } from "@/server/auth";
 import { adminDb } from "@/server/firebaseAdmin";
 import { createPixPayment, getMercadoPagoPayment } from "@/server/subscriptions/mercadoPago";
 import { calculateAdsBudget, calculateCycleEnd, getPlanAmount } from "@/server/subscriptions/plans";
-import { configureAndActivateCityCampaign } from "@/server/subscriptions/metaAds";
+import { configureAndActivateCityCampaign, pauseCityCampaign } from "@/server/subscriptions/metaAds";
 import type { PixCheckoutResponse, SubscriptionPlanId } from "@/types/subscriptions";
 
 const RESERVATION_TTL_MS = 30 * 60 * 1000;
@@ -364,6 +364,7 @@ export async function processMercadoPagoPayment(paymentId: string) {
             cityRef.set(
                 {
                     activeCampaignId: campaign.campaignId,
+                    activeSubscriptionId: checkoutId,
                     adsetIds: campaign.adsetIds,
                     adIds: campaign.adIds,
                     updatedAt: nowMs(),
@@ -472,6 +473,7 @@ export async function retryMetaActivation(checkoutId: string) {
                     status: "occupied",
                     ownerUserId: String(checkout.userId),
                     activeCampaignId: campaign.campaignId,
+                    activeSubscriptionId: checkoutId,
                     adsetIds: campaign.adsetIds,
                     adIds: campaign.adIds,
                     updatedAt: nowMs(),
@@ -522,4 +524,126 @@ export async function retryMetaActivation(checkoutId: string) {
         );
         throw error;
     }
+}
+
+export async function expireDueSubscriptions(limit = 20) {
+    const now = Timestamp.now();
+    const snap = await adminDb
+        .collection("subscriptions")
+        .where("status", "==", "active")
+        .where("endDate", "<=", now)
+        .limit(limit)
+        .get();
+
+    const results: Array<{
+        subscriptionId: string;
+        cityId: string;
+        status: "expired" | "failed" | "skipped";
+        message?: string;
+    }> = [];
+
+    for (const doc of snap.docs) {
+        const subscriptionId = doc.id;
+        const subscription = doc.data();
+        const cityId = String(subscription.cityId || "");
+        const campaignId = String(subscription.campaignId || "");
+        const adsetIds = Array.isArray(subscription.adsetIds)
+            ? subscription.adsetIds.map((id) => String(id)).filter(Boolean)
+            : [];
+
+        if (!cityId || !campaignId) {
+            await doc.ref.set(
+                {
+                    status: "expiration_failed",
+                    expirationFailureReason: "missing_city_or_campaign",
+                    updatedAt: nowMs(),
+                },
+                { merge: true },
+            );
+            results.push({ subscriptionId, cityId, status: "failed", message: "missing_city_or_campaign" });
+            continue;
+        }
+
+        const locked = await adminDb.runTransaction(async (tx) => {
+            const fresh = await tx.get(doc.ref);
+            const data = fresh.data() || {};
+            if (data.status !== "active") return false;
+            tx.set(
+                doc.ref,
+                {
+                    status: "expiring",
+                    expiringAt: nowMs(),
+                    updatedAt: nowMs(),
+                },
+                { merge: true },
+            );
+            return true;
+        });
+
+        if (!locked) {
+            results.push({ subscriptionId, cityId, status: "skipped", message: "already_processing" });
+            continue;
+        }
+
+        try {
+            await pauseCityCampaign({ campaignId, adsetIds });
+
+            const cityRef = adminDb.collection("cities").doc(cityId);
+            await adminDb.runTransaction(async (tx) => {
+                const citySnap = await tx.get(cityRef);
+                const city = citySnap.data() || {};
+                const belongsToSubscription =
+                    city.activeSubscriptionId === subscriptionId ||
+                    (!city.activeSubscriptionId &&
+                        city.ownerUserId === subscription.userId &&
+                        (city.activeCampaignId === campaignId || city.campaignId === campaignId));
+
+                tx.set(
+                    doc.ref,
+                    {
+                        status: "expired",
+                        endedAt: nowMs(),
+                        updatedAt: nowMs(),
+                    },
+                    { merge: true },
+                );
+
+                if (citySnap.exists && belongsToSubscription) {
+                    tx.set(
+                        cityRef,
+                        {
+                            status: "available",
+                            ownerUserId: null,
+                            activeSubscriptionId: FieldValue.delete(),
+                            activeCampaignId: FieldValue.delete(),
+                            adsetIds: FieldValue.delete(),
+                            adIds: FieldValue.delete(),
+                            reservedByCheckoutId: FieldValue.delete(),
+                            reservationExpiresAt: FieldValue.delete(),
+                            updatedAt: nowMs(),
+                        },
+                        { merge: true },
+                    );
+                }
+            });
+
+            results.push({ subscriptionId, cityId, status: "expired" });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "expiration_failed";
+            await doc.ref.set(
+                {
+                    status: "expiration_failed",
+                    expirationFailureReason: message,
+                    updatedAt: nowMs(),
+                },
+                { merge: true },
+            );
+            results.push({ subscriptionId, cityId, status: "failed", message });
+        }
+    }
+
+    return {
+        processed: results.length,
+        results,
+    };
 }
