@@ -495,7 +495,7 @@ function MapPageInner() {
         <div className="relative h-[calc(100dvh-72px)] overscroll-none xl:h-screen">
             <div ref={mapContainerRef} className="h-full w-full" />
 
-            <div className="pointer-events-none absolute bottom-[200px] left-3 z-10 flex flex-col gap-2">
+            <div className="pointer-events-none absolute bottom-[200px] left-3 z-10 hidden flex-col gap-2">
                 <MapCtrlBtn onClick={fitMapBounds} title="Ver todos">
                     <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                         <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3" />
@@ -565,6 +565,18 @@ function MapPageInner() {
                     </svg>
                     {dateFrom.slice(8)} – {dateTo.slice(8)} {dateTo.slice(5, 7)}/{dateTo.slice(0, 4)}
                 </button>
+                <div className="mt-1 flex flex-col items-end gap-1.5">
+                    <MapCtrlBtn onClick={fitMapBounds} title="Ver todos">
+                        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3" />
+                        </svg>
+                    </MapCtrlBtn>
+                    <MapCtrlBtn onClick={goToUserLocation} title="Mi ubicaciÃƒÂ³n" loading={locating}>
+                        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 2a7 7 0 0 1 7 7c0 5-7 13-7 13S5 14 5 9a7 7 0 0 1 7-7Z" /><circle cx="12" cy="9" r="2.5" />
+                        </svg>
+                    </MapCtrlBtn>
+                </div>
             </div>
 
             {/* ── LEADS LOADING OVERLAY ───────────────────────────────── */}

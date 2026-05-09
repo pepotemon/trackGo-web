@@ -19,6 +19,7 @@ import {
 } from "@/types/userLeads";
 import { getWhatsAppSentIds, markWhatsAppSent } from "@/lib/userContactState";
 import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
+import { useVendorSubscriptionStatus, type VendorSubscriptionStatus } from "@/features/subscriptions/useVendorSubscriptionStatus";
 
 type StatusFilter = "pending" | "visited" | "rejected" | "all";
 
@@ -136,6 +137,7 @@ export default function UserLeadsPage() {
     const userId = firebaseUser?.uid ?? "";
     const userName = profile?.name?.split(" ")[0] ?? "Vendedor";
     const activeWeek = useMemo(() => weekRange(), []);
+    const subscriptionStatus = useVendorSubscriptionStatus(userPermissions.canSeeSubscriptions ? userId : null);
 
     useEffect(() => {
         return () => {
@@ -331,14 +333,17 @@ export default function UserLeadsPage() {
                             {new Intl.DateTimeFormat("es", { weekday: "long", day: "2-digit", month: "long" }).format(new Date())}
                         </p>
                     </div>
-                    <button
-                        type="button"
-                        onClick={() => setSearchOpen(true)}
-                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-white shadow-sm transition active:bg-[#f3f0ff]"
-                        aria-label="Buscar"
-                    >
-                        <SearchIcon />
-                    </button>
+                    <div className="flex shrink-0 items-center gap-2">
+                        {userPermissions.canSeeSubscriptions ? <HeaderSubscriptionBadge status={subscriptionStatus} /> : null}
+                        <button
+                            type="button"
+                            onClick={() => setSearchOpen(true)}
+                            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-white shadow-sm transition active:bg-[#f3f0ff]"
+                            aria-label="Buscar"
+                        >
+                            <SearchIcon />
+                        </button>
+                    </div>
                 </div>
 
                 {/* STATS ROW */}
@@ -888,6 +893,29 @@ function EmptyState({ filter, search }: { filter: StatusFilter; search: string }
 }
 
 // ── ICONS ────────────────────────────────────────────────────────────────────
+
+function HeaderSubscriptionBadge({ status }: { status: VendorSubscriptionStatus }) {
+    const active = status === "active";
+    const loading = status === "loading";
+    return (
+        <span className={[
+            "inline-flex h-10 items-center gap-1.5 rounded-[13px] border px-2.5 text-[9px] font-black uppercase tracking-[0.06em] shadow-sm sm:text-[10px] sm:tracking-[0.08em]",
+            active
+                ? "border-emerald-100 bg-emerald-50 text-emerald-700"
+                : loading
+                  ? "border-slate-100 bg-white text-slate-400"
+                  : "border-rose-100 bg-rose-50 text-rose-600",
+        ].join(" ")}>
+            <span className={[
+                "h-1.5 w-1.5 rounded-full",
+                active ? "bg-emerald-500" : loading ? "bg-slate-300" : "bg-rose-400",
+                active ? "animate-pulse" : "",
+            ].join(" ")} />
+            <span className="sm:hidden">{active ? "Activa" : loading ? "..." : "Inactiva"}</span>
+            <span className="hidden sm:inline">{active ? "Suscripcion activa" : loading ? "Suscripcion" : "Suscripcion inactiva"}</span>
+        </span>
+    );
+}
 
 const ic = { fill: "none", stroke: "currentColor", strokeLinecap: "round" as const, strokeLinejoin: "round" as const, strokeWidth: 1.8 };
 

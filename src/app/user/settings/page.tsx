@@ -4,10 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { VendorPushPrompt } from "@/components/mobile/VendorPushPrompt";
 import { useAuth } from "@/features/auth/AuthProvider";
+import { useVendorSubscriptionStatus, type VendorSubscriptionStatus } from "@/features/subscriptions/useVendorSubscriptionStatus";
 
 export default function UserSettingsPage() {
     const { firebaseUser, profile, userPermissions, logout } = useAuth();
     const router = useRouter();
+    const subscriptionStatus = useVendorSubscriptionStatus(userPermissions.canSeeSubscriptions ? firebaseUser?.uid : null);
 
     async function handleLogout() {
         await logout();
@@ -32,6 +34,7 @@ export default function UserSettingsPage() {
                             title="Suscripciones"
                             body="Compra una ciudad disponible por Pix y activa tu campana de 5 dias."
                             tone="purple"
+                            status={subscriptionStatus}
                         />
                     ) : null}
                     <SettingsTile
@@ -64,7 +67,19 @@ export default function UserSettingsPage() {
     );
 }
 
-function SettingsTile({ href, title, body, tone }: { href: string; title: string; body: string; tone: "purple" | "blue" }) {
+function SettingsTile({
+    href,
+    title,
+    body,
+    tone,
+    status,
+}: {
+    href: string;
+    title: string;
+    body: string;
+    tone: "purple" | "blue";
+    status?: VendorSubscriptionStatus;
+}) {
     const cls = tone === "purple" ? "from-[#7c3aed] to-[#4f46e5]" : "from-[#2563eb] to-[#06b6d4]";
     return (
         <Link href={href} className="flex items-center gap-3 rounded-3xl border border-[#e8e7fb] bg-white p-4 shadow-[0_16px_38px_rgba(91,33,255,0.08)] active:scale-[0.99]">
@@ -72,10 +87,35 @@ function SettingsTile({ href, title, body, tone }: { href: string; title: string
                 {title.slice(0, 1)}
             </span>
             <span className="min-w-0 flex-1">
-                <span className="block text-[15px] font-black text-[#101936]">{title}</span>
+                <span className="flex flex-wrap items-center gap-2">
+                    <span className="block text-[15px] font-black text-[#101936]">{title}</span>
+                    {status ? <SubscriptionStatusPill status={status} /> : null}
+                </span>
                 <span className="mt-0.5 block text-[12px] font-semibold leading-snug text-[#66739a]">{body}</span>
             </span>
             <span className="text-[22px] font-black text-[#7c3aed]">›</span>
         </Link>
+    );
+}
+
+function SubscriptionStatusPill({ status }: { status: VendorSubscriptionStatus }) {
+    const active = status === "active";
+    const loading = status === "loading";
+    return (
+        <span className={[
+            "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] ring-1",
+            active
+                ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
+                : loading
+                  ? "bg-slate-50 text-slate-500 ring-slate-100"
+                  : "bg-rose-50 text-rose-600 ring-rose-100",
+        ].join(" ")}>
+            <span className={[
+                "h-1.5 w-1.5 rounded-full",
+                active ? "bg-emerald-500" : loading ? "bg-slate-300" : "bg-rose-400",
+                active ? "animate-pulse" : "",
+            ].join(" ")} />
+            {active ? "Activo" : loading ? "..." : "Inactivo"}
+        </span>
     );
 }
