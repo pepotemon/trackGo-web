@@ -1,5 +1,5 @@
 import { ResponseError } from "@/server/auth";
-import { calculateCycleEnd } from "@/server/subscriptions/plans";
+import { calculateAdsBudgetAllocation, calculateCycleEnd } from "@/server/subscriptions/plans";
 
 const GRAPH_VERSION = "v19.0";
 
@@ -110,7 +110,10 @@ export async function configureAndActivateCityCampaign({
 
     const start = new Date();
     const end = calculateCycleEnd(start, cycleDays);
-    const lifetimeBudget = Math.round(adsBudget * 100);
+    const budgetAllocation = calculateAdsBudgetAllocation(adsBudget, cycleDays);
+    if (budgetAllocation.dailyBudgetMinorUnits <= 0) {
+        throw new ResponseError("invalid_daily_budget", "El presupuesto diario para Meta debe ser mayor a cero.");
+    }
     const adsetId = adsetIds[0];
     const ads = await graphGet<{ data?: Array<{ id: string; name?: string; status?: string }> }>(`${adsetId}/ads`, {
         fields: "id,name,status",
@@ -120,7 +123,7 @@ export async function configureAndActivateCityCampaign({
 
     await graphPost(`${adsetId}`, {
         name: `TrackGo - ${cityName} - ${userId}`,
-        lifetime_budget: lifetimeBudget,
+        daily_budget: budgetAllocation.dailyBudgetMinorUnits,
         end_time: end.toISOString(),
         status: "ACTIVE",
     });
@@ -133,7 +136,12 @@ export async function configureAndActivateCityCampaign({
         adIds,
         startDate: start,
         endDate: end,
-        lifetimeBudget,
+        dailyBudget: budgetAllocation.dailyBudget,
+        operatingBudget: budgetAllocation.operatingBudget,
+        reservedBudget: budgetAllocation.reservedBudget,
+        totalBudget: budgetAllocation.totalBudget,
+        dailyBudgetMinorUnits: budgetAllocation.dailyBudgetMinorUnits,
+        reservePercent: budgetAllocation.reservePercent,
     };
 }
 

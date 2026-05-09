@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import { ResponseError } from "@/server/auth";
 import { adminDb } from "@/server/firebaseAdmin";
 import { createPixPayment, getMercadoPagoPayment } from "@/server/subscriptions/mercadoPago";
-import { calculateAdsBudget, calculateCycleEnd, getPlanAmount } from "@/server/subscriptions/plans";
+import { calculateAdsBudget, calculateAdsBudgetAllocation, calculateCycleEnd, getPlanAmount } from "@/server/subscriptions/plans";
 import { configureAndActivateCityCampaign, pauseCityCampaign } from "@/server/subscriptions/metaAds";
 import { sendPushToUser } from "@/server/push";
 import type { PixCheckoutResponse, SubscriptionPlanId } from "@/types/subscriptions";
@@ -294,6 +294,7 @@ export async function createPixSubscriptionCheckout(input: {
     const amount = getPlanAmount(input.plan, input.customAmount);
     const settings = await getSubscriptionSettings();
     const adsBudget = calculateAdsBudget(amount, settings.adsShare);
+    const budgetAllocation = calculateAdsBudgetAllocation(adsBudget, settings.cycleDays);
     const checkoutRef = adminDb.collection("subscriptionCheckouts").doc(checkoutId);
     const cityRef = adminDb.collection("cities").doc(input.cityId);
     const reservationExpiresAt = nowMs() + RESERVATION_TTL_MS;
@@ -358,6 +359,11 @@ export async function createPixSubscriptionCheckout(input: {
             plan: input.plan,
             amount,
             adsBudget,
+            dailyBudget: budgetAllocation.dailyBudget,
+            operatingBudget: budgetAllocation.operatingBudget,
+            reservedBudget: budgetAllocation.reservedBudget,
+            totalBudget: budgetAllocation.totalBudget,
+            reservePercent: budgetAllocation.reservePercent,
             adsShare: settings.adsShare,
             cycleDays: settings.cycleDays,
             paymentId: "",
@@ -658,7 +664,11 @@ export async function processMercadoPagoPayment(paymentId: string) {
                     campaignId: campaign.campaignId,
                     adsetIds: campaign.adsetIds,
                     adIds: campaign.adIds,
-                    lifetimeBudget: campaign.lifetimeBudget,
+                    dailyBudget: campaign.dailyBudget,
+                    operatingBudget: campaign.operatingBudget,
+                    reservedBudget: campaign.reservedBudget,
+                    totalBudget: campaign.totalBudget,
+                    reservePercent: campaign.reservePercent,
                     startDate: Timestamp.fromDate(campaign.startDate),
                     endDate: Timestamp.fromDate(campaign.endDate),
                     updatedAt: nowMs(),
@@ -669,6 +679,11 @@ export async function processMercadoPagoPayment(paymentId: string) {
                 {
                     activationStatus: "active",
                     campaignId: campaign.campaignId,
+                    dailyBudget: campaign.dailyBudget,
+                    operatingBudget: campaign.operatingBudget,
+                    reservedBudget: campaign.reservedBudget,
+                    totalBudget: campaign.totalBudget,
+                    reservePercent: campaign.reservePercent,
                     updatedAt: nowMs(),
                 },
                 { merge: true },
@@ -786,7 +801,11 @@ export async function retryMetaActivation(checkoutId: string) {
                     campaignId: campaign.campaignId,
                     adsetIds: campaign.adsetIds,
                     adIds: campaign.adIds,
-                    lifetimeBudget: campaign.lifetimeBudget,
+                    dailyBudget: campaign.dailyBudget,
+                    operatingBudget: campaign.operatingBudget,
+                    reservedBudget: campaign.reservedBudget,
+                    totalBudget: campaign.totalBudget,
+                    reservePercent: campaign.reservePercent,
                     startDate: Timestamp.fromDate(campaign.startDate),
                     endDate: Timestamp.fromDate(campaign.endDate),
                     updatedAt: nowMs(),
@@ -798,6 +817,11 @@ export async function retryMetaActivation(checkoutId: string) {
                 {
                     activationStatus: "active",
                     campaignId: campaign.campaignId,
+                    dailyBudget: campaign.dailyBudget,
+                    operatingBudget: campaign.operatingBudget,
+                    reservedBudget: campaign.reservedBudget,
+                    totalBudget: campaign.totalBudget,
+                    reservePercent: campaign.reservePercent,
                     updatedAt: nowMs(),
                 },
                 { merge: true },
