@@ -611,6 +611,22 @@ service cloud.firestore {
     }
 
     // -------------------------
+    // SUBSCRIPTIONS
+    // -------------------------
+    match /subscriptions/{subscriptionId} {
+      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      allow write: if false;
+    }
+
+    // -------------------------
+    // SUBSCRIPTION CHECKOUTS
+    // -------------------------
+    match /subscriptionCheckouts/{checkoutId} {
+      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      allow write: if false;
+    }
+
+    // -------------------------
     // AUTO ASSIGN LOGS
     // -------------------------
     match /autoAssignLogs/{logId} {

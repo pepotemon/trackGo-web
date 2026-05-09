@@ -413,7 +413,7 @@ function isAdminRouteAllowed(pathname: string, permissions: AdminPermissions) {
 }
 
 function MobileBottomNav({ pathname, onLogout, navItems }: { pathname: string; onLogout: () => void; navItems: { href: string; label: string; icon: NavIconName }[] }) {
-    const [swipeState, setSwipeState] = useState<"none" | "logout" | "home">("none");
+    const [swipeState, setSwipeState] = useState<"none" | "logout">("none");
     const touchStartX = useRef(0);
 
     useEffect(() => { setSwipeState("none"); }, [pathname]);
@@ -430,14 +430,10 @@ function MobileBottomNav({ pathname, onLogout, navItems }: { pathname: string; o
     function handleTouchEnd(e: React.TouchEvent) {
         const dx = (e.changedTouches[0]?.clientX ?? 0) - touchStartX.current;
         if (dx < -55) setSwipeState("logout");
-        else if (dx > 55) setSwipeState(pathname !== "/admin" ? "home" : "none");
         else setSwipeState("none");
     }
 
-    const translateClass =
-        swipeState === "logout" ? "-translate-x-[72px]" :
-        swipeState === "home"   ? "translate-x-[72px]" :
-        "translate-x-0";
+    const translateClass = swipeState === "logout" ? "-translate-x-[72px]" : "translate-x-0";
 
     return (
         <nav
@@ -446,20 +442,6 @@ function MobileBottomNav({ pathname, onLogout, navItems }: { pathname: string; o
             onTouchEnd={handleTouchEnd}
         >
             <div className="relative mx-auto max-w-md overflow-hidden">
-                {/* Home — revealed on swipe right */}
-                {swipeState === "home" ? (
-                    <Link
-                        href="/admin"
-                        onClick={() => setSwipeState("none")}
-                        className="absolute bottom-0 left-0 top-0 flex w-[68px] flex-col items-center justify-center gap-0.5 bg-violet-50 pb-1 pt-2.5 text-[10px] font-black text-violet-600 transition active:bg-violet-100"
-                    >
-                        <span className="flex h-9 w-9 items-center justify-center rounded-[14px] bg-violet-100">
-                            <NavIcon name="dashboard" size="md" />
-                        </span>
-                        <span className="leading-none">Inicio</span>
-                    </Link>
-                ) : null}
-
                 <div className={[`grid ${colsClass} transition-transform duration-300`, translateClass].join(" ")}>
                     {navItems.map((item) => {
                         const active = item.href === "/admin"
