@@ -90,8 +90,8 @@ export async function configureAndActivateCityCampaign({
     cycleDays?: number;
 }) {
     const campaign = await validateMetaCampaign(campaignId);
-    const adsets = await graphGet<{ data?: Array<{ id: string; name?: string; status?: string }> }>(`${campaign.id}/adsets`, {
-        fields: "id,name,status",
+    const adsets = await graphGet<{ data?: Array<{ id: string; name?: string; status?: string; daily_budget?: string; lifetime_budget?: string }> }>(`${campaign.id}/adsets`, {
+        fields: "id,name,status,daily_budget,lifetime_budget",
         limit: "50",
     });
 
@@ -111,10 +111,12 @@ export async function configureAndActivateCityCampaign({
     const start = new Date();
     const end = calculateCycleEnd(start, cycleDays);
     const budgetAllocation = calculateAdsBudgetAllocation(adsBudget, cycleDays);
-    if (budgetAllocation.dailyBudgetMinorUnits <= 0) {
-        throw new ResponseError("invalid_daily_budget", "El presupuesto diario para Meta debe ser mayor a cero.");
+    if (budgetAllocation.operatingBudgetMinorUnits <= 0) {
+        throw new ResponseError("invalid_ads_budget", "El presupuesto operativo para Meta debe ser mayor a cero.");
     }
     const adsetId = adsetIds[0];
+    const adset = adsets.data?.find((item) => item.id === adsetId);
+    const usesDailyBudget = Number(adset?.daily_budget || 0) > 0 && Number(adset?.lifetime_budget || 0) <= 0;
     const ads = await graphGet<{ data?: Array<{ id: string; name?: string; status?: string }> }>(`${adsetId}/ads`, {
         fields: "id,name,status",
         limit: "50",
@@ -123,7 +125,9 @@ export async function configureAndActivateCityCampaign({
 
     await graphPost(`${adsetId}`, {
         name: `TrackGo - ${cityName} - ${userId}`,
-        daily_budget: budgetAllocation.dailyBudgetMinorUnits,
+        ...(usesDailyBudget
+            ? { daily_budget: budgetAllocation.dailyBudgetMinorUnits }
+            : { lifetime_budget: budgetAllocation.operatingBudgetMinorUnits }),
         end_time: end.toISOString(),
         status: "ACTIVE",
     });
@@ -141,6 +145,8 @@ export async function configureAndActivateCityCampaign({
         reservedBudget: budgetAllocation.reservedBudget,
         totalBudget: budgetAllocation.totalBudget,
         dailyBudgetMinorUnits: budgetAllocation.dailyBudgetMinorUnits,
+        lifetimeBudget: usesDailyBudget ? null : budgetAllocation.operatingBudgetMinorUnits,
+        budgetMode: usesDailyBudget ? "daily" : "lifetime",
         reservePercent: budgetAllocation.reservePercent,
     };
 }
