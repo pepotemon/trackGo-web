@@ -413,13 +413,15 @@ function isAdminRouteAllowed(pathname: string, permissions: AdminPermissions) {
 }
 
 function MobileBottomNav({ pathname, onLogout, navItems }: { pathname: string; onLogout: () => void; navItems: { href: string; label: string; icon: NavIconName }[] }) {
-    const [logoutVisible, setLogoutVisible] = useState(false);
+    const [swipeState, setSwipeState] = useState<"none" | "logout" | "home">("none");
     const touchStartX = useRef(0);
+
+    useEffect(() => { setSwipeState("none"); }, [pathname]);
 
     if (isDetailPage(pathname)) return null;
     if (navItems.length === 0) return null;
 
-    const colsClass = (["grid-cols-1", "grid-cols-2", "grid-cols-3", "grid-cols-4"] as const)[Math.min(navItems.length, 4) - 1] ?? "grid-cols-4";
+    const colsClass = (["grid-cols-1", "grid-cols-2", "grid-cols-3", "grid-cols-4", "grid-cols-5"] as const)[Math.min(navItems.length, 5) - 1] ?? "grid-cols-4";
 
     function handleTouchStart(e: React.TouchEvent) {
         touchStartX.current = e.touches[0]?.clientX ?? 0;
@@ -427,9 +429,15 @@ function MobileBottomNav({ pathname, onLogout, navItems }: { pathname: string; o
 
     function handleTouchEnd(e: React.TouchEvent) {
         const dx = (e.changedTouches[0]?.clientX ?? 0) - touchStartX.current;
-        if (dx < -55) setLogoutVisible(true);
-        if (dx > 55) setLogoutVisible(false);
+        if (dx < -55) setSwipeState("logout");
+        else if (dx > 55) setSwipeState(pathname !== "/admin" ? "home" : "none");
+        else setSwipeState("none");
     }
+
+    const translateClass =
+        swipeState === "logout" ? "-translate-x-[72px]" :
+        swipeState === "home"   ? "translate-x-[72px]" :
+        "translate-x-0";
 
     return (
         <nav
@@ -438,12 +446,21 @@ function MobileBottomNav({ pathname, onLogout, navItems }: { pathname: string; o
             onTouchEnd={handleTouchEnd}
         >
             <div className="relative mx-auto max-w-md overflow-hidden">
-                <div
-                    className={[
-                        `grid ${colsClass} transition-transform duration-300`,
-                        logoutVisible ? "-translate-x-[72px]" : "translate-x-0",
-                    ].join(" ")}
-                >
+                {/* Home — revealed on swipe right */}
+                {swipeState === "home" ? (
+                    <Link
+                        href="/admin"
+                        onClick={() => setSwipeState("none")}
+                        className="absolute bottom-0 left-0 top-0 flex w-[68px] flex-col items-center justify-center gap-0.5 bg-violet-50 pb-1 pt-2.5 text-[10px] font-black text-violet-600 transition active:bg-violet-100"
+                    >
+                        <span className="flex h-9 w-9 items-center justify-center rounded-[14px] bg-violet-100">
+                            <NavIcon name="dashboard" size="md" />
+                        </span>
+                        <span className="leading-none">Inicio</span>
+                    </Link>
+                ) : null}
+
+                <div className={[`grid ${colsClass} transition-transform duration-300`, translateClass].join(" ")}>
                     {navItems.map((item) => {
                         const active = item.href === "/admin"
                             ? pathname === "/admin"
@@ -453,6 +470,7 @@ function MobileBottomNav({ pathname, onLogout, navItems }: { pathname: string; o
                             <Link
                                 key={item.href}
                                 href={item.href}
+                                onClick={() => setSwipeState("none")}
                                 className={[
                                     "relative flex flex-col items-center justify-center gap-0.5 px-1 pb-1 pt-2.5 text-[10px] font-black transition-colors active:opacity-70",
                                     active ? "text-[#4f46e5]" : "text-[#98a2b3]",
@@ -461,12 +479,7 @@ function MobileBottomNav({ pathname, onLogout, navItems }: { pathname: string; o
                                 {active && (
                                     <span className="absolute inset-x-4 top-0 h-[3px] rounded-full bg-gradient-to-r from-[#7c3aed] to-[#4f46e5]" />
                                 )}
-                                <span
-                                    className={[
-                                        "flex h-9 w-9 items-center justify-center rounded-[14px] transition-colors",
-                                        active ? "bg-[#f3f0ff]" : "",
-                                    ].join(" ")}
-                                >
+                                <span className={["flex h-9 w-9 items-center justify-center rounded-[14px] transition-colors", active ? "bg-[#f3f0ff]" : ""].join(" ")}>
                                     <NavIcon name={item.icon} size="md" />
                                 </span>
                                 <span className="max-w-full truncate leading-none">{item.label}</span>
@@ -475,10 +488,11 @@ function MobileBottomNav({ pathname, onLogout, navItems }: { pathname: string; o
                     })}
                 </div>
 
-                {logoutVisible ? (
+                {/* Logout — revealed on swipe left */}
+                {swipeState === "logout" ? (
                     <button
                         type="button"
-                        onClick={() => { setLogoutVisible(false); onLogout(); }}
+                        onClick={() => { setSwipeState("none"); onLogout(); }}
                         className="absolute bottom-0 right-0 top-0 flex w-[68px] flex-col items-center justify-center gap-0.5 bg-red-50 pb-1 pt-2.5 text-[10px] font-black text-red-600 transition active:bg-red-100"
                     >
                         <span className="flex h-9 w-9 items-center justify-center rounded-[14px] bg-red-100">

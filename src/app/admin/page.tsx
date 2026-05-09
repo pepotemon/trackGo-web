@@ -110,7 +110,7 @@ function assignmentLeadTitle(log: AutoAssignLogDoc) {
 
 export default function AdminDashboardPage() {
     const permissions = usePermissions();
-    const { firebaseUser } = useAuth();
+    const { firebaseUser, profile, isSuperAdmin } = useAuth();
     const [snapshot, setSnapshot] = useState<AdminDashboardSnapshot>(EMPTY_SNAPSHOT);
     const [queueRange, setQueueRange] = useState<AdminDashboardRange>("today");
     const [loading, setLoading] = useState(true);
@@ -123,7 +123,11 @@ export default function AdminDashboardPage() {
         setErr(null);
 
         try {
-            const next = await getAdminDashboardSnapshot({ queueRange: range });
+            const next = await getAdminDashboardSnapshot({
+                queueRange: range,
+                adminId: profile?.id ?? null,
+                isSuperAdmin,
+            });
             setSnapshot(next);
         } catch (error) {
             setErr(error instanceof Error ? error.message : "No se pudo cargar el dashboard.");
@@ -173,7 +177,7 @@ export default function AdminDashboardPage() {
                         <svg viewBox="0 0 24 24" className={["h-3 w-3 shrink-0", loading ? "tg-spin" : ""].join(" ")} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
                             <path d="M21 12a9 9 0 1 1-3.1-6.8" />
                         </svg>
-                        {loading ? "Actualizando…" : "Actualizar"}
+                        {loading ? "Actualizando..." : "Actualizar"}
                     </button>
                 </div>
 
@@ -203,6 +207,9 @@ export default function AdminDashboardPage() {
                     ) : null}
                     {permissions.usersView ? (
                         <MobileActionCard href="/admin/settings/users" icon="users" label="Usuarios" tone="purple" />
+                    ) : null}
+                    {(permissions.subscriptionsView || permissions.subscriptionsEdit) ? (
+                        <MobileActionCard href="/admin/settings/subscriptions" icon="wallet" label="Suscripciones" tone="green" />
                     ) : null}
                     <MobileActionCard href="/admin/settings" icon="settings" label="Configuración" tone="slate" />
                 </div>
@@ -305,7 +312,7 @@ export default function AdminDashboardPage() {
                 <KpiCard label="Cola activa" value={snapshot.stats.queueTotal} caption="Sin asignar" icon="users" tone="blue" />
                 <KpiCard label="Por revisar" value={snapshot.stats.pendingReview} caption="Listos para validar" icon="lead" tone="purple" />
                 {permissions.assignmentsView ? (
-                    <KpiCard label="Asignaciones hoy" value={snapshot.stats.autoAssignmentsToday} caption="Auto-asignacion" icon="assign" tone="green" />
+                    <KpiCard label="Asignaciones hoy" value={snapshot.stats.autoAssignmentsToday} caption="Auto-asignación" icon="assign" tone="green" />
                 ) : null}
                 <KpiCard label="Usuarios activos" value={snapshot.stats.activeUsers} caption={`${snapshot.stats.autoAssignUsers} con auto ON`} icon="check" tone="orange" />
             </section>

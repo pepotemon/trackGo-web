@@ -1,15 +1,22 @@
 import {
     collection,
+    getDocs,
     getCountFromServer,
+    limit,
+    orderBy,
     query,
     where,
     type QueryConstraint,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { dayKeyFromDate, getAutoAssignLogPage } from "@/data/autoAssignLogsRepo";
+import {
+    dayKeyFromDate,
+    getAutoAssignLogPage,
+    normalizeAutoAssignLogDoc,
+} from "@/data/autoAssignLogsRepo";
 import { getLeadQueuePage } from "@/data/leadsRepo";
 import { listAdminUsers } from "@/data/usersRepo";
-import type { LeadReviewStatus } from "@/types/leads";
+import type { AutoAssignLogDoc, LeadReviewStatus } from "@/types/leads";
 import type { UserDoc } from "@/types/users";
 import type { AdminDashboardRange, AdminDashboardSnapshot } from "@/types/dashboard";
 
@@ -62,12 +69,155 @@ function hasNewInbound(lead: { lastInboundMessageAt?: number | null; adminQueueL
     return inbound > seen;
 }
 
+function chunk<T>(items: T[], size: number) {
+    const chunks: T[][] = [];
+    for (let i = 0; i < items.length; i += size) {
+        chunks.push(items.slice(i, i + size));
+    }
+    return chunks;
+}
+
+function getScopedUsers(users: UserDoc[], adminId?: string | null, isSuperAdmin = false) {
+    if (isSuperAdmin || !adminId) return users;
+    return users.filter((user) => user.sharedWith?.some((entry) => entry.adminId === adminId));
+}
+
+async function countTodayAssignmentsForUsers(dayKey: string, userIds: string[] | null) {
+    if (userIds === null) {
+        return countCollection("autoAssignLogs", [where("dayKey", "==", dayKey)]);
+    }
+
+    if (userIds.length === 0) return 0;
+
+    const counts = await Promise.all(
+        chunk(userIds, 10).map((ids) =>
+            countCollection("autoAssignLogs", [
+                where("dayKey", "==", dayKey),
+                where("userId", "in", ids),
+            ])
+        )
+    );
+
+    return counts.reduce((sum, count) => sum + count, 0);
+}
+
+async function getRecentAssignmentsForUsers(
+    dayKey: string,
+    userIds: string[] | null
+): Promise<AutoAssignLogDoc[]> {
+    if (userIds === null) {
+        return (await getAutoAssignLogPage({ pageSize: 8, startKey: dayKey, endKey: dayKey })).items;
+    }
+
+    if (userIds.length === 0) return [];
+
+    const snapshots = await Promise.all(
+        chunk(userIds, 10).map((ids) =>
+            getDocs(query(
+                collection(db, "autoAssignLogs"),
+                where("dayKey", "==", dayKey),
+                where("userId", "in", ids),
+                limit(80)
+            ))
+        )
+    );
+
+    return snapshots
+        .flatMap((snap) => snap.docs.map((doc) => normalizeAutoAssignLogDoc(doc.id, doc.data())))
+        .sort((a, b) => Number(b.createdAt ?? 0) - Number(a.createdAt ?? 0))
+        .slice(0, 8);
+}
+
+export type MonthlyChartPoint = {
+    day: string;
+    dayNum: number;
+    assignments: number;
+    visits: number;
+};
+
+export type MonthlyChartData = {
+    points: MonthlyChartPoint[];
+    totalAssignments: number;
+    totalVisits: number;
+    totalRevenue: number;
+};
+
+export async function getMonthlyChartData(
+    startKey: string,
+    endKey: string
+): Promise<MonthlyChartData> {
+    const [logsSnap, eventsSnap] = await Promise.all([
+        getDocs(query(
+            collection(db, "autoAssignLogs"),
+            where("dayKey", ">=", startKey),
+            where("dayKey", "<=", endKey),
+            orderBy("dayKey", "asc"),
+            limit(5000)
+        )),
+        getDocs(query(
+            collection(db, "dailyEvents"),
+            where("dayKey", ">=", startKey),
+            where("dayKey", "<=", endKey),
+            orderBy("dayKey", "asc"),
+            limit(20000)
+        )),
+    ]);
+
+    const assignsByDay = new Map<string, number>();
+    for (const d of logsSnap.docs) {
+        const key = String(d.data().dayKey ?? "");
+        if (key) assignsByDay.set(key, (assignsByDay.get(key) ?? 0) + 1);
+    }
+
+    const visitsByDay = new Map<string, number>();
+    let totalRevenue = 0;
+    for (const d of eventsSnap.docs) {
+        const data = d.data();
+        const key = String(data.dayKey ?? "");
+        const amount = typeof data.amount === "number" ? data.amount : 0;
+        if (key && data.type === "visited") {
+            visitsByDay.set(key, (visitsByDay.get(key) ?? 0) + 1);
+            totalRevenue += amount;
+        }
+    }
+
+    const points: MonthlyChartPoint[] = [];
+    const cur = new Date(startKey + "T12:00:00");
+    const end = new Date(endKey + "T12:00:00");
+    while (cur <= end) {
+        const key = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`;
+        points.push({
+            day: key,
+            dayNum: cur.getDate(),
+            assignments: assignsByDay.get(key) ?? 0,
+            visits: visitsByDay.get(key) ?? 0,
+        });
+        cur.setDate(cur.getDate() + 1);
+    }
+
+    return {
+        points,
+        totalAssignments: points.reduce((s, p) => s + p.assignments, 0),
+        totalVisits: points.reduce((s, p) => s + p.visits, 0),
+        totalRevenue,
+    };
+}
+
 export async function getAdminDashboardSnapshot({
     queueRange = "all",
+    adminId = null,
+    isSuperAdmin = false,
 }: {
     queueRange?: AdminDashboardRange;
+    adminId?: string | null;
+    isSuperAdmin?: boolean;
 } = {}): Promise<AdminDashboardSnapshot> {
     const todayKey = dayKeyFromDate(new Date());
+    const users = await listAdminUsers();
+    const scopedUsers = getScopedUsers(users, adminId, isSuperAdmin);
+    const scopedAssignableUserIds = isSuperAdmin || !adminId
+        ? null
+        : scopedUsers.filter((user) => user.role === "user").map((user) => user.id);
 
     const [
         pendingReview,
@@ -76,8 +226,7 @@ export async function getAdminDashboardSnapshot({
         outOfCoverage,
         autoAssignmentsToday,
         queuePage,
-        assignmentPage,
-        users,
+        recentAssignments,
         rangeIncomplete,
         rangeNotSuitable,
         rangeOutOfCoverage,
@@ -103,12 +252,9 @@ export async function getAdminDashboardSnapshot({
             where("verificationStatus", "in", QUEUE_STATUSES),
             where("geoOutOfCoverage", "==", true),
         ]),
-        countCollection("autoAssignLogs", [
-            where("dayKey", "==", todayKey),
-        ]),
+        countTodayAssignmentsForUsers(todayKey, scopedAssignableUserIds),
         getLeadQueuePage({ pageSize: 8, statuses: QUEUE_STATUSES }),
-        getAutoAssignLogPage({ pageSize: 8, startKey: todayKey, endKey: todayKey }),
-        listAdminUsers(),
+        getRecentAssignmentsForUsers(todayKey, scopedAssignableUserIds),
         countCollection("clients", withUpdatedAtRange([
             where("source", "==", "whatsapp_meta"),
             where("assignedTo", "==", ""),
@@ -127,7 +273,7 @@ export async function getAdminDashboardSnapshot({
         ], queueRange)),
     ]);
 
-    const activeUsers = users.filter((user) => user.active);
+    const activeUsers = scopedUsers.filter((user) => user.active);
     const assignableUsers = activeUsers.filter((user) => user.role === "user");
 
     return {
@@ -150,6 +296,6 @@ export async function getAdminDashboardSnapshot({
         },
         queueRange,
         recentLeads: queuePage.items,
-        recentAssignments: assignmentPage.items,
+        recentAssignments,
     };
 }
