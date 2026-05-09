@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { TrackGoLogo } from "@/components/brand/TrackGoLogo";
 import { PullToRefresh } from "@/components/mobile/PullToRefresh";
@@ -23,9 +23,6 @@ export default function UserLayout({ children }: { children: ReactNode }) {
     const router = useRouter();
     const pathname = usePathname();
     const { firebaseUser, profile, isUser, loading, logout, userPermissions } = useAuth();
-    const [logoutVisible, setLogoutVisible] = useState(false);
-    const bottomNavTouchX = useRef(0);
-
     const MOBILE_NAV = BASE_NAV.filter((item) =>
         !item.permKey || userPermissions[item.permKey]
     );
@@ -33,22 +30,12 @@ export default function UserLayout({ children }: { children: ReactNode }) {
     useEffect(() => {
         if (loading) return;
         if (!firebaseUser) { router.replace("/login"); return; }
-        if (!isUser) { router.replace(profile?.role === "admin" ? "/admin/accounting" : "/no-access"); }
+        if (!isUser) { router.replace(profile?.role === "admin" ? "/admin" : "/no-access"); }
     }, [firebaseUser, isUser, loading, profile, router]);
 
     async function handleLogout() {
         await logout();
         router.replace("/login");
-    }
-
-    function onBottomNavTouchStart(e: React.TouchEvent) {
-        bottomNavTouchX.current = e.touches[0]?.clientX ?? 0;
-    }
-
-    function onBottomNavTouchEnd(e: React.TouchEvent) {
-        const dx = (e.changedTouches[0]?.clientX ?? 0) - bottomNavTouchX.current;
-        if (dx < -55) setLogoutVisible(true);
-        if (dx > 55) setLogoutVisible(false);
     }
 
     if (loading) {
@@ -135,16 +122,9 @@ export default function UserLayout({ children }: { children: ReactNode }) {
                 </main>
 
                 {/* ── MOBILE BOTTOM NAV ───────────────────────────────── */}
-                <nav
-                    className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#e8e7fb] bg-white/95 px-2 pb-[max(env(safe-area-inset-bottom),0.65rem)] pt-1 shadow-[0_-20px_56px_rgba(82,63,169,0.15)] backdrop-blur-xl xl:hidden"
-                    onTouchStart={onBottomNavTouchStart}
-                    onTouchEnd={onBottomNavTouchEnd}
-                >
-                    <div className="relative mx-auto max-w-md overflow-hidden">
-                        <div className={[
-                            `grid ${colsClass} transition-transform duration-300`,
-                            logoutVisible ? "-translate-x-[72px]" : "translate-x-0",
-                        ].join(" ")}>
+                <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#e8e7fb] bg-white/95 px-2 pb-[max(env(safe-area-inset-bottom),0.65rem)] pt-1 shadow-[0_-20px_56px_rgba(82,63,169,0.15)] backdrop-blur-xl xl:hidden">
+                    <div className="mx-auto max-w-md">
+                        <div className={`grid ${colsClass}`}>
                             {MOBILE_NAV.map((item) => {
                                 const active = pathname === item.href || pathname.startsWith(item.href);
                                 return (
@@ -170,19 +150,6 @@ export default function UserLayout({ children }: { children: ReactNode }) {
                                 );
                             })}
                         </div>
-
-                        {logoutVisible ? (
-                            <button
-                                type="button"
-                                onClick={() => { setLogoutVisible(false); handleLogout(); }}
-                                className="absolute bottom-0 right-0 top-0 flex w-[68px] flex-col items-center justify-center gap-0.5 bg-red-50 pb-1 pt-2.5 text-[10px] font-black text-red-600 transition active:bg-red-100"
-                            >
-                                <span className="flex h-9 w-9 items-center justify-center rounded-[14px] bg-red-100">
-                                    <NavIcon name="logOut" size="md" />
-                                </span>
-                                <span className="leading-none">Salir</span>
-                            </button>
-                        ) : null}
                     </div>
                 </nav>
             </div>

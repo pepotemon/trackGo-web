@@ -1,12 +1,21 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AppIcon } from "@/components/ui/AppIcon";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { useAuth } from "@/features/auth/AuthProvider";
 import { usePermissions } from "@/features/auth/usePermissions";
 
 export default function AdminSettingsPage() {
     const permissions = usePermissions();
+    const { logout } = useAuth();
+    const router = useRouter();
+
+    async function handleLogout() {
+        await logout();
+        router.replace("/login");
+    }
 
     const items: Array<{ href: string; title: string; body: string; icon: "users" | "wallet" | "alert"; tone: "purple" | "blue"; visible: boolean }> = [
         {
@@ -77,6 +86,21 @@ export default function AdminSettingsPage() {
                     </p>
                 </section>
             ) : null}
+
+            <section>
+                <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="flex h-12 w-full items-center justify-center gap-2 rounded-3xl border border-red-200 bg-red-50 text-[14px] font-black text-red-600 shadow-sm transition active:scale-[0.99] active:bg-red-100"
+                >
+                    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}>
+                        <path d="M10 17l5-5-5-5" />
+                        <path d="M15 12H3" />
+                        <path d="M21 19V5a2 2 0 0 0-2-2h-6" />
+                    </svg>
+                    Cerrar sesión
+                </button>
+            </section>
         </main>
     );
 }

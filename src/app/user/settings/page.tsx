@@ -1,11 +1,18 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { VendorPushPrompt } from "@/components/mobile/VendorPushPrompt";
 import { useAuth } from "@/features/auth/AuthProvider";
 
 export default function UserSettingsPage() {
-    const { firebaseUser, profile, userPermissions } = useAuth();
+    const { firebaseUser, profile, userPermissions, logout } = useAuth();
+    const router = useRouter();
+
+    async function handleLogout() {
+        await logout();
+        router.replace("/login");
+    }
     const name = profile?.name || firebaseUser?.email || "Vendedor";
 
     return (
@@ -39,6 +46,19 @@ export default function UserSettingsPage() {
                     <p className="text-[13px] font-black">Cuenta</p>
                     <p className="mt-1 text-[12px] font-semibold text-[#66739a]">{firebaseUser?.email || "Sin correo"}</p>
                 </div>
+
+                <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="flex h-12 w-full items-center justify-center gap-2 rounded-3xl border border-red-200 bg-red-50 text-[14px] font-black text-red-600 shadow-sm transition active:scale-[0.99] active:bg-red-100"
+                >
+                    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}>
+                        <path d="M10 17l5-5-5-5" />
+                        <path d="M15 12H3" />
+                        <path d="M21 19V5a2 2 0 0 0-2-2h-6" />
+                    </svg>
+                    Cerrar sesión
+                </button>
             </section>
         </main>
     );

@@ -170,7 +170,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                     {children}
                 </main>
 
-                <MobileBottomNav pathname={pathname} onLogout={handleLogout} navItems={visibleMobileNav} />
+                <MobileBottomNav pathname={pathname} navItems={visibleMobileNav} />
             </div>
         </div>
     );
@@ -412,37 +412,16 @@ function isAdminRouteAllowed(pathname: string, permissions: AdminPermissions) {
     return false;
 }
 
-function MobileBottomNav({ pathname, onLogout, navItems }: { pathname: string; onLogout: () => void; navItems: { href: string; label: string; icon: NavIconName }[] }) {
-    const [swipeState, setSwipeState] = useState<"none" | "logout">("none");
-    const touchStartX = useRef(0);
-
-    useEffect(() => { setSwipeState("none"); }, [pathname]);
-
+function MobileBottomNav({ pathname, navItems }: { pathname: string; navItems: { href: string; label: string; icon: NavIconName }[] }) {
     if (isDetailPage(pathname)) return null;
     if (navItems.length === 0) return null;
 
     const colsClass = (["grid-cols-1", "grid-cols-2", "grid-cols-3", "grid-cols-4", "grid-cols-5"] as const)[Math.min(navItems.length, 5) - 1] ?? "grid-cols-4";
 
-    function handleTouchStart(e: React.TouchEvent) {
-        touchStartX.current = e.touches[0]?.clientX ?? 0;
-    }
-
-    function handleTouchEnd(e: React.TouchEvent) {
-        const dx = (e.changedTouches[0]?.clientX ?? 0) - touchStartX.current;
-        if (dx < -55) setSwipeState("logout");
-        else setSwipeState("none");
-    }
-
-    const translateClass = swipeState === "logout" ? "-translate-x-[72px]" : "translate-x-0";
-
     return (
-        <nav
-            className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#e8e7fb] bg-white/95 px-2 pb-[max(env(safe-area-inset-bottom),0.65rem)] pt-1 shadow-[0_-20px_56px_rgba(82,63,169,0.15)] backdrop-blur-xl xl:hidden"
-            onTouchStart={handleTouchStart}
-            onTouchEnd={handleTouchEnd}
-        >
-            <div className="relative mx-auto max-w-md overflow-hidden">
-                <div className={[`grid ${colsClass} transition-transform duration-300`, translateClass].join(" ")}>
+        <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#e8e7fb] bg-white/95 px-2 pb-[max(env(safe-area-inset-bottom),0.65rem)] pt-1 shadow-[0_-20px_56px_rgba(82,63,169,0.15)] backdrop-blur-xl xl:hidden">
+            <div className="mx-auto max-w-md">
+                <div className={`grid ${colsClass}`}>
                     {navItems.map((item) => {
                         const active = item.href === "/admin"
                             ? pathname === "/admin"
@@ -452,7 +431,6 @@ function MobileBottomNav({ pathname, onLogout, navItems }: { pathname: string; o
                             <Link
                                 key={item.href}
                                 href={item.href}
-                                onClick={() => setSwipeState("none")}
                                 className={[
                                     "relative flex flex-col items-center justify-center gap-0.5 px-1 pb-1 pt-2.5 text-[10px] font-black transition-colors active:opacity-70",
                                     active ? "text-[#4f46e5]" : "text-[#98a2b3]",
@@ -469,20 +447,6 @@ function MobileBottomNav({ pathname, onLogout, navItems }: { pathname: string; o
                         );
                     })}
                 </div>
-
-                {/* Logout — revealed on swipe left */}
-                {swipeState === "logout" ? (
-                    <button
-                        type="button"
-                        onClick={() => { setSwipeState("none"); onLogout(); }}
-                        className="absolute bottom-0 right-0 top-0 flex w-[68px] flex-col items-center justify-center gap-0.5 bg-red-50 pb-1 pt-2.5 text-[10px] font-black text-red-600 transition active:bg-red-100"
-                    >
-                        <span className="flex h-9 w-9 items-center justify-center rounded-[14px] bg-red-100">
-                            <NavIcon name="logOut" size="md" />
-                        </span>
-                        <span className="leading-none">Salir</span>
-                    </button>
-                ) : null}
             </div>
         </nav>
     );
