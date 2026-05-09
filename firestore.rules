@@ -614,7 +614,7 @@ service cloud.firestore {
     // SUBSCRIPTIONS
     // -------------------------
     match /subscriptions/{subscriptionId} {
-      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      allow read: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
       allow write: if false;
     }
 

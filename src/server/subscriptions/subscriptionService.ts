@@ -1050,6 +1050,16 @@ export async function releaseSubscriptionCity(cityId: string) {
                 },
                 { merge: true },
             );
+
+            tx.set(
+                adminDb.collection("subscriptionCheckouts").doc(freshSubscriptionId),
+                {
+                    activationStatus: "city_released",
+                    releasedAt: nowMs(),
+                    updatedAt: nowMs(),
+                },
+                { merge: true },
+            );
         }
 
         if (freshReservedCheckoutId) {

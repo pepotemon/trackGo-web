@@ -2,6 +2,8 @@ import type {
     AccountingSummary,
     AccountingUserRow,
     AccountingAssignmentDoc,
+    AccountingSubscriptionSummaryRow,
+    AccountingSubscriptionDoc,
     DailyEventDoc,
     UserDoc,
     WeeklyInvestmentDoc,
@@ -63,6 +65,44 @@ function getWeekSubscription(user: UserDoc | undefined, weekStartKey: string) {
         ),
         paid: true,
     };
+}
+
+function buildRealSubscriptionsByUser(subscriptions: AccountingSubscriptionDoc[]) {
+    const map = new Map<
+        string,
+        {
+            gross: number;
+            cost: number;
+            count: number;
+            cities: string[];
+        }
+    >();
+
+    for (const subscription of subscriptions) {
+        if (!subscription.userId) continue;
+
+        const current = map.get(subscription.userId) ?? {
+            gross: 0,
+            cost: 0,
+            count: 0,
+            cities: [],
+        };
+        const cost = subscription.operatingBudget > 0
+            ? subscription.operatingBudget
+            : subscription.adsBudget;
+        const city = String(subscription.city || subscription.cityId || "").trim();
+
+        map.set(subscription.userId, {
+            gross: clamp2(current.gross + subscription.amount),
+            cost: clamp2(current.cost + cost),
+            count: current.count + 1,
+            cities: city && !current.cities.includes(city)
+                ? [...current.cities, city]
+                : current.cities,
+        });
+    }
+
+    return map;
 }
 
 function getEventAmount(event: DailyEventDoc, user?: UserDoc) {
@@ -151,28 +191,64 @@ export function buildAccountingSummary(input: {
     users: UserDoc[];
     events: DailyEventDoc[];
     assignments: AccountingAssignmentDoc[];
+    subscriptions?: AccountingSubscriptionDoc[];
     investment: WeeklyInvestmentDoc | null;
 }): AccountingSummary {
     const usersById = new Map(input.users.map((u) => [u.id, u]));
     const investmentByUser = buildGroupAllocations(input.investment);
+    const realSubscriptionsByUser = buildRealSubscriptionsByUser(input.subscriptions ?? []);
 
     const rowsMap = new Map<string, AccountingUserRow>();
 
     let grossSubscriptions = 0;
     let subscriptionInvestment = 0;
     let subscriptionsPaid = 0;
+    const subscriptionRows: AccountingSubscriptionSummaryRow[] = [];
 
     for (const user of input.users) {
-        const billingMode = user.billingMode ?? "per_visit";
-        const isWeekly = billingMode === "weekly_subscription";
-        const subscription = isWeekly
+        const realSubscription = realSubscriptionsByUser.get(user.id);
+        const hasRealSubscription = Boolean(realSubscription && realSubscription.count > 0);
+        const configuredBillingMode = user.billingMode ?? "per_visit";
+        const billingMode = hasRealSubscription ? "weekly_subscription" : configuredBillingMode;
+        const legacySubscription = !hasRealSubscription && configuredBillingMode === "weekly_subscription"
             ? getWeekSubscription(user, input.startKey)
             : null;
+        const subscription = hasRealSubscription
+            ? {
+                gross: realSubscription?.gross ?? 0,
+                cost: realSubscription?.cost ?? 0,
+                paid: true,
+                source: "real" as const,
+                count: realSubscription?.count ?? 0,
+                cities: realSubscription?.cities ?? [],
+            }
+            : legacySubscription?.paid
+                ? {
+                    ...legacySubscription,
+                    source: "manual" as const,
+                    count: 1,
+                    cities: [],
+                }
+                : null;
 
         if (subscription?.paid) {
             grossSubscriptions = clamp2(grossSubscriptions + subscription.gross);
             subscriptionInvestment = clamp2(subscriptionInvestment + subscription.cost);
-            subscriptionsPaid += 1;
+            subscriptionsPaid += Math.max(1, subscription.count);
+
+            if (subscription.source === "manual") {
+                subscriptionRows.push({
+                    subscriptionId: `manual_${user.id}_${input.startKey}`,
+                    userId: user.id,
+                    userName: user.name || "Usuario",
+                    userEmail: user.email,
+                    amount: subscription.gross,
+                    cost: subscription.cost,
+                    real: clamp2(subscription.gross - subscription.cost),
+                    source: "manual",
+                    createdAt: null,
+                });
+            }
         }
 
         rowsMap.set(user.id, {
@@ -187,6 +263,9 @@ export function buildAccountingSummary(input: {
             cost: 0,
             real: 0,
             subscriptionPaid: subscription?.paid,
+            subscriptionSource: subscription?.source ?? "none",
+            subscriptionCount: subscription?.count ?? 0,
+            subscriptionCities: subscription?.cities ?? [],
         });
     }
 
@@ -236,8 +315,13 @@ export function buildAccountingSummary(input: {
     const rows = Array.from(rowsMap.values())
         .map((row) => {
             const user = usersById.get(row.userId);
-            const subscription =
-                row.billingMode === "weekly_subscription"
+            const realSubscription = realSubscriptionsByUser.get(row.userId);
+            const subscription = realSubscription
+                ? {
+                    cost: realSubscription.cost,
+                    paid: true,
+                }
+                : row.billingMode === "weekly_subscription"
                     ? getWeekSubscription(user, input.startKey)
                     : null;
 
@@ -255,6 +339,30 @@ export function buildAccountingSummary(input: {
             };
         })
         .sort((a, b) => b.real - a.real);
+
+    for (const subscription of input.subscriptions ?? []) {
+        const user = usersById.get(subscription.userId);
+        if (!user) continue;
+        const cost = subscription.operatingBudget > 0
+            ? subscription.operatingBudget
+            : subscription.adsBudget;
+
+        subscriptionRows.push({
+            subscriptionId: subscription.id,
+            userId: subscription.userId,
+            userName: user.name || "Usuario",
+            userEmail: user.email,
+            cityId: subscription.cityId,
+            city: subscription.city,
+            plan: subscription.plan,
+            status: subscription.status,
+            amount: clamp2(subscription.amount),
+            cost: clamp2(cost),
+            real: clamp2(subscription.amount - cost),
+            source: "real",
+            createdAt: subscription.createdAt,
+        });
+    }
 
     const gross = clamp2(rows.reduce((acc, row) => acc + row.gross, 0));
 
@@ -281,5 +389,6 @@ export function buildAccountingSummary(input: {
         real,
         roi,
         rows,
+        subscriptionRows: subscriptionRows.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0)),
     };
 }

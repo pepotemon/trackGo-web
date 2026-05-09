@@ -11,6 +11,7 @@ import {
     listInvestmentGroups,
     listAccountingUsers,
     listDailyEventsByRange,
+    listPaidSubscriptionsByRange,
     reopenWeeklyInvestment,
     updateDailyEventRate,
     updateWeeklySubscriptionPayment,
@@ -23,6 +24,7 @@ import { useCan } from "@/features/auth/usePermissions";
 import type {
     AccountingSummary,
     AccountingAssignmentDoc,
+    AccountingSubscriptionDoc,
     DailyEventDoc,
     InvestmentGroupDoc,
     UserDoc,
@@ -129,6 +131,37 @@ function subscriptionCaption(user: UserDoc) {
     return `Suscripcion - cuota ${money(subscriptionAmount(user))} / costo ${money(subscriptionCost(user))}`;
 }
 
+function subscriptionAccountingCost(subscription: AccountingSubscriptionDoc) {
+    return subscription.operatingBudget > 0 ? subscription.operatingBudget : subscription.adsBudget;
+}
+
+function summarizeSubscriptionsByUser(subscriptions: AccountingSubscriptionDoc[]) {
+    const map = new Map<string, {
+        gross: number;
+        cost: number;
+        count: number;
+        cities: string[];
+    }>();
+
+    for (const subscription of subscriptions) {
+        const current = map.get(subscription.userId) ?? {
+            gross: 0,
+            cost: 0,
+            count: 0,
+            cities: [],
+        };
+        const city = String(subscription.city || subscription.cityId || "").trim();
+        map.set(subscription.userId, {
+            gross: Math.round((current.gross + subscription.amount) * 100) / 100,
+            cost: Math.round((current.cost + subscriptionAccountingCost(subscription)) * 100) / 100,
+            count: current.count + 1,
+            cities: city && !current.cities.includes(city) ? [...current.cities, city] : current.cities,
+        });
+    }
+
+    return map;
+}
+
 function differs(a: number | null | undefined, b: number | null | undefined) {
     if (a == null && b == null) return false;
     return Math.abs(Number(a ?? 0) - Number(b ?? 0)) > 0.01;
@@ -162,7 +195,11 @@ function excelMoney(value: number) {
 function exportAccountingSheet(summary: AccountingSummary) {
     const rows = summary.rows
         .map((row) => {
-            const model = row.billingMode === "weekly_subscription" ? "Suscripcion" : "Por visita";
+            const model = row.subscriptionSource === "real"
+                ? "Suscripcion pagada"
+                : row.billingMode === "weekly_subscription"
+                    ? "Suscripcion"
+                    : "Por visita";
             const payment = row.billingMode === "weekly_subscription"
                 ? row.subscriptionPaid
                     ? "Pagada"
@@ -277,6 +314,7 @@ export default function AccountingPage() {
     const [users, setUsers] = useState<UserDoc[]>([]);
     const [events, setEvents] = useState<DailyEventDoc[]>([]);
     const [assignments, setAssignments] = useState<AccountingAssignmentDoc[]>([]);
+    const [subscriptions, setSubscriptions] = useState<AccountingSubscriptionDoc[]>([]);
     const [investment, setInvestment] = useState<WeeklyInvestmentDoc | null>(null);
     const [investmentGroups, setInvestmentGroups] = useState<InvestmentGroupDoc[]>([]);
     const [closeOpen, setCloseOpen] = useState(false);
@@ -301,12 +339,16 @@ export default function AccountingPage() {
                 const endOfWeek = new Date(week.endDate);
                 endOfWeek.setHours(23, 59, 59, 999);
 
-                const [u, ev, ass, inv, groupCatalog] = await Promise.all([
+                const [u, ev, ass, subs, inv, groupCatalog] = await Promise.all([
                     listAccountingUsers(),
                     listDailyEventsByRange(week.startKey, week.endKey),
                     listClientAssignmentsByRange({
                         startKey: week.startKey,
                         endKey: week.endKey,
+                        startMs: week.startDate.getTime(),
+                        endMs: endOfWeek.getTime(),
+                    }),
+                    listPaidSubscriptionsByRange({
                         startMs: week.startDate.getTime(),
                         endMs: endOfWeek.getTime(),
                     }),
@@ -334,6 +376,7 @@ export default function AccountingPage() {
                 setUsers(u);
                 setEvents(ev);
                 setAssignments(ass);
+                setSubscriptions(subs);
                 setInvestment(weeklyInvestment);
                 setInvestmentGroups(groupCatalog);
             } catch (e: unknown) {
@@ -382,9 +425,10 @@ export default function AccountingPage() {
             users: myUsers,
             events,
             assignments,
+            subscriptions,
             investment: myInvestment,
         });
-    }, [week.startKey, week.endKey, myUsers, events, assignments, myInvestment]);
+    }, [week.startKey, week.endKey, myUsers, events, assignments, subscriptions, myInvestment]);
 
     const miGanancia = useMemo(() => {
         if (!profile || !summary) return null;
@@ -532,6 +576,7 @@ export default function AccountingPage() {
                     summary={summary}
                     events={events}
                     assignments={assignments}
+                    subscriptions={subscriptions}
                     startDate={week.startDate}
                     endDate={week.endDate}
                     users={myUsers}
@@ -683,6 +728,7 @@ export default function AccountingPage() {
                                 weekStartKey={week.startKey}
                                 weekEndKey={week.endKey}
                                 users={myUsers}
+                                subscriptions={subscriptions}
                                 investment={myInvestment}
                                 investmentGroups={myInvestmentGroups}
                                 useCatalogDefaults={weekOffset === 0}
@@ -778,6 +824,7 @@ function MobileAccountingPage({
     summary,
     events,
     assignments,
+    subscriptions,
     startDate,
     endDate,
     users,
@@ -809,6 +856,7 @@ function MobileAccountingPage({
     summary: AccountingSummary | null;
     events: DailyEventDoc[];
     assignments: AccountingAssignmentDoc[];
+    subscriptions: AccountingSubscriptionDoc[];
     startDate: Date;
     endDate: Date;
     users: UserDoc[];
@@ -1033,6 +1081,7 @@ function MobileAccountingPage({
                                 weekStartKey={week.startKey}
                                 weekEndKey={week.endKey}
                                 users={users}
+                                subscriptions={subscriptions}
                                 investment={investment}
                                 investmentGroups={investmentGroups}
                                 useCatalogDefaults={weekOffset === 0}
@@ -1407,7 +1456,11 @@ function MobileAccountingUserRow({
                 <div className="min-w-0 flex-1">
                     <div className="truncate text-[13px] font-black text-[#101936]">{row.name}</div>
                     <div className="mt-0.5 truncate text-[11px] font-semibold text-[#66739A]">
-                        {row.billingMode === "weekly_subscription" ? "Suscripción semanal" : "Por visita"}
+                        {row.subscriptionSource === "real"
+                            ? "Suscripción pagada"
+                            : row.billingMode === "weekly_subscription"
+                                ? "Suscripción manual"
+                                : "Por visita"}
                     </div>
                 </div>
                 <div className={[
@@ -1472,6 +1525,7 @@ function InvestmentContent({
     weekStartKey,
     weekEndKey,
     users,
+    subscriptions,
     investment,
     investmentGroups,
     useCatalogDefaults,
@@ -1486,6 +1540,7 @@ function InvestmentContent({
     weekStartKey: string;
     weekEndKey: string;
     users: UserDoc[];
+    subscriptions: AccountingSubscriptionDoc[];
     investment: WeeklyInvestmentDoc | null;
     investmentGroups: InvestmentGroupDoc[];
     useCatalogDefaults: boolean;
@@ -1529,29 +1584,47 @@ function InvestmentContent({
         () => activeGroups.reduce((sum, group) => sum + group.amount, 0),
         [activeGroups]
     );
+    const visibleUserIds = useMemo(() => new Set(users.map((user) => user.id)), [users]);
+    const realSubscriptions = useMemo(
+        () => subscriptions.filter((subscription) => visibleUserIds.has(subscription.userId)),
+        [subscriptions, visibleUserIds]
+    );
+    const realSubscriptionsByUser = useMemo(
+        () => summarizeSubscriptionsByUser(realSubscriptions),
+        [realSubscriptions]
+    );
     const subscriptionRows = useMemo(
-        () => users.filter((user) => user.billingMode === "weekly_subscription"),
-        [users]
+        () => users.filter((user) => user.billingMode === "weekly_subscription" || realSubscriptionsByUser.has(user.id)),
+        [users, realSubscriptionsByUser]
     );
     const paidSubscriptionRows = useMemo(
         () =>
             subscriptionRows.filter(
-                (user) => user.weeklySubscriptionWeeks?.[weekStartKey]?.paid === true
+                (user) =>
+                    realSubscriptionsByUser.has(user.id) ||
+                    user.weeklySubscriptionWeeks?.[weekStartKey]?.paid === true
             ),
-        [subscriptionRows, weekStartKey]
+        [subscriptionRows, weekStartKey, realSubscriptionsByUser]
     );
     const subscriptionInvestment = paidSubscriptionRows.reduce(
-        (sum, user) =>
-            sum + safeNumber(
-                user.weeklySubscriptionWeeks?.[weekStartKey]?.cost,
-                subscriptionCost(user)
-            ),
+        (sum, user) => {
+            const real = realSubscriptionsByUser.get(user.id);
+            if (real) return sum + real.cost;
+            return sum + safeNumber(
+                    user.weeklySubscriptionWeeks?.[weekStartKey]?.cost,
+                    subscriptionCost(user)
+                );
+        },
         0
     );
     const perVisitUsersWithVisits = useMemo(() => {
         const visitedUserIds = new Set(events.filter((event) => event.type === "visited").map((event) => event.userId));
-        return users.filter((user) => user.billingMode !== "weekly_subscription" && visitedUserIds.has(user.id));
-    }, [events, users]);
+        return users.filter((user) =>
+            user.billingMode !== "weekly_subscription" &&
+            !realSubscriptionsByUser.has(user.id) &&
+            visitedUserIds.has(user.id)
+        );
+    }, [events, users, realSubscriptionsByUser]);
     const totalInvestment = Math.round((subscriptionInvestment + assigned + manualAdjustment) * 100) / 100;
     const assignedPct = totalInvestment > 0 ? Math.min(100, Math.round((assigned / totalInvestment) * 100)) : 0;
 
@@ -1761,16 +1834,22 @@ function InvestmentContent({
             <Card className="overflow-hidden">
                 <CardHeader
                     title="Suscripciones"
-                    subtitle="Usuarios con modelo semanal. Solo las activas cuentan en inversion e ingresos."
+                    subtitle="Pagos reales del portal de suscripciones. Los controles manuales quedan como ajuste de soporte."
                 />
 
                 <div className="border-t border-[#eef1f5] p-4">
                     {subscriptionRows.length ? (
                         <div className="grid gap-2 xl:grid-cols-2">
                             {subscriptionRows.map((user) => {
-                                const paid = user.weeklySubscriptionWeeks?.[weekStartKey]?.paid === true;
-                                const weekAmount = user.weeklySubscriptionWeeks?.[weekStartKey]?.amount ?? subscriptionAmount(user);
-                                const weekCost = user.weeklySubscriptionWeeks?.[weekStartKey]?.cost ?? subscriptionCost(user);
+                                const real = realSubscriptionsByUser.get(user.id);
+                                const paid = Boolean(real) || user.weeklySubscriptionWeeks?.[weekStartKey]?.paid === true;
+                                const weekAmount = real?.gross ?? user.weeklySubscriptionWeeks?.[weekStartKey]?.amount ?? subscriptionAmount(user);
+                                const weekCost = real?.cost ?? user.weeklySubscriptionWeeks?.[weekStartKey]?.cost ?? subscriptionCost(user);
+                                const sourceLabel = real
+                                    ? `${real.count} pago${real.count === 1 ? "" : "s"} real${real.count === 1 ? "" : "es"}${real.cities.length ? ` · ${real.cities.join(", ")}` : ""}`
+                                    : paid
+                                        ? "Ajuste manual"
+                                        : "Sin pago real";
                                 return (
                                     <div
                                         key={user.id}
@@ -1783,14 +1862,17 @@ function InvestmentContent({
                                             <div className="mt-0.5 text-[11px] font-medium text-[#667085]">
                                                 Cuota {money(weekAmount)} / costo {money(weekCost)}
                                             </div>
+                                            <div className="mt-0.5 truncate text-[10px] font-bold text-[#98a2b3]">
+                                                {sourceLabel}
+                                            </div>
                                         </div>
                                         <div className="flex items-center justify-between gap-2 sm:justify-end">
-                                            <Badge tone={paid ? "green" : "yellow"}>
-                                                {paid ? "Activa" : "Inactiva"}
+                                            <Badge tone={real ? "green" : paid ? "yellow" : "yellow"}>
+                                                {real ? "Pago real" : paid ? "Manual" : "Inactiva"}
                                             </Badge>
                                             <SubscriptionSwitch
                                                 checked={paid}
-                                                disabled={isClosed}
+                                                disabled={isClosed || Boolean(real)}
                                                 onChange={() => onToggleSubscriptionPayment(user)}
                                             />
                                         </div>
@@ -1800,7 +1882,7 @@ function InvestmentContent({
                         </div>
                     ) : (
                         <div className="rounded-lg border border-dashed border-[#d0d5dd] bg-[#f9fafb] px-3 py-6 text-center text-[12px] font-semibold text-[#667085]">
-                            No hay usuarios con suscripcion semanal.
+                            No hay pagos reales ni ajustes manuales de suscripcion esta semana.
                         </div>
                     )}
                 </div>
@@ -2176,12 +2258,60 @@ function ClosedWeekPanel({
                 </div>
             </div>
 
+            {finalSummary.subscriptionRows?.length ? (
+                <div className="border-t border-[#eef1f5] p-4">
+                    <div className="mb-3 text-[12px] font-black text-[#101936]">Suscripciones guardadas en el cierre</div>
+                    <div className="grid gap-2 md:grid-cols-2">
+                        {finalSummary.subscriptionRows.map((item) => (
+                            <div key={item.subscriptionId} className="rounded-lg border border-[#e4e7ec] bg-white px-3 py-2.5">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                        <div className="truncate text-[12px] font-bold text-[#172033]">{item.userName}</div>
+                                        <div className="mt-0.5 truncate text-[11px] font-medium text-[#667085]">
+                                            {[item.city, item.plan, item.source === "manual" ? "Manual" : "Pago real"].filter(Boolean).join(" · ")}
+                                        </div>
+                                    </div>
+                                    <Badge tone={item.source === "real" ? "green" : "blue"}>
+                                        {item.source === "real" ? "Real" : "Manual"}
+                                    </Badge>
+                                </div>
+                                <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] font-semibold">
+                                    <MiniSnapshotValue label="Bruto" value={money(item.amount)} />
+                                    <MiniSnapshotValue label="Costo" value={money(item.cost)} />
+                                    <MiniSnapshotValue label="Real" value={money(item.real)} tone={item.real >= 0 ? "green" : "red"} />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ) : null}
+
             {hasDrift ? (
                 <div className="border-t border-amber-200 bg-amber-50 px-4 py-3 text-[12px] font-semibold text-amber-800">
                     El calculo actual ya no coincide exactamente con el snapshot final. Reabre y vuelve a cerrar si quieres actualizar el cierre.
                 </div>
             ) : null}
         </Card>
+    );
+}
+
+function MiniSnapshotValue({
+    label,
+    value,
+    tone = "default",
+}: {
+    label: string;
+    value: string;
+    tone?: "default" | "green" | "red";
+}) {
+    const valueClass =
+        tone === "green" ? "text-emerald-600" : tone === "red" ? "text-red-500" : "text-[#172033]";
+
+    return (
+        <div className="rounded-lg bg-[#f9fafb] px-2 py-2">
+            <div className="text-[9px] font-bold uppercase tracking-[0.06em] text-[#98a2b3]">{label}</div>
+            <div className={`mt-0.5 text-[11px] font-black ${valueClass}`}>{value}</div>
+        </div>
     );
 }
 
@@ -2815,7 +2945,11 @@ function DashboardContent({
                                 <div className="min-w-0">
                                     <div className="truncate text-[12px] font-semibold text-[#172033]">{row.name}</div>
                                     <div className="truncate text-[11px] font-medium text-[#98a2b3]">
-                                        {row.billingMode === "weekly_subscription" ? "Suscripcion" : "Por visita"}
+                                        {row.subscriptionSource === "real"
+                                            ? "Suscripcion pagada"
+                                            : row.billingMode === "weekly_subscription"
+                                                ? "Suscripcion manual"
+                                                : "Por visita"}
                                     </div>
                                 </div>
 
@@ -2887,7 +3021,7 @@ function DashboardContent({
                                         </td>
 
                                         <td className="px-3 py-2.5">
-                                            <ModelBadge mode={row.billingMode} paid={row.subscriptionPaid} />
+                                            <ModelBadge mode={row.billingMode} paid={row.subscriptionPaid} source={row.subscriptionSource} />
                                         </td>
 
                                         <td className="px-3 py-2.5">
@@ -3309,7 +3443,7 @@ function AccountingUserMobileCard({
             </div>
 
             <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                <ModelBadge mode={row.billingMode} paid={row.subscriptionPaid} />
+                <ModelBadge mode={row.billingMode} paid={row.subscriptionPaid} source={row.subscriptionSource} />
             </div>
 
             <div className="mt-3 grid grid-cols-3 overflow-hidden rounded-2xl border border-[#eef1f5] text-center text-[11px] font-black">
@@ -3375,14 +3509,20 @@ function Legend({
 function ModelBadge({
     mode,
     paid,
+    source,
 }: {
     mode: "per_visit" | "weekly_subscription";
     paid?: boolean;
+    source?: "real" | "manual" | "none";
 }) {
     if (mode === "weekly_subscription") {
+        if (source === "real") {
+            return <Badge tone="green">Suscripcion pagada</Badge>;
+        }
+
         return (
             <Badge tone={paid ? "blue" : "gray"}>
-                {paid ? "Suscripcion pagada" : "Suscripcion no pagada"}
+                {paid ? "Suscripcion manual" : "Suscripcion no pagada"}
             </Badge>
         );
     }

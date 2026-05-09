@@ -16,6 +16,7 @@ import { db } from "@/lib/firebase";
 import type {
     AccountingFinalSummary,
     AccountingAssignmentDoc,
+    AccountingSubscriptionDoc,
     AccountingSummary,
     DailyEventDoc,
     InvestmentGroupDoc,
@@ -36,6 +37,10 @@ function record(value: unknown): Record<string, unknown> {
 
 function text(value: unknown) {
     return typeof value === "string" ? value.trim() : "";
+}
+
+function withoutUndefined<T>(value: T): T {
+    return JSON.parse(JSON.stringify(value)) as T;
 }
 
 function toMs(value: unknown): number {
@@ -60,6 +65,41 @@ function normalizeAssignment(id: string, data: Record<string, unknown>): Account
         userId,
         assignedAt,
         assignedDayKey,
+    };
+}
+
+function normalizeSubscription(id: string, data: Record<string, unknown>): AccountingSubscriptionDoc | null {
+    const userId = text(data.userId);
+    const status = text(data.status) || null;
+    const createdAt = safeNumber(data.createdAt, toMs(data.startDate));
+    const amount = clamp2(safeNumber(data.amount, 0));
+    const adsBudget = clamp2(safeNumber(data.adsBudget, 0));
+    const reservedBudget = clamp2(safeNumber(data.reservedBudget, 0));
+    const operatingBudget = clamp2(
+        safeNumber(
+            data.operatingBudget,
+            adsBudget > 0 ? Math.max(0, adsBudget - reservedBudget) : 0
+        )
+    );
+    const totalBudget = clamp2(safeNumber(data.totalBudget, adsBudget));
+
+    if (["released", "cancelled", "refunded", "voided"].includes(String(status || ""))) return null;
+    if (!userId || !createdAt || amount <= 0) return null;
+
+    return {
+        id,
+        userId,
+        cityId: text(data.cityId) || null,
+        city: text(data.city) || text(data.cityName) || null,
+        plan: text(data.plan) || null,
+        status,
+        amount,
+        adsBudget,
+        operatingBudget,
+        reservedBudget,
+        totalBudget,
+        createdAt,
+        updatedAt: data.updatedAt == null ? null : safeNumber(data.updatedAt, 0),
     };
 }
 
@@ -117,6 +157,12 @@ function normalizeFinalSummary(value: unknown): AccountingFinalSummary | undefin
         rowsCount: safeNumber(data.rowsCount, 0),
         closedAt: safeNumber(data.closedAt, 0),
         closedBy: typeof data.closedBy === "string" ? data.closedBy : null,
+        rows: Array.isArray(data.rows)
+            ? (data.rows as AccountingFinalSummary["rows"])
+            : undefined,
+        subscriptionRows: Array.isArray(data.subscriptionRows)
+            ? (data.subscriptionRows as AccountingFinalSummary["subscriptionRows"])
+            : undefined,
     };
 }
 
@@ -232,6 +278,25 @@ export async function listClientAssignmentsByRange(input: {
     }
 
     return Array.from(byId.values());
+}
+
+export async function listPaidSubscriptionsByRange(input: {
+    startMs: number;
+    endMs: number;
+}): Promise<AccountingSubscriptionDoc[]> {
+    const snap = await getDocs(
+        query(
+            collection(db, "subscriptions"),
+            where("createdAt", ">=", input.startMs),
+            where("createdAt", "<=", input.endMs),
+            orderBy("createdAt", "asc"),
+            limit(1000)
+        )
+    );
+
+    return snap.docs
+        .map((docSnap) => normalizeSubscription(docSnap.id, record(docSnap.data())))
+        .filter((subscription): subscription is AccountingSubscriptionDoc => Boolean(subscription));
 }
 
 export async function getWeeklyInvestment(
@@ -365,7 +430,7 @@ export async function closeWeeklyInvestment(input: {
         ? normalizeWeeklyInvestment(currentSnap.id, record(currentSnap.data()))
         : null;
 
-    const finalSummary: AccountingFinalSummary = {
+    const finalSummary: AccountingFinalSummary = withoutUndefined({
         visited: input.summary.visited,
         rejected: input.summary.rejected,
         assigned: input.summary.assigned,
@@ -382,7 +447,9 @@ export async function closeWeeklyInvestment(input: {
         rowsCount: input.summary.rows.length,
         closedAt: now,
         closedBy: input.closedBy ?? null,
-    };
+        rows: input.summary.rows,
+        subscriptionRows: input.summary.subscriptionRows,
+    });
 
     await setDoc(
         ref,

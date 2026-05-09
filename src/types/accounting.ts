@@ -65,6 +65,22 @@ export type AccountingAssignmentDoc = {
     assignedDayKey: string;
 };
 
+export type AccountingSubscriptionDoc = {
+    id: string;
+    userId: string;
+    cityId?: string | null;
+    city?: string | null;
+    plan?: string | null;
+    status?: string | null;
+    amount: number;
+    adsBudget: number;
+    operatingBudget: number;
+    reservedBudget: number;
+    totalBudget: number;
+    createdAt: number;
+    updatedAt?: number | null;
+};
+
 export type WeeklyInvestmentAllocations = Record<string, number>;
 
 export type InvestmentGroupStatus = "active" | "inactive";
@@ -106,25 +122,6 @@ export type WeeklyInvestmentDoc = {
     updatedAt?: number;
 };
 
-export type AccountingFinalSummary = {
-    visited: number;
-    rejected: number;
-    assigned?: number;
-    gross: number;
-    grossVisits: number;
-    grossSubscriptions: number;
-    subscriptionsPaid: number;
-    investment: number;
-    subscriptionInvestment: number;
-    groupInvestment: number;
-    manualAdjustment: number;
-    real: number;
-    roi: number | null;
-    rowsCount: number;
-    closedAt: number;
-    closedBy?: string | null;
-};
-
 export type AccountingUserRow = {
     userId: string;
     name: string;
@@ -141,6 +138,27 @@ export type AccountingUserRow = {
     real: number;
 
     subscriptionPaid?: boolean;
+    subscriptionSource?: "real" | "manual" | "none";
+    subscriptionCount?: number;
+    subscriptionCities?: string[];
+};
+
+export type AccountingFinalUserRow = AccountingUserRow;
+
+export type AccountingSubscriptionSummaryRow = {
+    subscriptionId: string;
+    userId: string;
+    userName: string;
+    userEmail?: string;
+    cityId?: string | null;
+    city?: string | null;
+    plan?: string | null;
+    status?: string | null;
+    amount: number;
+    cost: number;
+    real: number;
+    source: "real" | "manual";
+    createdAt?: number | null;
 };
 
 export type AccountingSummary = {
@@ -164,4 +182,26 @@ export type AccountingSummary = {
     roi: number | null;
 
     rows: AccountingUserRow[];
+    subscriptionRows: AccountingSubscriptionSummaryRow[];
+};
+
+export type AccountingFinalSummary = {
+    visited: number;
+    rejected: number;
+    assigned?: number;
+    gross: number;
+    grossVisits: number;
+    grossSubscriptions: number;
+    subscriptionsPaid: number;
+    investment: number;
+    subscriptionInvestment: number;
+    groupInvestment: number;
+    manualAdjustment: number;
+    real: number;
+    roi: number | null;
+    rowsCount: number;
+    closedAt: number;
+    closedBy?: string | null;
+    rows?: AccountingFinalUserRow[];
+    subscriptionRows?: AccountingSubscriptionSummaryRow[];
 };
