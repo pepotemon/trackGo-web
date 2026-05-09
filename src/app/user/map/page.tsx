@@ -126,8 +126,18 @@ function MapPageInner() {
     const [waSent, setWaSent] = useState<Set<string>>(new Set());
     const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
     const [locating, setLocating] = useState(false);
-    const [locationSettled, setLocationSettled] = useState(false);
-    const [mapReady, setMapReady] = useState(false);
+    const [filterOpen, setFilterOpen] = useState(false);
+
+    const defaultDateFrom = (() => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+    })();
+    const defaultDateTo = (() => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    })();
+    const [dateFrom, setDateFrom] = useState(defaultDateFrom);
+    const [dateTo, setDateTo] = useState(defaultDateTo);
 
     const [actionType, setActionType] = useState<"visit" | "reject" | null>(null);
     const [rejectStep, setRejectStep] = useState<1 | 2>(1);
@@ -146,62 +156,63 @@ function MapPageInner() {
         return unsub;
     }, [userId]);
 
-    const { leadsWithCoords, counts } = useMemo(() => {
-        const withCoords: MetaLeadDoc[] = [];
-        const nextCounts: Record<MapFilter, number> = { all: 0, pending: 0, visited: 0, rejected: 0 };
+    const leadsWithCoords = useMemo(() =>
+        leads.filter((lead) => lead.location.lat !== null && lead.location.lng !== null),
+    [leads]);
 
-        for (const lead of leads) {
-            if (lead.location.lat === null || lead.location.lng === null) continue;
-            withCoords.push(lead);
-            nextCounts.all += 1;
-            if (!lead.status || lead.status === "pending") nextCounts.pending += 1;
-            if (lead.status === "visited") nextCounts.visited += 1;
-            if (lead.status === "rejected") nextCounts.rejected += 1;
-        }
+    const dateFromMs = useMemo(() => new Date(dateFrom + "T00:00:00").getTime(), [dateFrom]);
+    const dateToMs = useMemo(() => new Date(dateTo + "T23:59:59").getTime(), [dateTo]);
 
-        return { leadsWithCoords: withCoords, counts: nextCounts };
-    }, [leads]);
+    function passesDateFilter(lead: MetaLeadDoc) {
+        const status = leadStatusValue(lead);
+        if (status !== "visited" && status !== "rejected") return true;
+        const at = (lead as any).statusAt as number | null | undefined;
+        const ts = at ?? 0;
+        return ts >= dateFromMs && ts <= dateToMs;
+    }
 
     const filteredLeads = useMemo(() => {
-        if (mapFilter === "all") return leadsWithCoords;
-        return leadsWithCoords.filter((lead) =>
-            mapFilter === "pending" ? !lead.status || lead.status === "pending" : lead.status === mapFilter
-        );
-    }, [leadsWithCoords, mapFilter]);
+        return leadsWithCoords.filter((lead) => {
+            const status = leadStatusValue(lead);
+            if (mapFilter !== "all" && status !== mapFilter) return false;
+            return passesDateFilter(lead);
+        });
+    }, [leadsWithCoords, mapFilter, dateFromMs, dateToMs]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const counts = useMemo(() => {
+        const c: Record<MapFilter, number> = { all: 0, pending: 0, visited: 0, rejected: 0 };
+        for (const lead of leadsWithCoords) {
+            const status = leadStatusValue(lead);
+            const passes = passesDateFilter(lead);
+            if (status === "pending") { c.pending += 1; c.all += 1; }
+            else if (passes) {
+                c.all += 1;
+                if (status === "visited") c.visited += 1;
+                if (status === "rejected") c.rejected += 1;
+            }
+        }
+        return c;
+    }, [leadsWithCoords, dateFromMs, dateToMs]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const selectedLeadId = selectedLead?.id ?? null;
     const selectLead = useCallback((lead: MetaLeadDoc) => setSelectedLead(lead), []);
     const clearSelectedLead = useCallback(() => setSelectedLead(null), []);
 
     function locate() {
-        if (!navigator.geolocation) {
-            setLocationSettled(true);
-            return;
-        }
+        if (!navigator.geolocation) return;
         setLocating(true);
-        setLocationSettled(false);
         navigator.geolocation.getCurrentPosition(
             (pos) => {
                 setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
                 setLocating(false);
-                setLocationSettled(true);
             },
-            () => {
-                setLocating(false);
-                setLocationSettled(true);
-            },
+            () => { setLocating(false); },
             { enableHighAccuracy: true, timeout: 8000 }
         );
     }
 
     // Auto-locate on mount
     useEffect(() => { locate(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-    // Fallback: reveal map after 8s even if GPS never responds
-    useEffect(() => {
-        const t = setTimeout(() => setMapReady(true), 8000);
-        return () => clearTimeout(t);
-    }, []);
 
     const today = todayKey();
 
@@ -271,9 +282,7 @@ function MapPageInner() {
         window.open(url, "_blank");
     }
 
-    const defaultCenter = leadsWithCoords.length > 0
-        ? { lat: leadsWithCoords[0].location.lat!, lng: leadsWithCoords[0].location.lng! }
-        : { lat: -23.55, lng: -46.63 };
+    const defaultCenter = { lat: -14.24, lng: -51.93 };
     const leadPointData = useMemo(
         () => buildLeadPointData(filteredLeads, selectedLeadId),
         [filteredLeads, selectedLeadId]
@@ -294,7 +303,7 @@ function MapPageInner() {
             container: mapContainerRef.current,
             style: MAP_STYLE_URL,
             center: [defaultCenter.lng, defaultCenter.lat],
-            zoom: 12,
+            zoom: 4,
             attributionControl: false,
             pitchWithRotate: false,
             dragRotate: false,
@@ -370,9 +379,6 @@ function MapPageInner() {
                     "circle-opacity": 0.95,
                 },
             });
-            if (leadsRef.current.length > 0 && locationSettled) {
-                setMapReady(true);
-            }
         });
 
         map.on("click", (event) => {
@@ -435,7 +441,6 @@ function MapPageInner() {
                 center: [userLocation.lng, userLocation.lat],
                 zoom: 15,
             });
-            setMapReady(true);
         }
     }, [userLocation]);
 
@@ -458,11 +463,12 @@ function MapPageInner() {
         });
     }, [filteredLeads]);
 
+    const firstFitDoneRef = useRef(false);
     useEffect(() => {
-        if (!mapRef.current || !mapLoadedRef.current || mapReady || filteredLeads.length === 0 || !locationSettled) return;
+        if (!mapRef.current || !mapLoadedRef.current || firstFitDoneRef.current || filteredLeads.length === 0 || centeredRef.current) return;
+        firstFitDoneRef.current = true;
         fitMapBounds();
-        setMapReady(true);
-    }, [filteredLeads.length, fitMapBounds, locationSettled, mapReady]);
+    }, [filteredLeads.length, fitMapBounds]);
 
     const goToUserLocation = useCallback(() => {
         locate();
@@ -516,7 +522,8 @@ function MapPageInner() {
             </div>
 
             {/* ── FILTER DOCK ─────────────────────────────────────────── */}
-            <div className="pointer-events-none absolute right-3 top-4 z-10 flex flex-col gap-1.5">
+            <div className="pointer-events-none absolute right-3 top-4 z-10 flex flex-col items-end gap-1.5">
+                {/* Status pills */}
                 {(["all", "pending", "visited", "rejected"] as MapFilter[]).map((f) => {
                     const labels: Record<MapFilter, string> = { all: "Todos", pending: "Pend.", visited: "Visit.", rejected: "Rech." };
                     const dots: Record<MapFilter, string> = { all: "#7C3AED", pending: "#F59E0B", visited: "#059669", rejected: "#DC2626" };
@@ -547,29 +554,21 @@ function MapPageInner() {
                         </button>
                     );
                 })}
+                {/* Date filter button */}
+                <button
+                    type="button"
+                    onClick={() => setFilterOpen(true)}
+                    className="pointer-events-auto mt-1 flex touch-manipulation items-center gap-1.5 rounded-[12px] border border-white/60 bg-white/90 px-3 py-2 text-[11px] font-black text-[#7C3AED] shadow-lg backdrop-blur-md transition active:scale-[0.98]"
+                >
+                    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
+                    </svg>
+                    {dateFrom.slice(8)} – {dateTo.slice(8)} {dateTo.slice(5, 7)}/{dateTo.slice(0, 4)}
+                </button>
             </div>
 
-            {/* ── INITIAL MAP LOADING SCREEN ──────────────────────────── */}
-            {!mapReady ? (
-                <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-white">
-                    <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-[22px] bg-[#f3f0ff]">
-                        <svg viewBox="0 0 24 24" className="h-8 w-8 text-[#7C3AED]" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M9 18 3 21V6l6-3 6 3 6-3v15l-6 3-6-3Z" />
-                            <path d="M9 3v15M15 6v15" />
-                        </svg>
-                    </div>
-                    <p className="text-[18px] font-black text-[#101936]">Cargando mapa</p>
-                    <div className="mt-2 flex items-center gap-2 text-[13px] font-semibold text-[#66739A]">
-                        <svg className="tg-spin h-4 w-4 text-[#7C3AED]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                            <path d="M21 12a9 9 0 1 1-3.1-6.8" />
-                        </svg>
-                        Obteniendo tu ubicación...
-                    </div>
-                </div>
-            ) : null}
-
             {/* ── LEADS LOADING OVERLAY ───────────────────────────────── */}
-            {mapReady && loadingLeads ? (
+            {loadingLeads ? (
                 <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/70 backdrop-blur-sm">
                     <div className="flex flex-col items-center gap-3 rounded-2xl bg-white p-6 shadow-xl">
                         <svg className="tg-spin h-8 w-8 text-[#7C3AED]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -706,6 +705,53 @@ function MapPageInner() {
                         </button>
                         <button type="button" onClick={confirmVisit} disabled={saving} className="flex-1 rounded-[14px] bg-emerald-600 py-3 text-[13px] font-black text-white disabled:opacity-60">
                             {saving ? "Guardando..." : "Sí, visité"}
+                        </button>
+                    </div>
+                </BottomSheet>
+            ) : null}
+
+            {/* ── DATE FILTER MODAL ───────────────────────────────────── */}
+            {filterOpen ? (
+                <BottomSheet onClose={() => setFilterOpen(false)}>
+                    <p className="mb-1 text-[11px] font-black uppercase tracking-[0.12em] text-[#7C3AED]">Filtro de fechas</p>
+                    <p className="mb-4 text-[17px] font-black text-[#101936]">Visitados y rechazados</p>
+                    <p className="mb-3 text-[11px] font-semibold text-[#66739A]">
+                        Los pendientes siempre se muestran completos, sin filtro de fecha.
+                    </p>
+                    <div className="grid grid-cols-2 gap-3 mb-4">
+                        <div>
+                            <p className="mb-1 text-[10px] font-black uppercase tracking-wide text-[#66739A]">Desde</p>
+                            <input
+                                type="date"
+                                value={dateFrom}
+                                onChange={(e) => setDateFrom(e.target.value)}
+                                className="w-full rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 py-2.5 text-[13px] font-semibold text-[#101936] outline-none focus:border-[#7C3AED]"
+                            />
+                        </div>
+                        <div>
+                            <p className="mb-1 text-[10px] font-black uppercase tracking-wide text-[#66739A]">Hasta</p>
+                            <input
+                                type="date"
+                                value={dateTo}
+                                onChange={(e) => setDateTo(e.target.value)}
+                                className="w-full rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 py-2.5 text-[13px] font-semibold text-[#101936] outline-none focus:border-[#7C3AED]"
+                            />
+                        </div>
+                    </div>
+                    <div className="flex gap-2">
+                        <button
+                            type="button"
+                            onClick={() => { setDateFrom(defaultDateFrom); setDateTo(defaultDateTo); }}
+                            className="flex-1 rounded-[14px] border border-[#E8E7FB] py-3 text-[13px] font-black text-[#66739A]"
+                        >
+                            Este mes
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setFilterOpen(false)}
+                            className="flex-1 rounded-[14px] bg-[#7C3AED] py-3 text-[13px] font-black text-white"
+                        >
+                            Aplicar
                         </button>
                     </div>
                 </BottomSheet>
