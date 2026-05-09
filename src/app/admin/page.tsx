@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { getAdminDashboardSnapshot } from "@/data/adminDashboardRepo";
+import { getAdminDashboardSnapshot, getMonthlyChartData } from "@/data/adminDashboardRepo";
+import type { MonthlyChartData } from "@/data/adminDashboardRepo";
 import type { AdminDashboardRange, AdminDashboardSnapshot } from "@/types/dashboard";
 import type { AutoAssignLogDoc, LeadAutoAssignMatchType, MetaLeadDoc } from "@/types/leads";
 import { AppIcon, Badge, Button, Card, KpiCard, PageHeader } from "@/components/ui";
-import type { AppIconName } from "@/components/ui/AppIcon";
 import { usePermissions } from "@/features/auth/usePermissions";
 import { useAuth } from "@/features/auth/AuthProvider";
 
@@ -115,6 +115,8 @@ export default function AdminDashboardPage() {
     const [queueRange, setQueueRange] = useState<AdminDashboardRange>("today");
     const [loading, setLoading] = useState(true);
     const [err, setErr] = useState<string | null>(null);
+    const [chartData, setChartData] = useState<MonthlyChartData | null>(null);
+    const [chartLoading, setChartLoading] = useState(true);
 
     const adminLabel = firebaseUser?.displayName || firebaseUser?.email?.split("@")[0] || "Admin";
 
@@ -142,6 +144,17 @@ export default function AdminDashboardPage() {
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [queueRange]);
+
+    useEffect(() => {
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, "0");
+        const d = String(now.getDate()).padStart(2, "0");
+        getMonthlyChartData(`${y}-${m}-01`, `${y}-${m}-${d}`)
+            .then(setChartData)
+            .catch(() => setChartData(null))
+            .finally(() => setChartLoading(false));
+    }, []);
 
     function changeQueueRange(range: AdminDashboardRange) {
         setQueueRange(range);
@@ -191,28 +204,8 @@ export default function AdminDashboardPage() {
                     }
                 </div>
 
-                {/* Quick actions */}
-                <div className="mb-5 grid grid-cols-2 gap-2.5">
-                    {permissions.prospectos ? (
-                        <MobileActionCard href="/admin/leads" icon="lead" label="Prospectos" tone="purple" />
-                    ) : null}
-                    {permissions.actividad ? (
-                        <MobileActionCard href="/admin/activity" icon="activity" label="Actividad" tone="blue" />
-                    ) : null}
-                    {permissions.assignmentsView ? (
-                        <MobileActionCard href="/admin/leads/assignments" icon="assign" label="Asignaciones" tone="green" />
-                    ) : null}
-                    {permissions.accountingView ? (
-                        <MobileActionCard href="/admin/accounting" icon="wallet" label="Contabilidad" tone="slate" />
-                    ) : null}
-                    {permissions.usersView ? (
-                        <MobileActionCard href="/admin/settings/users" icon="users" label="Usuarios" tone="purple" />
-                    ) : null}
-                    {(permissions.subscriptionsView || permissions.subscriptionsEdit) ? (
-                        <MobileActionCard href="/admin/settings/subscriptions" icon="wallet" label="Suscripciones" tone="green" />
-                    ) : null}
-                    <MobileActionCard href="/admin/settings" icon="settings" label="Configuración" tone="slate" />
-                </div>
+                {/* Monthly chart */}
+                <MonthlyChartCard data={chartData} loading={chartLoading} />
 
                 {/* Recent assignments */}
                 {permissions.assignmentsView ? (
@@ -421,32 +414,6 @@ function MobileStatPill({ label, value, tone }: { label: string; value: number; 
     );
 }
 
-const ACTION_TONE_MAP = {
-    purple: { bg: "bg-[#f3f0ff]", icon: "text-[#7c3aed]", label: "text-[#4f46e5]" },
-    blue: { bg: "bg-[#eff6ff]", icon: "text-[#2563eb]", label: "text-[#1d4ed8]" },
-    green: { bg: "bg-[#ecfdf5]", icon: "text-[#059669]", label: "text-[#047857]" },
-    slate: { bg: "bg-[#f8fafc]", icon: "text-[#475569]", label: "text-[#334155]" },
-} as const;
-
-function MobileActionCard({ href, icon, label, tone }: {
-    href: string;
-    icon: AppIconName;
-    label: string;
-    tone: keyof typeof ACTION_TONE_MAP;
-}) {
-    const t = ACTION_TONE_MAP[tone];
-    const iconTone = (tone === "slate" ? "slate" : tone) as import("@/components/ui/AppIcon").AppIconTone;
-    return (
-        <Link
-            href={href}
-            className="flex items-center gap-3 rounded-[16px] border border-[#E8E7FB] bg-white px-4 py-3.5 shadow-[0_4px_18px_rgba(91,33,255,0.07)] transition active:scale-[0.98] active:bg-[#f8f7ff]"
-        >
-            <AppIcon name={icon} tone={iconTone} size="sm" className="h-9 w-9 shrink-0 rounded-[12px]" />
-            <span className={["text-[13px] font-black", t.label].join(" ")}>{label}</span>
-        </Link>
-    );
-}
-
 function MobileAssignmentRow({ log }: { log: AutoAssignLogDoc }) {
     const matchType = safeMatchType(log.matchType);
     return (
@@ -644,6 +611,162 @@ function MiniMetric({
                 <Badge tone={tone}>{label}</Badge>
             </div>
             <div className="text-[22px] font-semibold text-[#171717]">{value}</div>
+        </div>
+    );
+}
+
+// ── Monthly chart ─────────────────────────────────────────────────────────────
+
+const CW = 300;
+const CH = 80;
+const CPT = 8;
+const CPB = 4;
+const CPL = 4;
+const CPR = 4;
+
+function mkChartPts(values: number[], maxVal: number) {
+    if (values.length < 2) return [];
+    const dw = CW - CPL - CPR;
+    const dh = CH - CPT - CPB;
+    return values.map((v, i) => ({
+        x: CPL + (i / (values.length - 1)) * dw,
+        y: CPT + dh - (maxVal > 0 ? (v / maxVal) * dh : 0),
+    }));
+}
+
+function smoothLine(pts: { x: number; y: number }[]) {
+    if (pts.length < 2) return "";
+    let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+    for (let i = 1; i < pts.length; i++) {
+        const cx = ((pts[i - 1].x + pts[i].x) / 2).toFixed(1);
+        d += ` C ${cx} ${pts[i - 1].y.toFixed(1)} ${cx} ${pts[i].y.toFixed(1)} ${pts[i].x.toFixed(1)} ${pts[i].y.toFixed(1)}`;
+    }
+    return d;
+}
+
+function chartAreaPath(pts: { x: number; y: number }[], bottom: number) {
+    const line = smoothLine(pts);
+    if (!line) return "";
+    return `${line} L ${pts[pts.length - 1].x.toFixed(1)} ${bottom} L ${pts[0].x.toFixed(1)} ${bottom} Z`;
+}
+
+function fmtRevenue(v: number) {
+    if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
+    if (v >= 1000) return `$${(v / 1000).toFixed(1)}k`;
+    return `$${Math.round(v)}`;
+}
+
+function MonthlyChartCard({ data, loading }: { data: MonthlyChartData | null; loading: boolean }) {
+    const now = new Date();
+    const monthName = new Intl.DateTimeFormat("es", { month: "long", year: "numeric" }).format(now);
+    const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const todayPt = data?.points.find((p) => p.day === todayKey);
+
+    const assignVals = data?.points.map((p) => p.assignments) ?? [];
+    const visitVals = data?.points.map((p) => p.visits) ?? [];
+    const maxVal = Math.max(...assignVals, ...visitVals, 1);
+    const bottom = CH - CPB;
+
+    const assignPts = mkChartPts(assignVals, maxVal);
+    const visitPts = mkChartPts(visitVals, maxVal);
+
+    return (
+        <div className="mb-5 overflow-hidden rounded-[20px] border border-[#E8E7FB] bg-white shadow-[0_4px_18px_rgba(91,33,255,0.07)]">
+            {/* Header */}
+            <div className="flex items-start justify-between px-4 pt-4 pb-3">
+                <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.15em] text-[#7c70ba]">Rendimiento mensual</p>
+                    <p className="mt-0.5 text-[17px] font-black capitalize tracking-[-0.02em] text-[#101936]">{monthName}</p>
+                </div>
+                <div className="flex items-center gap-3 pt-1">
+                    <div className="flex items-center gap-1">
+                        <span className="inline-block h-2 w-2 rounded-full bg-[#7c3aed]" />
+                        <span className="text-[10px] font-bold text-[#66739A]">Asig.</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                        <span className="inline-block h-2 w-2 rounded-full bg-[#059669]" />
+                        <span className="text-[10px] font-bold text-[#66739A]">Visitas</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Chart area */}
+            <div className="px-2">
+                {loading ? (
+                    <div className="flex h-[88px] items-center justify-center">
+                        <svg className="tg-spin h-5 w-5 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                            <path d="M21 12a9 9 0 1 1-3.1-6.8" />
+                        </svg>
+                    </div>
+                ) : !data ? (
+                    <div className="flex h-[88px] items-center justify-center">
+                        <p className="text-[11px] font-semibold text-[#a3acca]">Sin datos disponibles</p>
+                    </div>
+                ) : (
+                    <svg
+                        viewBox={`0 0 ${CW} ${CH}`}
+                        className="w-full"
+                        style={{ height: "88px" }}
+                        preserveAspectRatio="none"
+                        aria-hidden="true"
+                    >
+                        <defs>
+                            <linearGradient id="mg-a" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#7c3aed" stopOpacity="0.28" />
+                                <stop offset="100%" stopColor="#7c3aed" stopOpacity="0.03" />
+                            </linearGradient>
+                            <linearGradient id="mg-v" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#059669" stopOpacity="0.22" />
+                                <stop offset="100%" stopColor="#059669" stopOpacity="0.03" />
+                            </linearGradient>
+                        </defs>
+
+                        {([0.33, 0.66, 1] as const).map((f) => {
+                            const y = (CPT + (bottom - CPT) * (1 - f)).toFixed(1);
+                            return (
+                                <line key={f} x1={CPL} y1={y} x2={CW - CPR} y2={y}
+                                    stroke="#ede9fe" strokeWidth="0.6" />
+                            );
+                        })}
+
+                        {assignPts.length >= 2 && (
+                            <>
+                                <path d={chartAreaPath(assignPts, bottom)} fill="url(#mg-a)" />
+                                <path d={smoothLine(assignPts)} fill="none" stroke="#7c3aed" strokeWidth="1.8" strokeLinecap="round" />
+                            </>
+                        )}
+
+                        {visitPts.length >= 2 && (
+                            <>
+                                <path d={chartAreaPath(visitPts, bottom)} fill="url(#mg-v)" />
+                                <path d={smoothLine(visitPts)} fill="none" stroke="#059669" strokeWidth="1.8" strokeLinecap="round" />
+                            </>
+                        )}
+                    </svg>
+                )}
+            </div>
+
+            {/* Bottom stats */}
+            <div className="grid grid-cols-3 divide-x divide-[#f0f1f2] border-t border-[#f0f1f2]">
+                <div className="px-3 py-3 text-center">
+                    <p className="text-[20px] font-black leading-none tracking-[-0.04em] text-[#7c3aed]">
+                        {todayPt?.assignments ?? 0}
+                    </p>
+                    <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.1em] text-[#a3acca]">Hoy</p>
+                </div>
+                <div className="px-3 py-3 text-center">
+                    <p className="text-[20px] font-black leading-none tracking-[-0.04em] text-[#059669]">
+                        {data?.totalVisits ?? 0}
+                    </p>
+                    <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.1em] text-[#a3acca]">Visitados</p>
+                </div>
+                <div className="px-3 py-3 text-center">
+                    <p className="text-[20px] font-black leading-none tracking-[-0.04em] text-[#101936]">
+                        {data ? fmtRevenue(data.totalRevenue) : "—"}
+                    </p>
+                    <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.1em] text-[#a3acca]">Ingresos</p>
+                </div>
+            </div>
         </div>
     );
 }
