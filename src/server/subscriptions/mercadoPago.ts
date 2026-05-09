@@ -135,6 +135,25 @@ export async function getMercadoPagoPayment(paymentId: string) {
     return data;
 }
 
+export async function cancelMercadoPagoPayment(paymentId: string) {
+    const response = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
+        method: "PUT",
+        headers: {
+            Authorization: `Bearer ${mercadoPagoToken()}`,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status: "cancelled" }),
+    });
+
+    const data = (await response.json()) as MercadoPagoPayment & MercadoPagoErrorBody;
+    if (!response.ok) {
+        console.error("[mercadopago:cancelPayment]", data);
+        throw new ResponseError("mercadopago_cancel_error", formatMercadoPagoError(data) || "No se pudo cancelar el Pix.", 502);
+    }
+
+    return data;
+}
+
 function formatMercadoPagoError(data: MercadoPagoErrorBody) {
     const cause = data.cause
         ?.map((item) => [item.code ? `code=${item.code}` : "", item.description, item.data].filter(Boolean).join(" · "))

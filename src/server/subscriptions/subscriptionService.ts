@@ -2,7 +2,7 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { randomUUID } from "crypto";
 import { ResponseError } from "@/server/auth";
 import { adminDb } from "@/server/firebaseAdmin";
-import { createPixPayment, getMercadoPagoPayment } from "@/server/subscriptions/mercadoPago";
+import { cancelMercadoPagoPayment, createPixPayment, getMercadoPagoPayment } from "@/server/subscriptions/mercadoPago";
 import { calculateAdsBudget, calculateAdsBudgetAllocation, calculateCycleEnd, getPlanAmount } from "@/server/subscriptions/plans";
 import { configureAndActivateCityCampaign, pauseCityCampaign } from "@/server/subscriptions/metaAds";
 import { sendPushToUser } from "@/server/push";
@@ -545,6 +545,15 @@ export async function processMercadoPagoPayment(paymentId: string) {
         };
     }
 
+    if (checkout.status === "cancelled" || checkout.activationStatus === "city_released") {
+        return {
+            ok: true,
+            ignored: true,
+            checkoutId,
+            status: "checkout_cancelled",
+        };
+    }
+
     const expectedAmount = Number(checkout.amount || 0);
     if (Math.abs(Number(payment.transaction_amount) - expectedAmount) > 0.01) {
         await checkoutRef.set(
@@ -723,6 +732,85 @@ export async function processMercadoPagoPayment(paymentId: string) {
         ok: true,
         checkoutId,
     };
+}
+
+export async function cancelPendingSubscriptionCheckout(input: { checkoutId: string; userId: string }) {
+    const checkoutId = input.checkoutId.trim();
+    if (!checkoutId) throw new ResponseError("checkout_required", "Indica el Pix pendiente a cancelar.");
+
+    const checkoutRef = adminDb.collection("subscriptionCheckouts").doc(checkoutId);
+    const checkoutSnap = await checkoutRef.get();
+    if (!checkoutSnap.exists) {
+        throw new ResponseError("checkout_not_found", "No existe el checkout.", 404);
+    }
+
+    const checkout = checkoutSnap.data() || {};
+    if (String(checkout.userId || "") !== input.userId) {
+        throw new ResponseError("checkout_forbidden", "No puedes cancelar este Pix.", 403);
+    }
+
+    if (checkout.status === "cancelled" || checkout.activationStatus === "city_released") {
+        return { ok: true, idempotent: true, checkoutId };
+    }
+
+    if (checkout.status !== "pending") {
+        throw new ResponseError("checkout_not_pending", "Solo puedes cancelar un Pix que todavia esta pendiente.", 409);
+    }
+
+    const paymentId = String(checkout.paymentId || "");
+    if (paymentId) {
+        const payment = await getMercadoPagoPayment(paymentId);
+        if (payment.status === "approved") {
+            throw new ResponseError("pix_already_paid", "Este Pix ya fue pagado y no se puede cancelar desde aqui.", 409);
+        }
+
+        if (["pending", "in_process", "authorized"].includes(payment.status)) {
+            await cancelMercadoPagoPayment(paymentId);
+        }
+    }
+
+    const cityRef = adminDb.collection("cities").doc(String(checkout.cityId || ""));
+
+    await adminDb.runTransaction(async (tx) => {
+        const [freshCheckoutSnap, citySnap] = await Promise.all([tx.get(checkoutRef), tx.get(cityRef)]);
+        const freshCheckout = freshCheckoutSnap.data() || {};
+        const city = citySnap.data() || {};
+
+        if (freshCheckout.status === "cancelled" || freshCheckout.activationStatus === "city_released") return;
+        if (freshCheckout.status !== "pending") {
+            throw new ResponseError("checkout_not_pending", "Solo puedes cancelar un Pix que todavia esta pendiente.", 409);
+        }
+
+        tx.set(
+            checkoutRef,
+            {
+                status: "cancelled",
+                activationStatus: "city_released",
+                cancelledAt: nowMs(),
+                releasedAt: nowMs(),
+                cancellationReason: "cancelled_by_user",
+                failureReason: FieldValue.delete(),
+                updatedAt: nowMs(),
+            },
+            { merge: true },
+        );
+
+        if (citySnap.exists && city.reservedByCheckoutId === checkoutId) {
+            tx.set(
+                cityRef,
+                {
+                    status: "available",
+                    ownerUserId: null,
+                    reservedByCheckoutId: FieldValue.delete(),
+                    reservationExpiresAt: FieldValue.delete(),
+                    updatedAt: nowMs(),
+                },
+                { merge: true },
+            );
+        }
+    });
+
+    return { ok: true, checkoutId };
 }
 
 export async function retryMetaActivation(checkoutId: string) {

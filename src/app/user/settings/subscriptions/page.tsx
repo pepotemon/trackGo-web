@@ -112,6 +112,7 @@ export default function UserSubscriptionsPage() {
     const [creating, setCreating] = useState(false);
     const [message, setMessage] = useState("");
     const [copiedId, setCopiedId] = useState<string | null>(null);
+    const [cancelingCheckoutId, setCancelingCheckoutId] = useState<string | null>(null);
     const [activeFeature, setActiveFeature] = useState<string | null>(null);
 
     const selectedPlanInfo = useMemo(
@@ -152,7 +153,7 @@ export default function UserSubscriptionsPage() {
         [subscriptions],
     );
     const historicalCheckouts = useMemo(
-        () => checkouts.filter((item) => item.status === "failed" || item.status === "expired"),
+        () => checkouts.filter((item) => item.status === "failed" || item.status === "expired" || item.status === "cancelled"),
         [checkouts],
     );
 
@@ -306,6 +307,36 @@ export default function UserSubscriptionsPage() {
         await navigator.clipboard.writeText(qrCode);
         setCopiedId(id);
         window.setTimeout(() => setCopiedId(null), 1400);
+    }
+
+    async function cancelPixCheckout(checkoutId: string) {
+        if (!firebaseUser) return;
+        const ok = window.confirm("Cancelar este Pix pendiente y liberar la ciudad?");
+        if (!ok) return;
+
+        setCancelingCheckoutId(checkoutId);
+        setMessage("");
+        try {
+            const token = await firebaseUser.getIdToken();
+            const response = await fetch("/api/subscriptions/cancel-checkout", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ checkoutId }),
+            });
+            const data = await response.json();
+            if (!response.ok || !data.ok) {
+                throw new Error(data.message || "No se pudo cancelar la transaccion.");
+            }
+            await loadData();
+            setMessage("Transaccion cancelada. La ciudad quedo disponible nuevamente.");
+        } catch (error) {
+            setMessage(error instanceof Error ? error.message : "No se pudo cancelar la transaccion.");
+        } finally {
+            setCancelingCheckoutId(null);
+        }
     }
 
     if (!userPermissions.canSeeSubscriptions) {
@@ -589,7 +620,7 @@ export default function UserSubscriptionsPage() {
 
                         {pendingCheckout ? (
                             <p className="mt-2 text-center text-[11px] font-bold text-amber-700">
-                                Ya tienes un Pix pendiente para esta ciudad. Usa el QR de abajo o espera a que la reserva expire.
+                                Ya tienes un Pix pendiente para esta ciudad. Usa el QR de abajo o cancela la transaccion si no vas a pagar.
                             </p>
                         ) : (
                             <p className="mt-2 text-center text-[11px] font-semibold text-[#66739a]">
@@ -609,6 +640,8 @@ export default function UserSubscriptionsPage() {
                                 checkout={checkout}
                                 copiedId={copiedId}
                                 onCopy={copyPixCode}
+                                canceling={cancelingCheckoutId === checkout.id}
+                                onCancel={cancelPixCheckout}
                             />
                         ))}
                     </section>
@@ -642,7 +675,11 @@ export default function UserSubscriptionsPage() {
                                     key={checkout.id}
                                     cityName={checkout.cityName || checkout.cityId || "Ciudad desconocida"}
                                     amount={checkout.amount}
-                                    statusLabel={checkout.status === "failed" ? "Pago fallido" : "Pix expirado"}
+                                    statusLabel={
+                                        checkout.status === "failed" ? "Pago fallido"
+                                        : checkout.status === "cancelled" || checkout.activationStatus === "city_released" ? "Transaccion cancelada"
+                                        : "Pix expirado"
+                                    }
                                     statusTone={checkout.status === "failed" ? "red" : "neutral"}
                                     note={checkout.failureReason || undefined}
                                     startDate={checkout.createdAt}
@@ -674,10 +711,14 @@ function CheckoutCard({
     checkout,
     copiedId,
     onCopy,
+    canceling,
+    onCancel,
 }: {
     checkout: PortalCheckout;
     copiedId: string | null;
     onCopy: (qrCode: string, id: string) => Promise<void>;
+    canceling: boolean;
+    onCancel: (id: string) => Promise<void>;
 }) {
     const isPending = checkout.status === "pending";
     const isMetaFailed = checkout.status === "approved" && checkout.activationStatus === "meta_failed";
@@ -728,6 +769,14 @@ function CheckoutCard({
                         Abrir pago en MercadoPago
                     </a>
                 ) : null}
+                <button
+                    type="button"
+                    disabled={canceling}
+                    onClick={() => void onCancel(checkout.id)}
+                    className="mt-2 h-11 w-full rounded-2xl border border-red-200 bg-white px-3 text-[12px] font-black text-red-600 transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                    {canceling ? "Cancelando..." : "Cancelar transaccion"}
+                </button>
             </div>
         );
     }

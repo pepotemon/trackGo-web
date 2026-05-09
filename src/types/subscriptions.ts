@@ -2,14 +2,15 @@ export type SubscriptionPlanId = "base" | "crecimiento" | "dominio" | "custom";
 
 export type SubscriptionCityStatus = "available" | "reserved" | "occupied";
 
-export type SubscriptionCheckoutStatus = "pending" | "approved" | "failed" | "expired";
+export type SubscriptionCheckoutStatus = "pending" | "approved" | "failed" | "expired" | "cancelled";
 
 export type SubscriptionActivationStatus =
     | "waiting_payment"
     | "processing"
     | "active"
     | "meta_failed"
-    | "city_occupied";
+    | "city_occupied"
+    | "city_released";
 
 export type SubscriptionCity = {
     id: string;

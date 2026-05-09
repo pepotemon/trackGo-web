@@ -17,12 +17,11 @@ export default function AdminSettingsPage() {
         router.replace("/login");
     }
 
-    const items: Array<{ href: string; title: string; body: string; icon: "users" | "wallet" | "alert"; tone: "purple" | "blue"; visible: boolean }> = [
+    const items: Array<{ href: string; title: string; body: string; tone: "purple" | "blue"; visible: boolean }> = [
         {
             href: "/admin/settings/users",
             title: "Usuarios",
             body: "Permisos, socios, cobertura, tarifas y acceso operativo.",
-            icon: "users",
             tone: "blue",
             visible: permissions.usersView,
         },
@@ -30,7 +29,6 @@ export default function AdminSettingsPage() {
             href: "/admin/settings/subscriptions",
             title: "Suscripciones",
             body: "Ciudades, campañas Meta, reglas comerciales y auditoría Pix.",
-            icon: "wallet",
             tone: "purple",
             visible: permissions.subscriptionsView || permissions.subscriptionsEdit,
         },
@@ -38,7 +36,6 @@ export default function AdminSettingsPage() {
             href: "/admin/settings/notifications",
             title: "Notificaciones",
             body: "Activa o desactiva avisos push en este dispositivo.",
-            icon: "alert",
             tone: "blue",
             visible: true,
         },
@@ -67,7 +64,7 @@ export default function AdminSettingsPage() {
                                 ? "bg-gradient-to-br from-[#7c3aed] to-[#4f46e5]"
                                 : "bg-gradient-to-br from-[#2563eb] to-[#06b6d4]",
                         ].join(" ")}>
-                            <AppIcon name={item.icon} className="h-5 w-5" />
+                            {item.title.slice(0, 1)}
                         </span>
                         <span className="min-w-0 flex-1">
                             <span className="block text-[15px] font-black text-[#101936]">{item.title}</span>

@@ -959,6 +959,8 @@ function StatusPill({ status }: { status: string }) {
               ? "bg-amber-50 text-amber-700 ring-amber-100"
               : normalized.includes("failed") || normalized === "meta_failed"
                 ? "bg-red-50 text-red-700 ring-red-100"
+                : normalized === "city_released" || normalized === "cancelled"
+                  ? "bg-slate-50 text-slate-700 ring-slate-100"
                 : "bg-slate-50 text-slate-700 ring-slate-100";
     return <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] ring-1 ${classes}`}>{labelStatus(normalized)}</span>;
 }
@@ -1036,6 +1038,8 @@ function labelStatus(status: string) {
         meta_failed: "Error",
         failed: "Error",
         expired: "Expirada",
+        cancelled: "Cancelada",
+        city_released: "Liberada",
     };
     return labels[status] || status;
 }
