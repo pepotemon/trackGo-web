@@ -17,7 +17,7 @@ export default function LoginPage() {
 
     useEffect(() => {
         if (loading) return;
-        if (firebaseUser && isAdmin) router.replace("/admin/accounting");
+        if (firebaseUser && isAdmin) router.replace("/admin");
         else if (firebaseUser && isUser) router.replace("/user/leads");
         else if (firebaseUser) router.replace("/no-access");
     }, [loading, firebaseUser, isAdmin, isUser, router]);

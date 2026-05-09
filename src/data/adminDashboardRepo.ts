@@ -3,7 +3,6 @@ import {
     getDocs,
     getCountFromServer,
     limit,
-    orderBy,
     query,
     where,
     type QueryConstraint,
@@ -151,14 +150,12 @@ export async function getMonthlyChartData(
             collection(db, "autoAssignLogs"),
             where("dayKey", ">=", startKey),
             where("dayKey", "<=", endKey),
-            orderBy("dayKey", "asc"),
             limit(5000)
         )),
         getDocs(query(
             collection(db, "dailyEvents"),
             where("dayKey", ">=", startKey),
             where("dayKey", "<=", endKey),
-            orderBy("dayKey", "asc"),
             limit(20000)
         )),
     ]);

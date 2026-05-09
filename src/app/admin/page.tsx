@@ -115,8 +115,6 @@ export default function AdminDashboardPage() {
     const [queueRange, setQueueRange] = useState<AdminDashboardRange>("today");
     const [loading, setLoading] = useState(true);
     const [err, setErr] = useState<string | null>(null);
-    const [chartData, setChartData] = useState<MonthlyChartData | null>(null);
-    const [chartLoading, setChartLoading] = useState(true);
 
     const adminLabel = firebaseUser?.displayName || firebaseUser?.email?.split("@")[0] || "Admin";
 
@@ -144,17 +142,6 @@ export default function AdminDashboardPage() {
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [queueRange]);
-
-    useEffect(() => {
-        const now = new Date();
-        const y = now.getFullYear();
-        const m = String(now.getMonth() + 1).padStart(2, "0");
-        const d = String(now.getDate()).padStart(2, "0");
-        getMonthlyChartData(`${y}-${m}-01`, `${y}-${m}-${d}`)
-            .then(setChartData)
-            .catch(() => setChartData(null))
-            .finally(() => setChartLoading(false));
-    }, []);
 
     function changeQueueRange(range: AdminDashboardRange) {
         setQueueRange(range);
@@ -205,7 +192,7 @@ export default function AdminDashboardPage() {
                 </div>
 
                 {/* Monthly chart */}
-                <MonthlyChartCard data={chartData} loading={chartLoading} />
+                <MonthlyChartCard />
 
                 {/* Recent assignments */}
                 {permissions.assignmentsView ? (
@@ -656,11 +643,42 @@ function fmtRevenue(v: number) {
     return `$${Math.round(v)}`;
 }
 
-function MonthlyChartCard({ data, loading }: { data: MonthlyChartData | null; loading: boolean }) {
+function MonthlyChartCard() {
+    const [monthDate, setMonthDate] = useState(() => {
+        const t = new Date();
+        return new Date(t.getFullYear(), t.getMonth(), 1);
+    });
+    const [data, setData] = useState<MonthlyChartData | null>(null);
+    const [loading, setLoading] = useState(true);
+
     const now = new Date();
-    const monthName = new Intl.DateTimeFormat("es", { month: "long", year: "numeric" }).format(now);
-    const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-    const todayPt = data?.points.find((p) => p.day === todayKey);
+    const isCurrentMonth =
+        monthDate.getFullYear() === now.getFullYear() &&
+        monthDate.getMonth() === now.getMonth();
+
+    useEffect(() => {
+        setLoading(true);
+        setData(null);
+        const y = monthDate.getFullYear();
+        const m = String(monthDate.getMonth() + 1).padStart(2, "0");
+        const lastDayNum = isCurrentMonth
+            ? new Date().getDate()
+            : new Date(y, monthDate.getMonth() + 1, 0).getDate();
+        const d = String(lastDayNum).padStart(2, "0");
+        let cancelled = false;
+        getMonthlyChartData(`${y}-${m}-01`, `${y}-${m}-${d}`)
+            .then((v) => { if (!cancelled) setData(v); })
+            .catch(() => { if (!cancelled) setData(null); })
+            .finally(() => { if (!cancelled) setLoading(false); });
+        return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [monthDate]);
+
+    const monthName = new Intl.DateTimeFormat("es", { month: "long", year: "numeric" }).format(monthDate);
+    const todayKey = isCurrentMonth
+        ? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`
+        : null;
+    const todayPt = todayKey ? data?.points.find((p) => p.day === todayKey) : null;
 
     const assignVals = data?.points.map((p) => p.assignments) ?? [];
     const visitVals = data?.points.map((p) => p.visits) ?? [];
@@ -673,12 +691,35 @@ function MonthlyChartCard({ data, loading }: { data: MonthlyChartData | null; lo
     return (
         <div className="mb-5 overflow-hidden rounded-[20px] border border-[#E8E7FB] bg-white shadow-[0_4px_18px_rgba(91,33,255,0.07)]">
             {/* Header */}
-            <div className="flex items-start justify-between px-4 pt-4 pb-3">
+            <div className="flex items-center justify-between px-4 pt-4 pb-3">
                 <div>
                     <p className="text-[10px] font-black uppercase tracking-[0.15em] text-[#7c70ba]">Rendimiento mensual</p>
-                    <p className="mt-0.5 text-[17px] font-black capitalize tracking-[-0.02em] text-[#101936]">{monthName}</p>
+                    <div className="mt-0.5 flex items-center gap-1.5">
+                        <button
+                            type="button"
+                            onClick={() => setMonthDate((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))}
+                            className="flex h-5 w-5 items-center justify-center rounded-full text-[#a3acca] transition active:bg-[#f3f0ff] active:text-[#7c3aed]"
+                            aria-label="Mes anterior"
+                        >
+                            <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M15 18l-6-6 6-6" />
+                            </svg>
+                        </button>
+                        <p className="text-[17px] font-black capitalize tracking-[-0.02em] text-[#101936]">{monthName}</p>
+                        <button
+                            type="button"
+                            onClick={() => { if (!isCurrentMonth) setMonthDate((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1)); }}
+                            disabled={isCurrentMonth}
+                            className="flex h-5 w-5 items-center justify-center rounded-full text-[#a3acca] transition active:bg-[#f3f0ff] active:text-[#7c3aed] disabled:opacity-25"
+                            aria-label="Mes siguiente"
+                        >
+                            <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M9 18l6-6-6-6" />
+                            </svg>
+                        </button>
+                    </div>
                 </div>
-                <div className="flex items-center gap-3 pt-1">
+                <div className="flex items-center gap-3">
                     <div className="flex items-center gap-1">
                         <span className="inline-block h-2 w-2 rounded-full bg-[#7c3aed]" />
                         <span className="text-[10px] font-bold text-[#66739A]">Asig.</span>
@@ -750,9 +791,11 @@ function MonthlyChartCard({ data, loading }: { data: MonthlyChartData | null; lo
             <div className="grid grid-cols-3 divide-x divide-[#f0f1f2] border-t border-[#f0f1f2]">
                 <div className="px-3 py-3 text-center">
                     <p className="text-[20px] font-black leading-none tracking-[-0.04em] text-[#7c3aed]">
-                        {todayPt?.assignments ?? 0}
+                        {isCurrentMonth ? (todayPt?.assignments ?? 0) : (data?.totalAssignments ?? 0)}
                     </p>
-                    <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.1em] text-[#a3acca]">Hoy</p>
+                    <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.1em] text-[#a3acca]">
+                        {isCurrentMonth ? "Hoy" : "Total"}
+                    </p>
                 </div>
                 <div className="px-3 py-3 text-center">
                     <p className="text-[20px] font-black leading-none tracking-[-0.04em] text-[#059669]">
