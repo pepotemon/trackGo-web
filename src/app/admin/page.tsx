@@ -650,7 +650,6 @@ function MonthlyChartCard() {
     });
     const [data, setData] = useState<MonthlyChartData | null>(null);
     const [loading, setLoading] = useState(true);
-    const [chartErr, setChartErr] = useState<string | null>(null);
 
     const now = new Date();
     const isCurrentMonth =
@@ -660,7 +659,6 @@ function MonthlyChartCard() {
     useEffect(() => {
         setLoading(true);
         setData(null);
-        setChartErr(null);
         const y = monthDate.getFullYear();
         const m = String(monthDate.getMonth() + 1).padStart(2, "0");
         const lastDayNum = isCurrentMonth
@@ -670,13 +668,7 @@ function MonthlyChartCard() {
         let cancelled = false;
         getMonthlyChartData(`${y}-${m}-01`, `${y}-${m}-${d}`)
             .then((v) => { if (!cancelled) setData(v); })
-            .catch((e: unknown) => {
-                if (cancelled) return;
-                const msg = e instanceof Error ? e.message : String(e);
-                console.error("[chart]", msg);
-                setChartErr(msg);
-                setData(null);
-            })
+            .catch(() => { if (!cancelled) setData(null); })
             .finally(() => { if (!cancelled) setLoading(false); });
         return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -748,10 +740,8 @@ function MonthlyChartCard() {
                         </svg>
                     </div>
                 ) : !data ? (
-                    <div className="flex h-[88px] items-center justify-center px-4">
-                        <p className="text-center text-[10px] font-semibold text-[#a3acca]">
-                            {chartErr ?? "Sin datos disponibles"}
-                        </p>
+                    <div className="flex h-[88px] items-center justify-center">
+                        <p className="text-[11px] font-semibold text-[#a3acca]">Sin datos disponibles</p>
                     </div>
                 ) : (
                     <svg

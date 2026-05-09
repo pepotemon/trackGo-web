@@ -156,7 +156,7 @@ export async function getMonthlyChartData(
             collection(db, "dailyEvents"),
             where("dayKey", ">=", startKey),
             where("dayKey", "<=", endKey),
-            limit(20000)
+            limit(10000)
         )),
     ]);
 
