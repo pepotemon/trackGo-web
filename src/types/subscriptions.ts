@@ -22,6 +22,7 @@ export type SubscriptionCity = {
     campaignId?: string | null;
     activeCampaignId?: string | null;
     baseCampaignId?: string | null;
+    campaignDeliveryStatus?: "active" | "paused" | null;
     reservedByCheckoutId?: string | null;
     reservationExpiresAt?: number | null;
     updatedAt?: number | null;

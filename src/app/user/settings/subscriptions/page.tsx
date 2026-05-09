@@ -42,6 +42,7 @@ type PortalCheckout = {
     ticketUrl?: string | null;
     expiresAt?: string | null;
     failureReason?: string | null;
+    hiddenFromUser?: boolean;
     createdAt?: number | null;
     updatedAt?: number | null;
 };
@@ -143,8 +144,10 @@ export default function UserSubscriptionsPage() {
     );
     const activeCheckouts = useMemo(
         () => checkouts.filter((item) =>
-            item.status === "pending" ||
-            (item.status === "approved" && item.activationStatus !== "active")
+            !item.hiddenFromUser && (
+                item.status === "pending" ||
+                (item.status === "approved" && item.activationStatus !== "active")
+            )
         ),
         [checkouts],
     );
@@ -237,6 +240,7 @@ export default function UserSubscriptionsPage() {
                         ticketUrl: d.ticketUrl || null,
                         expiresAt: d.expiresAt || null,
                         failureReason: d.failureReason || null,
+                        hiddenFromUser: d.hiddenFromUser === true,
                         createdAt: Number(d.createdAt || 0) || null,
                         updatedAt: Number(d.updatedAt || 0) || null,
                     };
@@ -811,7 +815,7 @@ function CheckoutCard({
                         </div>
                         <p className="mt-1 text-[12px] font-bold text-rose-800">{cityLabel} — {amountLabel}</p>
                         <p className="mt-1 text-[11px] font-semibold text-rose-700">
-                            Pago recibido pero hubo un error al activar la campana.{checkout.failureReason ? ` (${checkout.failureReason})` : ""} Contacta soporte.
+                            Pago recibido, pero hubo un error al activar tu acceso. Contacta soporte para que podamos revisarlo.
                         </p>
                     </div>
                 </div>

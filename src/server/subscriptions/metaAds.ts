@@ -158,6 +158,28 @@ export async function pauseCityCampaign({
     campaignId: string;
     adsetIds?: string[];
 }) {
+    return setCityCampaignDeliveryStatus({ campaignId, adsetIds, status: "PAUSED" });
+}
+
+export async function resumeCityCampaign({
+    campaignId,
+    adsetIds,
+}: {
+    campaignId: string;
+    adsetIds?: string[];
+}) {
+    return setCityCampaignDeliveryStatus({ campaignId, adsetIds, status: "ACTIVE" });
+}
+
+async function setCityCampaignDeliveryStatus({
+    campaignId,
+    adsetIds,
+    status,
+}: {
+    campaignId: string;
+    adsetIds?: string[];
+    status: "ACTIVE" | "PAUSED";
+}) {
     const campaign = await validateMetaCampaign(campaignId);
     const ids = adsetIds?.filter(Boolean).length
         ? adsetIds.filter(Boolean)
@@ -168,12 +190,13 @@ export async function pauseCityCampaign({
             })
         ).data?.map((item) => item.id).filter(Boolean) || [];
 
-    await Promise.all(ids.map((adsetId) => graphPost(`${adsetId}`, { status: "PAUSED" })));
-    await graphPost(`${campaign.id}`, { status: "PAUSED" });
+    await Promise.all(ids.map((adsetId) => graphPost(`${adsetId}`, { status })));
+    await graphPost(`${campaign.id}`, { status });
 
     return {
         campaignId: campaign.id,
         adsetIds: ids,
+        status,
     };
 }
 

@@ -4,7 +4,7 @@ import { ResponseError } from "@/server/auth";
 import { adminDb } from "@/server/firebaseAdmin";
 import { cancelMercadoPagoPayment, createPixPayment, getMercadoPagoPayment } from "@/server/subscriptions/mercadoPago";
 import { calculateAdsBudget, calculateAdsBudgetAllocation, calculateCycleEnd, getPlanAmount } from "@/server/subscriptions/plans";
-import { configureAndActivateCityCampaign, pauseCityCampaign } from "@/server/subscriptions/metaAds";
+import { configureAndActivateCityCampaign, pauseCityCampaign, resumeCityCampaign } from "@/server/subscriptions/metaAds";
 import { sendPushToUser } from "@/server/push";
 import type { PixCheckoutResponse, SubscriptionPlanId } from "@/types/subscriptions";
 
@@ -32,6 +32,7 @@ export async function listSubscriptionCities() {
             ownerUserId: data.ownerUserId || null,
             campaignId: data.campaignId || null,
             baseCampaignId: data.baseCampaignId || null,
+            campaignDeliveryStatus: data.campaignDeliveryStatus || null,
             reservedByCheckoutId: isExpiredReservation ? null : data.reservedByCheckoutId || null,
             reservationExpiresAt: isExpiredReservation ? null : reservationExpiresAt,
             updatedAt: Number(data.updatedAt || 0) || null,
@@ -143,6 +144,7 @@ export async function getSubscriptionsOverview() {
             activationStatus: data.activationStatus || "unknown",
             failureReason: data.failureReason || null,
             campaignId: data.campaignId || null,
+            hiddenFromUser: data.hiddenFromUser === true,
             createdAt: Number(data.createdAt || 0) || null,
             updatedAt: Number(data.updatedAt || 0) || null,
             paymentApprovedAt: Number(data.paymentApprovedAt || 0) || null,
@@ -503,6 +505,7 @@ export async function getUserSubscriptionPortal(userId: string) {
                 ticketUrl: data.ticketUrl || null,
                 expiresAt: data.expiresAt || null,
                 failureReason: data.failureReason || null,
+                hiddenFromUser: data.hiddenFromUser === true,
                 createdAt: Number(data.createdAt || 0) || null,
                 updatedAt: Number(data.updatedAt || 0) || null,
                 paymentApprovedAt: Number(data.paymentApprovedAt || 0) || null,
@@ -660,6 +663,7 @@ export async function processMercadoPagoPayment(paymentId: string) {
             cityRef.set(
                 {
                     activeCampaignId: campaign.campaignId,
+                    campaignDeliveryStatus: "active",
                     activeSubscriptionId: checkoutId,
                     adsetIds: campaign.adsetIds,
                     adIds: campaign.adIds,
@@ -870,6 +874,7 @@ export async function retryMetaActivation(checkoutId: string) {
                     status: "occupied",
                     ownerUserId: String(checkout.userId),
                     activeCampaignId: campaign.campaignId,
+                    campaignDeliveryStatus: "active",
                     activeSubscriptionId: checkoutId,
                     adsetIds: campaign.adsetIds,
                     adIds: campaign.adIds,
@@ -946,6 +951,69 @@ export async function retryMetaActivation(checkoutId: string) {
     }
 }
 
+export async function hideCheckoutFromUser(checkoutId: string) {
+    const checkoutRef = adminDb.collection("subscriptionCheckouts").doc(checkoutId.trim());
+    const checkoutSnap = await checkoutRef.get();
+
+    if (!checkoutSnap.exists) {
+        throw new ResponseError("checkout_not_found", "No existe el checkout.", 404);
+    }
+
+    const checkout = checkoutSnap.data() || {};
+    if (checkout.status !== "approved" || checkout.activationStatus !== "meta_failed") {
+        throw new ResponseError("checkout_not_hideable", "Solo se puede ocultar un error de activacion pendiente.", 409);
+    }
+
+    await checkoutRef.set(
+        {
+            hiddenFromUser: true,
+            hiddenFromUserAt: nowMs(),
+            updatedAt: nowMs(),
+        },
+        { merge: true },
+    );
+
+    return { ok: true, checkoutId: checkoutRef.id };
+}
+
+export async function updateCityCampaignDelivery(input: { cityId: string; status: "active" | "paused" }) {
+    const cityId = input.cityId.trim();
+    if (!cityId) throw new ResponseError("city_required", "Indica la ciudad.");
+
+    const cityRef = adminDb.collection("cities").doc(cityId);
+    const citySnap = await cityRef.get();
+    if (!citySnap.exists) throw new ResponseError("city_not_found", "La ciudad no existe.", 404);
+
+    const city = citySnap.data() || {};
+    if (city.status !== "occupied" && !city.activeSubscriptionId) {
+        throw new ResponseError("city_not_occupied", "Solo puedes pausar o reanudar una ciudad ocupada.", 409);
+    }
+
+    const campaignId = String(city.activeCampaignId || city.campaignId || city.baseCampaignId || "");
+    if (!campaignId) {
+        throw new ResponseError("campaign_required", "La ciudad no tiene campana Meta configurada.", 409);
+    }
+
+    const adsetIds = Array.isArray(city.adsetIds) ? city.adsetIds.map((id) => String(id)).filter(Boolean) : [];
+    const result =
+        input.status === "paused"
+            ? await pauseCityCampaign({ campaignId, adsetIds })
+            : await resumeCityCampaign({ campaignId, adsetIds });
+
+    await cityRef.set(
+        {
+            campaignDeliveryStatus: input.status,
+            campaignDeliveryUpdatedAt: nowMs(),
+            activeCampaignId: result.campaignId,
+            adsetIds: result.adsetIds,
+            updatedAt: nowMs(),
+        },
+        { merge: true },
+    );
+
+    return { ok: true, cityId, campaignId: result.campaignId, status: input.status };
+}
+
 export async function releaseSubscriptionCity(cityId: string) {
     if (!cityId.trim()) {
         throw new ResponseError("city_required", "Indica la ciudad a liberar.");
@@ -1004,6 +1072,8 @@ export async function releaseSubscriptionCity(cityId: string) {
                 ownerUserId: null,
                 activeSubscriptionId: FieldValue.delete(),
                 activeCampaignId: FieldValue.delete(),
+                campaignDeliveryStatus: FieldValue.delete(),
+                campaignDeliveryUpdatedAt: FieldValue.delete(),
                 adsetIds: FieldValue.delete(),
                 adIds: FieldValue.delete(),
                 reservedByCheckoutId: FieldValue.delete(),

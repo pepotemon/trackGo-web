@@ -56,6 +56,7 @@ type OverviewCheckout = {
     status: string;
     activationStatus: string;
     failureReason?: string | null;
+    hiddenFromUser?: boolean;
     createdAt?: number | null;
     updatedAt?: number | null;
     paymentApprovedAt?: number | null;
@@ -323,6 +324,50 @@ export default function SubscriptionsAdminPage() {
         }
     }
 
+    async function hideCheckoutNotice(checkoutId: string) {
+        try {
+            setActionBusyId(checkoutId);
+            setActionMessage("");
+            const token = await getAuthToken();
+            const response = await fetch("/api/subscriptions/hide-checkout", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ checkoutId }),
+            });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.message || "No se pudo ocultar el aviso.");
+            setActionMessage("Aviso ocultado para el vendedor.");
+            await loadOverview();
+        } catch (err) {
+            setActionMessage(err instanceof Error ? humanizeError(err.message) : "No se pudo ocultar el aviso.");
+        } finally {
+            setActionBusyId("");
+        }
+    }
+
+    async function updateCampaignDelivery(cityId: string, status: "active" | "paused") {
+        const label = status === "paused" ? "pausar" : "reanudar";
+        if (!window.confirm(`Esto va a ${label} la campana en Meta para esta ciudad. Continuar?`)) return;
+        try {
+            setActionBusyId(`${cityId}:${status}`);
+            setActionMessage("");
+            const token = await getAuthToken();
+            const response = await fetch("/api/subscriptions/campaign-delivery", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ cityId, status }),
+            });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.message || `No se pudo ${label} la campana.`);
+            setActionMessage(status === "paused" ? "Campana pausada correctamente." : "Campana reanudada correctamente.");
+            await loadOverview();
+        } catch (err) {
+            setActionMessage(err instanceof Error ? humanizeError(err.message) : `No se pudo ${label} la campana.`);
+        } finally {
+            setActionBusyId("");
+        }
+    }
+
     if (!canView) {
         return <EmptyState title="Sin permiso" body="No tienes permiso para ver suscripciones." />;
     }
@@ -405,6 +450,7 @@ export default function SubscriptionsAdminPage() {
                             canRetry={canManage}
                             busy={actionBusyId === item.id}
                             onRetry={() => void retryCheckout(item.id)}
+                            onHide={() => void hideCheckoutNotice(item.id)}
                         />
                     ))}
                     {overview?.checkouts.length === 0 ? <EmptyInline text="No hay pagos recientes." /> : null}
@@ -420,6 +466,7 @@ export default function SubscriptionsAdminPage() {
                     onDetail={() => { setDetailCityId(sheetCityId); setSheetCityId(null); }}
                     onEdit={() => { openEditCity(sheetCity); setSheetCityId(null); }}
                     onRelease={() => { void releaseCity(sheetCityId!); setSheetCityId(null); }}
+                    onCampaignDelivery={(status) => { void updateCampaignDelivery(sheetCityId!, status); setSheetCityId(null); }}
                     onClose={() => setSheetCityId(null)}
                 />
             ) : null}
@@ -429,9 +476,11 @@ export default function SubscriptionsAdminPage() {
                 subscription={detailSubscription}
                 checkout={detailCheckout}
                 canManage={canManage}
-                busy={actionBusyId === detailCityId}
+                busy={actionBusyId === detailCityId || Boolean(detailCityId && actionBusyId.startsWith(`${detailCityId}:`))}
                 onRelease={() => { if (detailCityId) void releaseCity(detailCityId); }}
                 onRetry={() => { if (detailCheckout) void retryCheckout(detailCheckout.id); }}
+                onHideCheckout={() => { if (detailCheckout) void hideCheckoutNotice(detailCheckout.id); }}
+                onCampaignDelivery={(status) => { if (detailCityId) void updateCampaignDelivery(detailCityId, status); }}
                 onClose={() => setDetailCityId(null)}
             />
 
@@ -518,6 +567,7 @@ function CityActionSheet({
     onDetail,
     onEdit,
     onRelease,
+    onCampaignDelivery,
     onClose,
 }: {
     city: SubscriptionCity;
@@ -527,13 +577,15 @@ function CityActionSheet({
     onDetail: () => void;
     onEdit: () => void;
     onRelease: () => void;
+    onCampaignDelivery: (status: "active" | "paused") => void;
     onClose: () => void;
 }) {
     const isOccupied = city.status === "occupied" || city.status === "reserved";
+    const campaignPaused = city.campaignDeliveryStatus === "paused";
     return (
         <>
             <button type="button" onClick={onClose} aria-label="Cerrar" className="fixed inset-0 z-40 bg-black/40" />
-            <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-[24px] bg-white px-4 pb-8 pt-4 shadow-[0_-8px_40px_rgba(0,0,0,0.18)]">
+            <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-[24px] bg-white px-4 pb-8 pt-4 shadow-[0_-8px_40px_rgba(0,0,0,0.18)] sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:w-[min(420px,calc(100vw-2rem))] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl sm:p-4 sm:shadow-[0_28px_80px_rgba(16,25,54,0.24)]">
                 <div className="mx-auto mb-4 h-1 w-12 rounded-full bg-[#e8e7fb]" />
                 <div className="mb-4 min-w-0">
                     <p className="truncate text-[15px] font-black text-[#101936]">{city.name}</p>
@@ -563,6 +615,17 @@ function CityActionSheet({
                         >
                             <AppIcon name="edit" size="sm" plain className="h-5 w-5 text-[#66739a]" />
                             Editar ciudad
+                        </button>
+                    ) : null}
+                    {canManage && city.status === "occupied" ? (
+                        <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => onCampaignDelivery(campaignPaused ? "active" : "paused")}
+                            className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#f8f7ff] px-4 text-[14px] font-bold text-[#101936] transition active:bg-[#f3f0ff] disabled:opacity-50"
+                        >
+                            <AppIcon name={campaignPaused ? "play" : "pause"} size="sm" plain className="h-5 w-5 text-[#7c3aed]" />
+                            {campaignPaused ? "Reanudar campana" : "Pausar campana"}
                         </button>
                     ) : null}
                     {canManage && city.status !== "available" ? (
@@ -624,16 +687,19 @@ function CheckoutRow({
     canRetry,
     busy,
     onRetry,
+    onHide,
 }: {
     item: OverviewCheckout;
     canRetry: boolean;
     busy: boolean;
     onRetry: () => void;
+    onHide: () => void;
 }) {
     const failed = item.status === "failed" || item.activationStatus.includes("failed");
     const isPending = item.status === "pending";
     const isApproved = item.status === "approved" && !item.activationStatus.includes("failed");
     const canRetryActivation = canRetry && item.status === "approved" && item.activationStatus === "meta_failed";
+    const canHideCheckout = canRetryActivation && item.hiddenFromUser !== true;
 
     const borderCls = failed
         ? "border-red-100 bg-red-50/40"
@@ -661,10 +727,17 @@ function CheckoutRow({
                 <p className="mt-2 line-clamp-2 rounded-xl bg-red-100 px-2.5 py-1.5 text-[10px] font-bold text-red-700">{humanizeError(item.failureReason)}</p>
             ) : null}
             {canRetryActivation ? (
-                <Button type="button" variant="secondary" disabled={busy} onClick={onRetry} className="mt-2 w-full">
-                    <AppIcon name="refresh" size="sm" plain className="h-4 w-4 text-current" />
-                    {busy ? "Reintentando..." : "Reintentar"}
-                </Button>
+                <div className="mt-2 grid gap-2">
+                    <Button type="button" variant="secondary" disabled={busy} onClick={onRetry} className="w-full">
+                        <AppIcon name="refresh" size="sm" plain className="h-4 w-4 text-current" />
+                        {busy ? "Reintentando..." : "Reintentar"}
+                    </Button>
+                    {canHideCheckout ? (
+                        <Button type="button" variant="ghost" disabled={busy} onClick={onHide} className="w-full">
+                            Ocultar al vendedor
+                        </Button>
+                    ) : null}
+                </div>
             ) : null}
         </div>
     );
@@ -844,6 +917,8 @@ function CityDetailModal({
     busy,
     onRelease,
     onRetry,
+    onHideCheckout,
+    onCampaignDelivery,
     onClose,
 }: {
     city: SubscriptionCity | null;
@@ -853,11 +928,16 @@ function CityDetailModal({
     busy: boolean;
     onRelease: () => void;
     onRetry: () => void;
+    onHideCheckout: () => void;
+    onCampaignDelivery: (status: "active" | "paused") => void;
     onClose: () => void;
 }) {
     if (!city) return null;
     const canRetry = canManage && checkout?.status === "approved" && checkout?.activationStatus === "meta_failed";
+    const canHideCheckout = canRetry && checkout?.hiddenFromUser !== true;
     const canRelease = canManage && city.status !== "available";
+    const canToggleCampaign = canManage && city.status === "occupied";
+    const campaignPaused = city.campaignDeliveryStatus === "paused";
 
     return (
         <Modal open title={city.name} subtitle={[city.state, city.country].filter(Boolean).join(" - ") || "Sin region"} size="md" onClose={onClose}>
@@ -865,6 +945,7 @@ function CityDetailModal({
                 {/* Estado de la ciudad */}
                 <div className="flex items-center gap-2">
                     <StatusPill status={city.status} />
+                    {city.campaignDeliveryStatus ? <StatusPill status={`campaign_${city.campaignDeliveryStatus}`} /> : null}
                     {subscription ? <StatusPill status={subscription.status} /> : null}
                 </div>
 
@@ -911,12 +992,23 @@ function CityDetailModal({
                 ) : null}
 
                 {/* Acciones */}
-                {(canRetry || canRelease) ? (
+                {(canRetry || canHideCheckout || canToggleCampaign || canRelease) ? (
                     <div className="flex flex-wrap justify-end gap-2 pt-1">
                         {canRetry ? (
                             <Button type="button" variant="secondary" disabled={busy} onClick={onRetry}>
                                 <AppIcon name="refresh" size="sm" plain className="h-4 w-4 text-current" />
                                 {busy ? "Reintentando..." : "Reintentar activacion"}
+                            </Button>
+                        ) : null}
+                        {canHideCheckout ? (
+                            <Button type="button" variant="ghost" disabled={busy} onClick={onHideCheckout}>
+                                Ocultar al vendedor
+                            </Button>
+                        ) : null}
+                        {canToggleCampaign ? (
+                            <Button type="button" variant="secondary" disabled={busy} onClick={() => onCampaignDelivery(campaignPaused ? "active" : "paused")}>
+                                <AppIcon name={campaignPaused ? "play" : "pause"} size="sm" plain className="h-4 w-4 text-current" />
+                                {campaignPaused ? "Reanudar campana" : "Pausar campana"}
                             </Button>
                         ) : null}
                         {canRelease ? (
@@ -955,6 +1047,8 @@ function StatusPill({ status }: { status: string }) {
     const classes =
         normalized === "available" || normalized === "active" || normalized === "approved"
             ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
+            : normalized === "campaign_active"
+              ? "bg-blue-50 text-blue-700 ring-blue-100"
             : normalized === "occupied" || normalized === "reserved" || normalized === "processing" || normalized === "waiting_payment"
               ? "bg-amber-50 text-amber-700 ring-amber-100"
               : normalized.includes("failed") || normalized === "meta_failed"
@@ -1034,6 +1128,8 @@ function labelStatus(status: string) {
         waiting_payment: "Esperando",
         processing: "Procesando",
         active: "Activa",
+        campaign_active: "Campana activa",
+        campaign_paused: "Campana pausada",
         approved: "Aprobado",
         meta_failed: "Error",
         failed: "Error",
