@@ -403,6 +403,7 @@ function isAdminRouteAllowed(pathname: string, permissions: AdminPermissions) {
     if (pathname.startsWith("/admin/settings/notifications")) return true;
     if (pathname.startsWith("/admin/settings/users")) return permissions.usersView;
     if (pathname.startsWith("/admin/settings/subscriptions")) return permissions.subscriptionsView || permissions.subscriptionsEdit;
+    if (pathname.startsWith("/admin/settings/commercial-directory")) return permissions.commercialDirectoryView || permissions.commercialDirectoryEdit;
     if (pathname.startsWith("/admin/accounting")) return permissions.accountingView;
     if (pathname.startsWith("/admin/activity")) return permissions.actividad;
     if (pathname.startsWith("/admin/leads/assignments")) return permissions.assignmentsView;

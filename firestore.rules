@@ -22,6 +22,21 @@ service cloud.firestore {
         && myUserDoc().data.active == true;
     }
 
+    function isSuperAdmin() {
+      return isAdmin()
+        && myUserDoc().data.isSuperAdmin == true;
+    }
+
+    function hasAdminPermission(permission) {
+      return isSuperAdmin()
+        || (
+          isAdmin()
+          && ("permissions" in myUserDoc().data)
+          && (permission in myUserDoc().data.permissions)
+          && myUserDoc().data.permissions[permission] == true
+        );
+    }
+
     function isUser() {
       return signedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
@@ -641,6 +656,35 @@ service cloud.firestore {
     // -------------------------
     match /autoAssignState/{docId} {
       allow read, write: if false;
+    }
+
+    // -------------------------
+    // COMMERCIAL DIRECTORY
+    // Public-source cold prospect database managed by admins.
+    // -------------------------
+    match /commercialDirectoryLocations/{locationId} {
+      allow read: if hasAdminPermission("commercialDirectoryView")
+        || hasAdminPermission("commercialDirectoryEdit");
+      allow create, update, delete: if hasAdminPermission("commercialDirectoryEdit");
+    }
+
+    match /commercialDirectoryCategories/{categoryId} {
+      allow read: if hasAdminPermission("commercialDirectoryView")
+        || hasAdminPermission("commercialDirectoryEdit");
+      allow create, update, delete: if hasAdminPermission("commercialDirectoryEdit");
+    }
+
+    match /commercialDirectoryProspects/{prospectId} {
+      allow read: if hasAdminPermission("commercialDirectoryView")
+        || hasAdminPermission("commercialDirectoryEdit");
+      allow create, update, delete: if hasAdminPermission("commercialDirectoryEdit");
+    }
+
+    match /commercialDirectoryImports/{importId} {
+      allow read: if hasAdminPermission("commercialDirectoryView")
+        || hasAdminPermission("commercialDirectoryEdit");
+      allow create: if hasAdminPermission("commercialDirectoryEdit");
+      allow update, delete: if false;
     }
 
     // -------------------------

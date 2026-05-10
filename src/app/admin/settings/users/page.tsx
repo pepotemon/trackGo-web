@@ -1833,6 +1833,23 @@ function EditUserModal({
                             </div>
 
                             <div>
+                                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.06em] text-[#98A2B3]">Directorio Comercial</p>
+                                <div className="space-y-1.5">
+                                    {([
+                                        { key: "commercialDirectoryView", label: "Ver Directorio Comercial" },
+                                        { key: "commercialDirectoryEdit", label: "Crear carpetas e importar Excel" },
+                                    ] as { key: keyof AdminPermissions; label: string }[]).map(({ key, label }) => (
+                                        <PermissionToggle
+                                            key={key}
+                                            label={label}
+                                            value={permissions[key]}
+                                            onChange={(val) => setPermissions((prev) => ({ ...prev, [key]: val }))}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div>
                                 <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.06em] text-[#98A2B3]">Usuarios</p>
                                 <div className="space-y-1.5">
                                     {([

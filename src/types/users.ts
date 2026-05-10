@@ -56,6 +56,10 @@ export type AdminPermissions = {
     subscriptionsView: boolean;
     /** Can configure subscription cities, rules and operational actions. */
     subscriptionsEdit: boolean;
+    /** Can view the Commercial Directory admin screen. */
+    commercialDirectoryView: boolean;
+    /** Can create locations and import public prospect databases. */
+    commercialDirectoryEdit: boolean;
     /** Can view the Usuarios screen (filtered to assigned users). */
     usersView: boolean;
     /** Can create a new user. */
@@ -87,6 +91,8 @@ export function defaultAdminPermissions(): AdminPermissions {
         accountingInvestmentEdit: false,
         subscriptionsView: false,
         subscriptionsEdit: false,
+        commercialDirectoryView: false,
+        commercialDirectoryEdit: false,
         usersView: false,
         usersCreate: false,
         usersEdit: false,
@@ -137,6 +143,8 @@ export function fullAdminPermissions(): AdminPermissions {
         accountingInvestmentEdit: true,
         subscriptionsView: true,
         subscriptionsEdit: true,
+        commercialDirectoryView: true,
+        commercialDirectoryEdit: true,
         usersView: true,
         usersCreate: true,
         usersEdit: true,

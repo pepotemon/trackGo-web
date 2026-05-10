@@ -33,6 +33,13 @@ export default function AdminSettingsPage() {
             visible: permissions.subscriptionsView || permissions.subscriptionsEdit,
         },
         {
+            href: "/admin/settings/commercial-directory",
+            title: "Directorio Comercial",
+            body: "Base publica de prospectos por pais, ciudad, barrio y categoria.",
+            tone: "blue",
+            visible: permissions.commercialDirectoryView || permissions.commercialDirectoryEdit,
+        },
+        {
             href: "/admin/settings/notifications",
             title: "Notificaciones",
             body: "Activa o desactiva avisos push en este dispositivo.",
