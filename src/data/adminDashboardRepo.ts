@@ -81,6 +81,19 @@ function getScopedUsers(users: UserDoc[], adminId?: string | null, isSuperAdmin 
     return users.filter((user) => user.sharedWith?.some((entry) => entry.adminId === adminId));
 }
 
+function adminSellerAccountingStartMs(user: UserDoc, adminId: string, adminCreatedAt?: number) {
+    const share = user.sharedWith?.find((entry) => entry.adminId === adminId);
+    if (!share) return null;
+    const startMs = Math.max(
+        typeof adminCreatedAt === "number" ? adminCreatedAt : 0,
+        typeof share.assignedAt === "number" ? share.assignedAt : 0,
+    );
+    if (!Number.isFinite(startMs) || startMs <= 0) return 0;
+    const date = new Date(startMs);
+    date.setHours(0, 0, 0, 0);
+    return date.getTime();
+}
+
 async function countTodayAssignmentsForUsers(dayKey: string, userIds: string[] | null) {
     if (userIds === null) {
         return countCollection("autoAssignLogs", [where("dayKey", "==", dayKey)]);
@@ -143,9 +156,11 @@ export type MonthlyChartData = {
 
 export async function getMonthlyChartData(
     startKey: string,
-    endKey: string
+    endKey: string,
+    scope?: { adminId?: string | null; adminCreatedAt?: number; isSuperAdmin?: boolean }
 ): Promise<MonthlyChartData> {
-    const [logsSnap, eventsSnap] = await Promise.all([
+    const [users, logsSnap, eventsSnap] = await Promise.all([
+        listAdminUsers(),
         getDocs(query(
             collection(db, "autoAssignLogs"),
             where("dayKey", ">=", startKey),
@@ -159,9 +174,22 @@ export async function getMonthlyChartData(
             limit(10000)
         )),
     ]);
+    const scopedUsers = getScopedUsers(users, scope?.adminId, scope?.isSuperAdmin === true);
+    const scopedUserIds = scope?.isSuperAdmin === true || !scope?.adminId
+        ? null
+        : new Set(scopedUsers.filter((user) => user.role === "user").map((user) => user.id));
+    const accountingStartByUser = new Map<string, number>();
+    if (scope?.isSuperAdmin !== true && scope?.adminId) {
+        for (const user of scopedUsers) {
+            const startMs = adminSellerAccountingStartMs(user, scope.adminId, scope.adminCreatedAt);
+            if (startMs !== null) accountingStartByUser.set(user.id, startMs);
+        }
+    }
 
     const assignsByDay = new Map<string, number>();
     for (const d of logsSnap.docs) {
+        const userId = String(d.data().userId || "");
+        if (scopedUserIds && !scopedUserIds.has(userId)) continue;
         const key = String(d.data().dayKey ?? "");
         if (key) assignsByDay.set(key, (assignsByDay.get(key) ?? 0) + 1);
     }
@@ -170,11 +198,19 @@ export async function getMonthlyChartData(
     let totalRevenue = 0;
     for (const d of eventsSnap.docs) {
         const data = d.data();
+        const userId = String(data.userId || "");
+        if (scopedUserIds && !scopedUserIds.has(userId)) continue;
         const key = String(data.dayKey ?? "");
         const amount = typeof data.amount === "number" ? data.amount : 0;
         if (key && data.type === "visited") {
             visitsByDay.set(key, (visitsByDay.get(key) ?? 0) + 1);
-            totalRevenue += amount;
+            const eventCreatedAt = typeof data.createdAt === "number" ? data.createdAt : 0;
+            const revenueAllowedFrom = scope?.isSuperAdmin === true || !scope?.adminId
+                ? 0
+                : accountingStartByUser.get(userId) ?? Number.POSITIVE_INFINITY;
+            if (eventCreatedAt >= revenueAllowedFrom) {
+                totalRevenue += amount;
+            }
         }
     }
 

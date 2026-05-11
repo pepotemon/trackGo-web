@@ -192,7 +192,11 @@ export default function AdminDashboardPage() {
                 </div>
 
                 {/* Monthly chart */}
-                <MonthlyChartCard />
+                <MonthlyChartCard
+                    adminId={profile?.id ?? null}
+                    adminCreatedAt={profile?.createdAt}
+                    isSuperAdmin={isSuperAdmin}
+                />
 
                 {/* Recent assignments */}
                 {permissions.assignmentsView ? (
@@ -643,7 +647,15 @@ function fmtRevenue(v: number) {
     return `$${Math.round(v)}`;
 }
 
-function MonthlyChartCard() {
+function MonthlyChartCard({
+    adminId,
+    adminCreatedAt,
+    isSuperAdmin,
+}: {
+    adminId?: string | null;
+    adminCreatedAt?: number;
+    isSuperAdmin: boolean;
+}) {
     const [monthDate, setMonthDate] = useState(() => {
         const t = new Date();
         return new Date(t.getFullYear(), t.getMonth(), 1);
@@ -668,7 +680,7 @@ function MonthlyChartCard() {
             : new Date(y, monthDate.getMonth() + 1, 0).getDate();
         const d = String(lastDayNum).padStart(2, "0");
         let cancelled = false;
-        getMonthlyChartData(`${y}-${m}-01`, `${y}-${m}-${d}`)
+        getMonthlyChartData(`${y}-${m}-01`, `${y}-${m}-${d}`, { adminId, adminCreatedAt, isSuperAdmin })
             .then((v) => { if (!cancelled) setData(v); })
             .catch(() => { if (!cancelled) setData(null); })
             .finally(() => { if (!cancelled) setLoading(false); });
@@ -677,7 +689,7 @@ function MonthlyChartCard() {
             window.clearTimeout(timer);
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [monthDate]);
+    }, [monthDate, adminId, adminCreatedAt, isSuperAdmin]);
 
     const monthName = new Intl.DateTimeFormat("es", { month: "long", year: "numeric" }).format(monthDate);
     const todayKey = isCurrentMonth
