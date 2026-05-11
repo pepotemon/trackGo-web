@@ -31,6 +31,29 @@ function saveNote(leadId: string, note: string) {
     }
 }
 
+// ── WhatsApp ──────────────────────────────────────────────────────────────────
+
+const SPANISH_3DIGIT_CC = ["507","502","503","504","505","506","509","593","591","595","598"];
+const SPANISH_PHONE_PREFIXES = [...SPANISH_3DIGIT_CC, "52","54","56","57","51","58"];
+function isSpanishPhone(phone: string) {
+    const d = phone.replace(/\D/g, "");
+    if (SPANISH_PHONE_PREFIXES.some(p => d.startsWith(p))) return true;
+    if (d.startsWith("55") && SPANISH_3DIGIT_CC.some(cc => d.slice(2).startsWith(cc))) return true;
+    return false;
+}
+function buildWALink(phone: string, msg: string) {
+    const d = phone.replace(/\D/g, "");
+    if (SPANISH_PHONE_PREFIXES.some(p => d.startsWith(p))) return `https://wa.me/${d}?text=${encodeURIComponent(msg)}`;
+    if (d.startsWith("55")) {
+        const stripped = d.slice(2);
+        if (SPANISH_3DIGIT_CC.some(cc => stripped.startsWith(cc))) return `https://wa.me/${stripped}?text=${encodeURIComponent(msg)}`;
+        return `https://wa.me/${d}?text=${encodeURIComponent(msg)}`;
+    }
+    return `https://wa.me/55${d}?text=${encodeURIComponent(msg)}`;
+}
+
+const PAGE_SIZE = 15;
+
 // ── utils ─────────────────────────────────────────────────────────────────────
 
 function norm(s: unknown) {
@@ -128,12 +151,6 @@ function missingFields(lead: MetaLeadDoc) {
     return missing;
 }
 
-function recoveryBadge(lead: MetaLeadDoc) {
-    if (!lead.business) return "24h sin completar";
-    if (!lead.location?.mapsUrl && !lead.location?.lat) return "Falta ubicacion";
-    return "Por revisar";
-}
-
 // ── page ──────────────────────────────────────────────────────────────────────
 
 export default function UserIncompleteClientsPage() {
@@ -165,6 +182,13 @@ export default function UserIncompleteClientsPage() {
     const [previewMessages, setPreviewMessages] = useState<LeadMessageDoc[]>([]);
     const [previewLoading, setPreviewLoading] = useState(false);
     const [previewError, setPreviewError] = useState("");
+    const [confirmTakeOpen, setConfirmTakeOpen] = useState(false);
+
+    // pagination
+    const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+    // whatsapp
+    const [waSent, setWaSent] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         const timer = window.setInterval(() => setRecoveryClock((value) => value + 1), 5 * 60 * 1000);
@@ -250,9 +274,9 @@ export default function UserIncompleteClientsPage() {
         return [...seen].sort();
     }, [activeList, endKey, startKey]);
 
-    // reset ddd filter when switching tabs
+    // reset ddd filter and pagination when switching tabs
     useEffect(() => {
-        const timer = window.setTimeout(() => setDddFilter("all"), 0);
+        const timer = window.setTimeout(() => { setDddFilter("all"); setVisibleCount(PAGE_SIZE); }, 0);
         return () => window.clearTimeout(timer);
     }, [tab]);
     useEffect(() => {
@@ -276,6 +300,15 @@ export default function UserIncompleteClientsPage() {
         return list;
     }, [activeList, dddFilter, endKey, search, startKey]);
 
+    // reset pagination when filtered list changes
+    useEffect(() => {
+        const timer = window.setTimeout(() => setVisibleCount(PAGE_SIZE), 0);
+        return () => window.clearTimeout(timer);
+    }, [dddFilter, startKey, endKey, search]);
+
+    const pagedVisible = tab === "incomplete" ? visible.slice(0, visibleCount) : visible;
+    const hasMore = tab === "incomplete" && visible.length > visibleCount;
+
     // ── actions ───────────────────────────────────────────────────────────────
 
     function openNote(lead: MetaLeadDoc) {
@@ -288,6 +321,14 @@ export default function UserIncompleteClientsPage() {
         saveNote(actionLead.id, noteText);
         setNotes((prev) => ({ ...prev, [actionLead.id]: noteText.trim() }));
         closeAction();
+    }
+
+    function openWhatsApp(lead: MetaLeadDoc) {
+        const msg = isSpanishPhone(lead.phone)
+            ? `¡Buenas tardes! Somos de Crédito Comercial. Nos comunicamos para continuar con la liberación del crédito y el registro de tu negocio. ¡Quedamos atentos! 😊`
+            : `Boa tarde! Somos da Crédito Comercial. Estamos entrando em contato para dar continuidade à liberação do crédito e realização do cadastro. Aguardamos seu retorno! 😊`;
+        window.open(buildWALink(lead.phone, msg), "_blank");
+        setWaSent((prev) => new Set(prev).add(lead.id));
     }
 
     function openNotSuitable(lead: MetaLeadDoc) { setActionLead(lead); setActionType("not_suitable"); }
@@ -402,7 +443,9 @@ export default function UserIncompleteClientsPage() {
                 <div className="mb-3 flex gap-1.5">
                     <TabBtn active={tab === "incomplete"} onClick={() => setTab("incomplete")}>
                         Recuperar
-                        <CountPill active={tab === "incomplete"}>{incomplete.length}</CountPill>
+                        <CountPill active={tab === "incomplete"} hasMore={tab === "incomplete" && hasMore}>
+                            {incomplete.length}{tab === "incomplete" && hasMore ? "+" : ""}
+                        </CountPill>
                     </TabBtn>
                     <TabBtn active={tab === "not_suitable"} onClick={() => setTab("not_suitable")}>
                         No aptos
@@ -447,19 +490,32 @@ export default function UserIncompleteClientsPage() {
                 ) : visible.length === 0 ? (
                     <EmptyState tab={tab} hasSearch={!!search} hasPhoneCodes={phoneCodes.length > 0} />
                 ) : (
-                    <div className="grid gap-2.5">
-                        {visible.map((lead) => (
-                            <ClientCard
-                                key={lead.id}
-                                lead={lead}
-                                note={notes[lead.id]}
-                                tab={tab}
-                                onNote={() => openNote(lead)}
-                                onNotSuitable={() => openNotSuitable(lead)}
-                                onReview={() => openReview(lead)}
-                            />
-                        ))}
-                    </div>
+                    <>
+                        <div className="grid gap-2.5">
+                            {pagedVisible.map((lead) => (
+                                <ClientCard
+                                    key={lead.id}
+                                    lead={lead}
+                                    note={notes[lead.id]}
+                                    tab={tab}
+                                    waSent={waSent.has(lead.id)}
+                                    onNote={() => openNote(lead)}
+                                    onNotSuitable={() => openNotSuitable(lead)}
+                                    onReview={() => openReview(lead)}
+                                    onWhatsApp={() => openWhatsApp(lead)}
+                                />
+                            ))}
+                        </div>
+                        {hasMore ? (
+                            <button
+                                type="button"
+                                onClick={() => setVisibleCount((n) => n + PAGE_SIZE)}
+                                className="mt-3 w-full rounded-[14px] border border-[#E8E7FB] bg-white py-3 text-[12px] font-black text-[#7C3AED] shadow-sm transition active:bg-[#f3f0ff]"
+                            >
+                                Cargar más ({visible.length - visibleCount} restantes)
+                            </button>
+                        ) : null}
+                    </>
                 )}
             </div>
 
@@ -490,9 +546,11 @@ export default function UserIncompleteClientsPage() {
                                         lead={lead}
                                         note={notes[lead.id]}
                                         tab={tab}
+                                        waSent={waSent.has(lead.id)}
                                         onNote={() => { openNote(lead); setSearchOpen(false); }}
                                         onNotSuitable={() => { openNotSuitable(lead); setSearchOpen(false); }}
                                         onReview={() => { openReview(lead); setSearchOpen(false); }}
+                                        onWhatsApp={() => { openWhatsApp(lead); setSearchOpen(false); }}
                                     />
                                 ))}
                             </div>
@@ -644,11 +702,11 @@ export default function UserIncompleteClientsPage() {
                         </p>
                         <button
                             type="button"
-                            onClick={confirmAccept}
+                            onClick={() => setConfirmTakeOpen(true)}
                             disabled={saving || previewLoading}
                             className="w-full rounded-[14px] bg-emerald-600 py-3 text-[13px] font-black text-white disabled:opacity-60"
                         >
-                            {saving ? "Tomando..." : "Tomar cliente"}
+                            Tomar cliente
                         </button>
                     </div>
                 }>
@@ -697,6 +755,30 @@ export default function UserIncompleteClientsPage() {
                 </BottomSheet>
             ) : null}
 
+            {confirmTakeOpen && actionLead ? (
+                <BottomSheet onClose={() => setConfirmTakeOpen(false)}>
+                    <div className="mb-4">
+                        <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-700">TOMAR CLIENTE</span>
+                        <p className="mt-2 text-[17px] font-black text-[#101936]">{displayName(actionLead)}</p>
+                    </div>
+                    <div className="mb-4 rounded-[14px] border border-emerald-100 bg-emerald-50 px-3 py-3 text-[12px] font-semibold text-emerald-800">
+                        <p className="font-black">Nueva funcion: chat dentro de TrackGo</p>
+                        <p className="mt-1">Una vez que tomes este cliente, podras chatear con el directamente desde Prospectos usando el boton <span className="font-black">Chat</span> — sin salir de la app ni abrir WhatsApp.</p>
+                    </div>
+                    <div className="flex gap-2">
+                        <button type="button" onClick={() => setConfirmTakeOpen(false)} className="flex-1 rounded-[14px] border border-[#E8E7FB] py-3 text-[13px] font-black text-[#66739A]">Cancelar</button>
+                        <button
+                            type="button"
+                            onClick={async () => { setConfirmTakeOpen(false); await confirmAccept(); }}
+                            disabled={saving}
+                            className="flex-1 rounded-[14px] bg-emerald-600 py-3 text-[13px] font-black text-white disabled:opacity-60"
+                        >
+                            {saving ? "Tomando..." : "Confirmar"}
+                        </button>
+                    </div>
+                </BottomSheet>
+            ) : null}
+
             {actionType === "not_suitable" && actionLead ? (
                 <BottomSheet onClose={closeAction}>
                     <div className="mb-4">
@@ -724,15 +806,17 @@ export default function UserIncompleteClientsPage() {
 // ── CLIENT CARD ───────────────────────────────────────────────────────────────
 
 function ClientCard({
-    lead, note, tab,
-    onNote, onNotSuitable, onReview,
+    lead, note, tab, waSent,
+    onNote, onNotSuitable, onReview, onWhatsApp,
 }: {
     lead: MetaLeadDoc;
     note?: string;
     tab: Tab;
+    waSent: boolean;
     onNote: () => void;
     onNotSuitable: () => void;
     onReview: () => void;
+    onWhatsApp: () => void;
 }) {
     const ddd = extractDDD(lead.phone);
     const hasLocation = !!lead.location?.lat;
@@ -774,24 +858,21 @@ function ClientCard({
                     ) : null}
                 </div>
 
-                {/* Recovery badges */}
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                    {tab === "incomplete" ? (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-[#7C3AED]">
-                            <span className="h-1.5 w-1.5 rounded-full bg-[#7C3AED]" />{recoveryBadge(lead)}
-                        </span>
-                    ) : null}
-                    {!hasLocation ? (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">
-                            <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />Falta: ubicación
-                        </span>
-                    ) : null}
-                    {missing.includes("Falta negocio") ? (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700">
-                            <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />Falta: negocio
-                        </span>
-                    ) : null}
-                </div>
+                {/* Recovery badges — only falta ubicacion & falta negocio */}
+                {(tab === "incomplete" && (!hasLocation || missing.includes("Falta negocio"))) ? (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                        {!hasLocation ? (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+                                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />Falta: ubicación
+                            </span>
+                        ) : null}
+                        {missing.includes("Falta negocio") ? (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700">
+                                <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />Falta: negocio
+                            </span>
+                        ) : null}
+                    </div>
+                ) : null}
 
                 {/* Last message */}
                 {lead.lastInboundText ? (
@@ -826,6 +907,11 @@ function ClientCard({
                         <ChatIcon /> Revisar
                     </button>
                     <ActionBtn onClick={onNote} tone="violet" title="Nota"><NoteIcon /></ActionBtn>
+                    {tab === "incomplete" ? (
+                        <ActionBtn onClick={onWhatsApp} tone={waSent ? "sent" : "green"} title={waSent ? "Enviado" : "WhatsApp"}>
+                            <WspIcon />
+                        </ActionBtn>
+                    ) : null}
                     <div className="flex-1" />
                     {tab === "incomplete" ? (
                         <ActionBtn onClick={onNotSuitable} tone="gray" title="Marcar no apto"><BanIcon /></ActionBtn>
@@ -879,8 +965,14 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
         </button>
     );
 }
-function CountPill({ active, children }: { active: boolean; children: React.ReactNode }) {
-    return <span className={["flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[9px] font-black", active ? "bg-white/25 text-white" : "bg-[#f3f0ff] text-[#7C3AED]"].join(" ")}>{children}</span>;
+function CountPill({ active, hasMore, children }: { active: boolean; hasMore?: boolean; children: React.ReactNode }) {
+    return (
+        <span className={[
+            "flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[9px] font-black",
+            active ? "bg-white/25 text-white" : "bg-[#f3f0ff] text-[#7C3AED]",
+            hasMore ? "animate-pulse" : "",
+        ].join(" ")}>{children}</span>
+    );
 }
 function ActionBtn({ onClick, tone, title, children }: { onClick: () => void; tone: "green" | "violet" | "gray" | "sent"; title: string; children: React.ReactNode }) {
     const cls: Record<string, string> = {
@@ -955,3 +1047,4 @@ function NoteIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {.
 function BanIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><circle cx="12" cy="12" r="10" /><path d="m4.9 4.9 14.2 14.2" /></svg>; }
 function ChatIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z" /><path d="M8 9h8M8 13h5" /></svg>; }
 function ClientsIcon({ className }: { className?: string }) { return <svg viewBox="0 0 24 24" className={className} {...ic}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>; }
+function WspIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/></svg>; }
