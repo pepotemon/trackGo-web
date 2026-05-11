@@ -75,6 +75,8 @@ function profileFromSnapshot(id: string, data: Record<string, unknown>, authEmai
         permissions: (data.permissions as AdminPermissions | undefined) ?? undefined,
         userPermissions: (data.userPermissions as UserPermissions | undefined) ?? undefined,
         phoneCodes: resolvePhoneCodes(data),
+        createdAt: typeof data.createdAt === "number" ? data.createdAt : undefined,
+        updatedAt: typeof data.updatedAt === "number" ? data.updatedAt : undefined,
     };
 }
 
@@ -129,6 +131,8 @@ export type AppUser = {
     permissions?: AdminPermissions;
     userPermissions?: UserPermissions;
     phoneCodes?: string[];
+    createdAt?: number;
+    updatedAt?: number;
 };
 
 type AuthContextValue = {

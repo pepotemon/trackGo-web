@@ -27,7 +27,7 @@ export type UserDoc = {
             updatedBy?: string | null;
         }
     >;
-    sharedWith?: { adminId: string; adminName?: string; percentage: number }[];
+    sharedWith?: { adminId: string; adminName?: string; percentage: number; assignedAt?: number }[];
 };
 
 export type DailyEventType = "visited" | "rejected" | "pending";

@@ -163,6 +163,7 @@ export type UserSharedAdmin = {
     adminName: string;
     /** 0–100. The percentage of this user's profit that belongs to this admin. */
     percentage: number;
+    assignedAt?: number;
 };
 
 export type UserDoc = {

@@ -302,6 +302,15 @@ function exportAccountingSheet(summary: AccountingSummary) {
     URL.revokeObjectURL(url);
 }
 
+function adminSellerAccountingStartMs(user: UserDoc, adminId: string, adminCreatedAt?: number) {
+    const share = user.sharedWith?.find((entry) => entry.adminId === adminId);
+    if (!share) return null;
+    return Math.max(
+        safeNumber(adminCreatedAt, 0),
+        safeNumber(share.assignedAt, 0),
+    );
+}
+
 export default function AccountingPage() {
     const { firebaseUser, profile, isSuperAdmin } = useAuth();
     const canAccounting = useCan("accountingView");
@@ -396,8 +405,47 @@ export default function AccountingPage() {
 
     const myUsers = useMemo(() => {
         if (isSuperAdmin || !profile) return users;
-        return users.filter((u) => u.sharedWith?.some((s) => s.adminId === profile.id));
+        const weekEndMs = new Date(week.endDate).setHours(23, 59, 59, 999);
+        return users.filter((u) => {
+            const startMs = adminSellerAccountingStartMs(u, profile.id, profile.createdAt);
+            return startMs !== null && startMs <= weekEndMs;
+        });
+    }, [users, isSuperAdmin, profile, week.endDate]);
+
+    const accountingStartByUser = useMemo(() => {
+        const map = new Map<string, number>();
+        if (isSuperAdmin || !profile) {
+            users.forEach((user) => map.set(user.id, 0));
+            return map;
+        }
+
+        for (const user of users) {
+            const startMs = adminSellerAccountingStartMs(user, profile.id, profile.createdAt);
+            if (startMs !== null) map.set(user.id, startMs);
+        }
+        return map;
     }, [users, isSuperAdmin, profile]);
+
+    const scopedEvents = useMemo(
+        () => isSuperAdmin
+            ? events
+            : events.filter((event) => event.createdAt >= (accountingStartByUser.get(event.userId) ?? Number.POSITIVE_INFINITY)),
+        [events, isSuperAdmin, accountingStartByUser],
+    );
+
+    const scopedAssignments = useMemo(
+        () => isSuperAdmin
+            ? assignments
+            : assignments.filter((assignment) => assignment.assignedAt >= (accountingStartByUser.get(assignment.userId) ?? Number.POSITIVE_INFINITY)),
+        [assignments, isSuperAdmin, accountingStartByUser],
+    );
+
+    const scopedSubscriptions = useMemo(
+        () => isSuperAdmin
+            ? subscriptions
+            : subscriptions.filter((subscription) => subscription.createdAt >= (accountingStartByUser.get(subscription.userId) ?? Number.POSITIVE_INFINITY)),
+        [subscriptions, isSuperAdmin, accountingStartByUser],
+    );
 
     const myInvestmentGroups = useMemo(() => {
         if (isSuperAdmin || !profile) return investmentGroups;
@@ -412,9 +460,14 @@ export default function AccountingPage() {
             ...investment,
             amount: 0,
             allocations: {},
-            groups: (investment.groups ?? []).filter((g) =>
-                g.userIds.some((id) => myIds.has(id))
-            ),
+            groups: (investment.groups ?? [])
+                .map((g) => {
+                    const originalUserIds = Array.isArray(g.userIds) ? g.userIds.filter(Boolean) : [];
+                    const scopedUserIds = originalUserIds.filter((id) => myIds.has(id));
+                    const ratio = originalUserIds.length ? scopedUserIds.length / originalUserIds.length : 0;
+                    return { ...g, userIds: scopedUserIds, amount: Math.round((g.amount || 0) * ratio * 100) / 100 };
+                })
+                .filter((g) => g.userIds.length > 0),
         };
     }, [investment, myUsers, isSuperAdmin, profile]);
 
@@ -423,12 +476,12 @@ export default function AccountingPage() {
             startKey: week.startKey,
             endKey: week.endKey,
             users: myUsers,
-            events,
-            assignments,
-            subscriptions,
+            events: scopedEvents,
+            assignments: scopedAssignments,
+            subscriptions: scopedSubscriptions,
             investment: myInvestment,
         });
-    }, [week.startKey, week.endKey, myUsers, events, assignments, subscriptions, myInvestment]);
+    }, [week.startKey, week.endKey, myUsers, scopedEvents, scopedAssignments, scopedSubscriptions, myInvestment]);
 
     const miGanancia = useMemo(() => {
         if (!profile || !summary) return null;
@@ -571,12 +624,12 @@ export default function AccountingPage() {
                     weekOffset={weekOffset}
                     setWeekOffset={setWeekOffset}
                     usersCount={myUsers.length}
-                    eventsCount={events.length}
+                    eventsCount={scopedEvents.length}
                     loading={loading}
                     summary={summary}
-                    events={events}
-                    assignments={assignments}
-                    subscriptions={subscriptions}
+                    events={scopedEvents}
+                    assignments={scopedAssignments}
+                    subscriptions={scopedSubscriptions}
                     startDate={week.startDate}
                     endDate={week.endDate}
                     users={myUsers}
@@ -690,7 +743,7 @@ export default function AccountingPage() {
 
                     <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
                         <CounterPill icon="users" label={`${myUsers.length} usuarios`} />
-                        <CounterPill icon="activity" label={`${events.length} eventos`} />
+                        <CounterPill icon="activity" label={`${scopedEvents.length} eventos`} />
                     </div>
                 </section>
 
@@ -716,8 +769,8 @@ export default function AccountingPage() {
                         {activeTab === "overview" || !canInvestmentView ? (
                             <DashboardContent
                                 summary={summary}
-                                events={events}
-                                assignments={assignments}
+                                events={scopedEvents}
+                                assignments={scopedAssignments}
                                 startDate={week.startDate}
                                 endDate={week.endDate}
                                 miGanancia={miGanancia}
@@ -727,12 +780,12 @@ export default function AccountingPage() {
                                 weekStartKey={week.startKey}
                                 weekEndKey={week.endKey}
                                 users={myUsers}
-                                subscriptions={subscriptions}
+                                subscriptions={scopedSubscriptions}
                                 investment={myInvestment}
                                 investmentGroups={myInvestmentGroups}
                                 useCatalogDefaults={weekOffset === 0}
                                 isClosed={isClosed || !canInvestmentEdit}
-                                events={events}
+                                events={scopedEvents}
                                 onToggleSubscriptionPayment={toggleSubscriptionPayment}
                                 onPatchEvents={handlePatchEvents}
                                 onSaved={(next) => {

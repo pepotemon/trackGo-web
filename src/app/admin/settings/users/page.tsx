@@ -1906,7 +1906,9 @@ function EditUserModal({
                                     <div key={entry.adminId} className="flex items-center justify-between gap-3 rounded-lg border border-[#e5e7eb] bg-white px-3 py-2">
                                         <div className="min-w-0">
                                             <div className="truncate text-[12px] font-semibold text-[#171717]">{entry.adminName}</div>
-                                            <div className="text-[11px] font-medium text-[#9ca3af]">{entry.percentage}% de ganancia</div>
+                                            <div className="text-[11px] font-medium text-[#9ca3af]">
+                                                {entry.percentage}% de ganancia{entry.assignedAt ? ` · desde ${new Date(entry.assignedAt).toLocaleDateString("es")}` : ""}
+                                            </div>
                                         </div>
                                         <IconButton
                                             icon="trash"
@@ -1949,7 +1951,7 @@ function EditUserModal({
                                         const pct = Math.min(100, Math.max(0, safeNumber(sharedPercent, 0)));
                                         setSharedWith((prev) => [
                                             ...prev.filter((e) => e.adminId !== admin.id),
-                                            { adminId: admin.id, adminName: admin.name || admin.email || admin.id, percentage: pct },
+                                            { adminId: admin.id, adminName: admin.name || admin.email || admin.id, percentage: pct, assignedAt: Date.now() },
                                         ]);
                                         setSharedAdminId("");
                                         setSharedPercent("50");
