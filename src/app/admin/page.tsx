@@ -116,7 +116,7 @@ export default function AdminDashboardPage() {
     const [loading, setLoading] = useState(true);
     const [err, setErr] = useState<string | null>(null);
 
-    const adminLabel = firebaseUser?.displayName || firebaseUser?.email?.split("@")[0] || "Admin";
+    const adminLabel = profile?.name || profile?.email || firebaseUser?.email?.split("@")[0] || "Admin";
 
     async function loadDashboard(range = queueRange) {
         setLoading(true);
@@ -657,8 +657,10 @@ function MonthlyChartCard() {
         monthDate.getMonth() === now.getMonth();
 
     useEffect(() => {
-        setLoading(true);
-        setData(null);
+        const timer = window.setTimeout(() => {
+            setLoading(true);
+            setData(null);
+        }, 0);
         const y = monthDate.getFullYear();
         const m = String(monthDate.getMonth() + 1).padStart(2, "0");
         const lastDayNum = isCurrentMonth
@@ -670,7 +672,10 @@ function MonthlyChartCard() {
             .then((v) => { if (!cancelled) setData(v); })
             .catch(() => { if (!cancelled) setData(null); })
             .finally(() => { if (!cancelled) setLoading(false); });
-        return () => { cancelled = true; };
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timer);
+        };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [monthDate]);
 

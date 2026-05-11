@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { usePermissions } from "@/features/auth/usePermissions";
 import { TrackGoLogo } from "@/components/brand/TrackGoLogo";
@@ -43,14 +43,14 @@ const MOBILE_NAV: { href: string; label: string; icon: NavIconName }[] = [
 export default function AdminLayout({ children }: { children: ReactNode }) {
     const router = useRouter();
     const pathname = usePathname();
-    const { firebaseUser, isAdmin, loading, logout } = useAuth();
+    const { firebaseUser, profile, isAdmin, loading, logout } = useAuth();
     const permissions = usePermissions();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [now, setNow] = useState(() => new Date());
 
     const adminLabel = useMemo(() => {
-        return firebaseUser?.displayName || firebaseUser?.email || "Admin";
-    }, [firebaseUser]);
+        return profile?.name || profile?.email || firebaseUser?.email || "Admin";
+    }, [firebaseUser, profile]);
 
     const liveDate = useMemo(() => {
         return new Intl.DateTimeFormat("es", {
@@ -138,7 +138,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
                     <div className="mt-3 flex items-center gap-2 rounded-xl border border-[#d9d2ff] bg-white/80 px-2 py-2 shadow-sm shadow-violet-200/60">
                         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-[#7c3aed] to-[#4f46e5] text-[12px] font-bold text-white">
-                            C
+                            {adminLabel.slice(0, 1).toUpperCase()}
                         </div>
                         <div className="min-w-0">
                             <span className="block truncate text-[12px] font-semibold text-[#101936]">
