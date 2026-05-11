@@ -6,7 +6,10 @@ export async function GET(request: Request) {
         const user = await requireServerUser(request);
         requireSubscriptionsView(user);
 
-        const overview = await getSubscriptionsOverview();
+        const overview = await getSubscriptionsOverview({
+            adminId: user.uid,
+            isSuperAdmin: user.isSuperAdmin === true,
+        });
         return Response.json({ ok: true, ...overview });
     } catch (error) {
         return errorResponse(error);

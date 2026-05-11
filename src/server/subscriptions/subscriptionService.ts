@@ -77,12 +77,10 @@ export async function saveSubscriptionSettings(input: { adsShare: number; cycleD
     return getSubscriptionSettings();
 }
 
-export async function getSubscriptionsOverview() {
-    const [cities, settings, subscriptionsSnap, checkoutsSnap, usersSnap] = await Promise.all([
+export async function getSubscriptionsOverview(scope?: { adminId?: string; isSuperAdmin?: boolean }) {
+    const [cities, settings, usersSnap] = await Promise.all([
         listSubscriptionCities(),
         getSubscriptionSettings(),
-        adminDb.collection("subscriptions").orderBy("updatedAt", "desc").limit(30).get(),
-        adminDb.collection("subscriptionCheckouts").orderBy("updatedAt", "desc").limit(40).get(),
         adminDb.collection("users").get(),
     ]);
 
@@ -100,7 +98,14 @@ export async function getSubscriptionsOverview() {
         }),
     );
 
-    const subscriptions = subscriptionsSnap.docs.map((doc) => {
+    const scopedUserIds = getScopedSubscriptionUserIds(usersSnap.docs, scope);
+    const scopedUserSet = scopedUserIds ? new Set(scopedUserIds) : null;
+    const [subscriptionsDocs, checkoutsDocs] = await Promise.all([
+        listScopedSubscriptionDocs("subscriptions", scopedUserIds, 30),
+        listScopedSubscriptionDocs("subscriptionCheckouts", scopedUserIds, 40),
+    ]);
+
+    const subscriptions = subscriptionsDocs.map((doc) => {
         const data = doc.data();
         const user = users.get(String(data.userId || ""));
         return {
@@ -125,7 +130,7 @@ export async function getSubscriptionsOverview() {
         };
     });
 
-    const checkouts = checkoutsSnap.docs.map((doc) => {
+    const checkouts = checkoutsDocs.map((doc) => {
         const data = doc.data();
         const user = users.get(String(data.userId || ""));
         return {
@@ -155,10 +160,61 @@ export async function getSubscriptionsOverview() {
 
     return {
         settings,
-        cities,
+        cities: scopedUserSet
+            ? cities.filter((city) => city.status === "occupied" && Boolean(city.ownerUserId && scopedUserSet.has(city.ownerUserId)))
+            : cities,
         subscriptions,
         checkouts,
     };
+}
+
+function getScopedSubscriptionUserIds(
+    userDocs: Array<FirebaseFirestore.QueryDocumentSnapshot<FirebaseFirestore.DocumentData>>,
+    scope?: { adminId?: string; isSuperAdmin?: boolean },
+) {
+    if (scope?.isSuperAdmin !== false || !scope?.adminId) return null;
+    return userDocs
+        .filter((doc) => {
+            const data = doc.data();
+            return data.role === "user" && Array.isArray(data.sharedWith)
+                && data.sharedWith.some((entry: unknown) => {
+                    const item = entry && typeof entry === "object" ? entry as Record<string, unknown> : {};
+                    return item.adminId === scope.adminId;
+                });
+        })
+        .map((doc) => doc.id);
+}
+
+async function listScopedSubscriptionDocs(
+    collectionName: "subscriptions" | "subscriptionCheckouts",
+    scopedUserIds: string[] | null,
+    limit: number,
+) {
+    if (scopedUserIds && scopedUserIds.length === 0) return [];
+    if (!scopedUserIds) {
+        const snap = await adminDb.collection(collectionName).orderBy("updatedAt", "desc").limit(limit).get();
+        return snap.docs;
+    }
+
+    const chunks: string[][] = [];
+    for (let i = 0; i < scopedUserIds.length; i += 30) {
+        chunks.push(scopedUserIds.slice(i, i + 30));
+    }
+
+    const snaps = await Promise.all(
+        chunks.map((chunk) =>
+            adminDb
+                .collection(collectionName)
+                .where("userId", "in", chunk)
+                .limit(Math.max(limit, 100))
+                .get(),
+        ),
+    );
+
+    return snaps
+        .flatMap((snap) => snap.docs)
+        .sort((a, b) => Number(b.data().updatedAt || 0) - Number(a.data().updatedAt || 0))
+        .slice(0, limit);
 }
 
 function timestampToMs(value: unknown) {
