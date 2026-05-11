@@ -13,30 +13,10 @@ import {
 } from "@/data/incompleteClientsRepo";
 import { subscribeLeadMessages } from "@/data/leadChatRepo";
 import type { LeadMessageDoc, MetaLeadDoc } from "@/types/leads";
-import { getWhatsAppSentIds, markWhatsAppSent } from "@/lib/userContactState";
 import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
 
 type Tab = "incomplete" | "not_suitable";
 type RangePreset = "all" | "today" | "week" | "month" | "custom";
-
-const SPANISH_3DIGIT_CC = ["507","502","503","504","505","506","509","593","591","595","598"];
-const SPANISH_PHONE_PREFIXES = [...SPANISH_3DIGIT_CC, "52","54","56","57","51","58"];
-function isSpanishPhone(phone: string) {
-    const d = phone.replace(/\D/g, "");
-    if (SPANISH_PHONE_PREFIXES.some(p => d.startsWith(p))) return true;
-    if (d.startsWith("55") && SPANISH_3DIGIT_CC.some(cc => d.slice(2).startsWith(cc))) return true;
-    return false;
-}
-function buildWALink(phone: string, msg: string) {
-    const d = phone.replace(/\D/g, "");
-    if (SPANISH_PHONE_PREFIXES.some(p => d.startsWith(p))) return `https://wa.me/${d}?text=${encodeURIComponent(msg)}`;
-    if (d.startsWith("55")) {
-        const stripped = d.slice(2);
-        if (SPANISH_3DIGIT_CC.some(cc => stripped.startsWith(cc))) return `https://wa.me/${stripped}?text=${encodeURIComponent(msg)}`;
-        return `https://wa.me/${d}?text=${encodeURIComponent(msg)}`;
-    }
-    return `https://wa.me/55${d}?text=${encodeURIComponent(msg)}`;
-}
 
 // ── localStorage notes ────────────────────────────────────────────────────────
 
@@ -166,7 +146,6 @@ export default function UserIncompleteClientsPage() {
     const [loadingIncomplete, setLoadingIncomplete] = useState(true);
     const [loadingNotSuitable, setLoadingNotSuitable] = useState(true);
     const [notes, setNotes] = useState<Record<string, string>>({});
-    const [waSent, setWaSent] = useState<Set<string>>(new Set());
     const [search, setSearch] = useState("");
     const [searchOpen, setSearchOpen] = useState(false);
     const [infoOpen, setInfoOpen] = useState(false);
@@ -180,7 +159,7 @@ export default function UserIncompleteClientsPage() {
 
     // modals
     const [actionLead, setActionLead] = useState<MetaLeadDoc | null>(null);
-    const [actionType, setActionType] = useState<"note" | "not_suitable" | "accept" | "review" | null>(null);
+    const [actionType, setActionType] = useState<"note" | "not_suitable" | "review" | null>(null);
     const [noteText, setNoteText] = useState("");
     const [saving, setSaving] = useState(false);
     const [previewMessages, setPreviewMessages] = useState<LeadMessageDoc[]>([]);
@@ -207,14 +186,12 @@ export default function UserIncompleteClientsPage() {
             const noteMap: Record<string, string> = {};
             data.forEach((l) => { const n = getNote(l.id); if (n) noteMap[l.id] = n; });
             setNotes((prev) => ({ ...prev, ...noteMap }));
-            setWaSent((prev) => new Set([...prev, ...getWhatsAppSentIds(data.map((lead) => lead.id))]));
             setLoadingIncomplete(false);
         });
 
         const loadingNotSuitableTimer = window.setTimeout(() => setLoadingNotSuitable(true), 0);
         const unsubNS = subscribeNotSuitableClients(phoneCodes, (data) => {
             setNotSuitable(data);
-            setWaSent((prev) => new Set([...prev, ...getWhatsAppSentIds(data.map((lead) => lead.id))]));
             setLoadingNotSuitable(false);
         });
 
@@ -314,7 +291,6 @@ export default function UserIncompleteClientsPage() {
     }
 
     function openNotSuitable(lead: MetaLeadDoc) { setActionLead(lead); setActionType("not_suitable"); }
-    function openAccept(lead: MetaLeadDoc) { setActionLead(lead); setActionType("accept"); }
     function openReview(lead: MetaLeadDoc) { setActionLead(lead); setActionType("review"); }
     function closeAction() {
         setActionLead(null);
@@ -365,14 +341,6 @@ export default function UserIncompleteClientsPage() {
         }
     }
 
-    function openWhatsApp(lead: MetaLeadDoc) {
-        const msg = isSpanishPhone(lead.phone)
-            ? `¡Hola! Somos de Crédito Comercial. Anteriormente nos contactaste sobre la liberación de crédito para tu negocio activo. Solo queremos confirmar si todavía tienes interés. ¡Gracias y disculpa la molestia! 🙏`
-            : `Olá! Somos da Crédito Comercial. Você nos contatou anteriormente sobre a liberação de crédito para o seu comércio. Gostaríamos de saber se ainda tem interesse. Obrigado e desculpe o incômodo! 🙏`;
-        window.open(buildWALink(lead.phone, msg), "_blank");
-        markWhatsAppSent(lead.id);
-        setWaSent((prev) => new Set(prev).add(lead.id));
-    }
 
     if (!phoneCodes.length && !loadingIncomplete) {
         return (
@@ -390,8 +358,6 @@ export default function UserIncompleteClientsPage() {
 
     return (
         <div className="flex min-h-screen flex-col bg-[radial-gradient(circle_at_top_right,rgba(124,58,237,0.07),transparent_36%),linear-gradient(180deg,#fbfaff_0%,#f4f0ff_50%,#fbfaff_100%)]">
-
-            {/* ── HEADER ──────────────────────────────────────────────── */}
             <div className="sticky top-0 z-20 bg-[#fbfaff]/96 px-3 pb-3 pt-4 backdrop-blur-md xl:px-6">
                 <div className="mb-3 flex items-center justify-between gap-3">
                     <div>
@@ -433,7 +399,6 @@ export default function UserIncompleteClientsPage() {
                     </div>
                 </div>
 
-                {/* TABS */}
                 <div className="mb-3 flex gap-1.5">
                     <TabBtn active={tab === "incomplete"} onClick={() => setTab("incomplete")}>
                         Recuperar
@@ -445,7 +410,6 @@ export default function UserIncompleteClientsPage() {
                     </TabBtn>
                 </div>
 
-                {/* DDD FILTER */}
                 {activeDdds.length > 1 ? (
                     <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                         <FilterChip active={dddFilter === "all"} onClick={() => setDddFilter("all")}>
@@ -477,7 +441,6 @@ export default function UserIncompleteClientsPage() {
                 </div>
             </div>
 
-            {/* ── LIST ────────────────────────────────────────────────── */}
             <div className="flex-1 px-3 pb-4 pt-2 xl:px-6">
                 {loading ? (
                     <LoadingState />
@@ -490,12 +453,9 @@ export default function UserIncompleteClientsPage() {
                                 key={lead.id}
                                 lead={lead}
                                 note={notes[lead.id]}
-                                waSent={waSent.has(lead.id)}
                                 tab={tab}
-                                onWhatsApp={() => openWhatsApp(lead)}
                                 onNote={() => openNote(lead)}
                                 onNotSuitable={() => openNotSuitable(lead)}
-                                onAccept={() => openAccept(lead)}
                                 onReview={() => openReview(lead)}
                             />
                         ))}
@@ -503,7 +463,6 @@ export default function UserIncompleteClientsPage() {
                 )}
             </div>
 
-            {/* ── SEARCH OVERLAY ──────────────────────────────────────── */}
             {searchOpen ? (
                 <div className="fixed inset-0 z-50 flex flex-col bg-[#fbfaff]">
                     <div className="flex items-center gap-3 border-b border-[#E8E7FB] px-4 py-3">
@@ -513,10 +472,10 @@ export default function UserIncompleteClientsPage() {
                                 autoFocus
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
-                                placeholder="Negocio, teléfono, mensaje..."
+                                placeholder="Negocio, telefono, mensaje..."
                                 className="min-w-0 flex-1 bg-transparent text-[14px] font-semibold text-[#101936] outline-none placeholder:text-[#98A2B3]"
                             />
-                            {search ? <button type="button" onClick={() => setSearch("")} className="text-[18px] text-[#98A2B3]">×</button> : null}
+                            {search ? <button type="button" onClick={() => setSearch("")} className="text-[18px] text-[#98A2B3]">x</button> : null}
                         </div>
                         <button type="button" onClick={() => setSearchOpen(false)} className="text-[13px] font-black text-[#7C3AED]">Listo</button>
                     </div>
@@ -531,10 +490,8 @@ export default function UserIncompleteClientsPage() {
                                         lead={lead}
                                         note={notes[lead.id]}
                                         tab={tab}
-                                        onWhatsApp={() => openWhatsApp(lead)}
                                         onNote={() => { openNote(lead); setSearchOpen(false); }}
                                         onNotSuitable={() => { openNotSuitable(lead); setSearchOpen(false); }}
-                                        onAccept={() => { openAccept(lead); setSearchOpen(false); }}
                                         onReview={() => { openReview(lead); setSearchOpen(false); }}
                                     />
                                 ))}
@@ -574,7 +531,6 @@ export default function UserIncompleteClientsPage() {
                 </BottomSheet>
             ) : null}
 
-            {/* ── NOTE MODAL ──────────────────────────────────────────── */}
             {filtersOpen ? (
                 <BottomSheet onClose={() => setFiltersOpen(false)}>
                     <div className="mb-4">
@@ -664,7 +620,7 @@ export default function UserIncompleteClientsPage() {
 
             {actionType === "note" && actionLead ? (
                 <BottomSheet onClose={closeAction}>
-                    <p className="mb-3 text-[15px] font-black text-[#101936]">Nota · {displayName(actionLead)}</p>
+                    <p className="mb-3 text-[15px] font-black text-[#101936]">Nota - {displayName(actionLead)}</p>
                     <textarea
                         autoFocus
                         className="w-full rounded-[14px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 py-2.5 text-[13px] font-semibold text-[#101936] outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-violet-100"
@@ -680,7 +636,6 @@ export default function UserIncompleteClientsPage() {
                 </BottomSheet>
             ) : null}
 
-            {/* ── NO APTO MODAL ───────────────────────────────────────── */}
             {actionType === "review" && actionLead ? (
                 <BottomSheet onClose={closeAction} fixedFooter={
                     <div>
@@ -739,7 +694,6 @@ export default function UserIncompleteClientsPage() {
                             )}
                         </div>
                     </div>
-
                 </BottomSheet>
             ) : null}
 
@@ -751,7 +705,7 @@ export default function UserIncompleteClientsPage() {
                         <p className="mt-0.5 text-[12px] font-semibold text-[#66739A]">{actionLead.phone}</p>
                     </div>
                     <div className="mb-4 rounded-[14px] border border-orange-100 bg-orange-50 px-3 py-3 text-[12px] font-semibold text-orange-800">
-                        <p className="font-black">⚠ Esta acción es visible para el administrador.</p>
+                        <p className="font-black">Esta accion es visible para el administrador.</p>
                         <p className="mt-1">El cliente pasara a la base de datos de No Aptos. Ayudaras al sistema a identificar clientes que no son candidatos validos en tu zona.</p>
                     </div>
                     <div className="flex gap-2">
@@ -763,25 +717,6 @@ export default function UserIncompleteClientsPage() {
                 </BottomSheet>
             ) : null}
 
-            {/* ── ACCEPT MODAL ────────────────────────────────────────── */}
-            {actionType === "accept" && actionLead ? (
-                <BottomSheet onClose={closeAction}>
-                    <div className="mb-4">
-                        <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-700">ASIGNAR A MÍ</span>
-                        <p className="mt-2 text-[17px] font-black text-[#101936]">{displayName(actionLead)}</p>
-                        <p className="mt-0.5 text-[12px] font-semibold text-[#66739A]">{actionLead.phone}</p>
-                    </div>
-                    <p className="mb-4 rounded-[14px] border border-emerald-100 bg-emerald-50 px-3 py-2.5 text-[12px] font-semibold text-emerald-700">
-                        Este cliente pasará a tu lista de Prospectos para que lo visites.
-                    </p>
-                    <div className="flex gap-2">
-                        <button type="button" onClick={closeAction} className="flex-1 rounded-[14px] border border-[#E8E7FB] py-3 text-[13px] font-black text-[#66739A]">Cancelar</button>
-                        <button type="button" onClick={confirmAccept} disabled={saving} className="flex-1 rounded-[14px] bg-emerald-600 py-3 text-[13px] font-black text-white disabled:opacity-60">
-                            {saving ? "Asignando..." : "Sí, tomar cliente"}
-                        </button>
-                    </div>
-                </BottomSheet>
-            ) : null}
         </div>
     );
 }
@@ -789,17 +724,14 @@ export default function UserIncompleteClientsPage() {
 // ── CLIENT CARD ───────────────────────────────────────────────────────────────
 
 function ClientCard({
-    lead, note, waSent, tab,
-    onWhatsApp, onNote, onNotSuitable, onAccept, onReview,
+    lead, note, tab,
+    onNote, onNotSuitable, onReview,
 }: {
     lead: MetaLeadDoc;
     note?: string;
-    waSent?: boolean;
     tab: Tab;
-    onWhatsApp: () => void;
     onNote: () => void;
     onNotSuitable: () => void;
-    onAccept: () => void;
     onReview: () => void;
 }) {
     const ddd = extractDDD(lead.phone);
@@ -886,32 +818,18 @@ function ClientCard({
 
                 {/* Actions */}
                 <div className="mt-3 flex items-center gap-1.5 border-t border-[#F2F0FF] pt-2.5">
-                    {tab === "incomplete" ? (
-                        <button
-                            type="button"
-                            onClick={onReview}
-                            className="flex h-9 flex-1 items-center justify-center gap-2 rounded-[12px] border border-violet-200 bg-violet-50 text-[12px] font-black text-[#7C3AED] transition active:bg-violet-100"
-                        >
-                            <ChatIcon /> Revisar
-                        </button>
-                    ) : (
-                        <ActionBtn onClick={onWhatsApp} tone={waSent ? "sent" : "green"} title={waSent ? "Enviado" : "WhatsApp"}>
-                            {waSent ? <WACheckIcon /> : <WAIcon />}
-                        </ActionBtn>
-                    )}
+                    <button
+                        type="button"
+                        onClick={onReview}
+                        className="flex h-9 flex-1 items-center justify-center gap-2 rounded-[12px] border border-violet-200 bg-violet-50 text-[12px] font-black text-[#7C3AED] transition active:bg-violet-100"
+                    >
+                        <ChatIcon /> Revisar
+                    </button>
                     <ActionBtn onClick={onNote} tone="violet" title="Nota"><NoteIcon /></ActionBtn>
                     <div className="flex-1" />
                     {tab === "incomplete" ? (
                         <ActionBtn onClick={onNotSuitable} tone="gray" title="Marcar no apto"><BanIcon /></ActionBtn>
-                    ) : (
-                        <button
-                            type="button"
-                            onClick={onAccept}
-                            className="flex h-8 items-center gap-1.5 rounded-[11px] border border-emerald-200 bg-emerald-50 px-2.5 text-[11px] font-black text-emerald-700 transition active:bg-emerald-100"
-                        >
-                            <CheckIcon /> Tomar igual
-                        </button>
-                    )}
+                    ) : null}
                 </div>
             </div>
         </div>
@@ -1033,10 +951,7 @@ function SearchIcon() { return <svg viewBox="0 0 24 24" className="h-4 w-4 text-
 function FilterIcon() { return <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#7C3AED]" {...ic}><path d="M4 6h16M7 12h10M10 18h4" /></svg>; }
 function PhoneIcon() { return <svg viewBox="0 0 24 24" className="h-3 w-3 shrink-0" {...ic}><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.1-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.8.4 1.6.7 2.4a2 2 0 0 1-.5 2.1L8.1 9.4a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.8.3 1.6.5 2.4.7a2 2 0 0 1 1.7 2Z" /></svg>; }
 function PinIcon() { return <svg viewBox="0 0 24 24" className="h-3 w-3 shrink-0" {...ic}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1 1 18 0Z" /><circle cx="12" cy="10" r="3" {...ic} /></svg>; }
-function CheckIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M20 6 9 17l-5-5" /></svg>; }
 function NoteIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" /><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" /></svg>; }
 function BanIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><circle cx="12" cy="12" r="10" /><path d="m4.9 4.9 14.2 14.2" /></svg>; }
 function ChatIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z" /><path d="M8 9h8M8 13h5" /></svg>; }
-function WAIcon() { return <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M17.47 14.38c-.28-.14-1.65-.82-1.9-.91-.26-.09-.44-.14-.63.14-.19.28-.73.91-.9 1.1-.16.18-.33.2-.61.07-.28-.14-1.18-.44-2.25-1.39-.83-.74-1.39-1.66-1.55-1.93-.16-.28-.02-.43.12-.57.12-.12.28-.32.42-.48.14-.16.18-.28.28-.46.09-.18.05-.34-.02-.48-.07-.14-.63-1.52-.86-2.08-.23-.55-.46-.47-.63-.48-.16-.01-.35-.01-.53-.01-.18 0-.48.07-.73.34-.25.27-.97.95-.97 2.31 0 1.36.99 2.67 1.13 2.86.14.18 1.96 2.99 4.75 4.2.66.28 1.18.45 1.58.58.66.21 1.27.18 1.74.11.53-.08 1.65-.68 1.88-1.33.24-.65.24-1.2.17-1.33-.07-.12-.25-.19-.53-.33Z"/><path d="M12.05 2.01C6.49 2.01 2 6.5 2 12.07c0 1.87.51 3.63 1.4 5.14L2 22l4.93-1.36A10.04 10.04 0 0 0 12.05 22C17.61 22 22 17.5 22 11.93 22 6.5 17.61 2.01 12.05 2.01Zm0 18.37a8.34 8.34 0 0 1-4.23-1.15l-.3-.18-3.13.86.86-3.17-.2-.32a8.35 8.35 0 0 1-1.27-4.41c0-4.61 3.72-8.36 8.3-8.36 4.57 0 8.29 3.75 8.29 8.36-.01 4.61-3.72 8.37-8.32 8.37Z"/></svg>; }
-function WACheckIcon() { return <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M17.47 14.38c-.28-.14-1.65-.82-1.9-.91-.26-.09-.44-.14-.63.14-.19.28-.73.91-.9 1.1-.16.18-.33.2-.61.07-.28-.14-1.18-.44-2.25-1.39-.83-.74-1.39-1.66-1.55-1.93-.16-.28-.02-.43.12-.57.12-.12.28-.32.42-.48.14-.16.18-.28.28-.46.09-.18.05-.34-.02-.48-.07-.14-.63-1.52-.86-2.08-.23-.55-.46-.47-.63-.48-.16-.01-.35-.01-.53-.01-.18 0-.48.07-.73.34-.25.27-.97.95-.97 2.31 0 1.36.99 2.67 1.13 2.86.14.18 1.96 2.99 4.75 4.2.66.28 1.18.45 1.58.58.66.21 1.27.18 1.74.11.53-.08 1.65-.68 1.88-1.33.24-.65.24-1.2.17-1.33-.07-.12-.25-.19-.53-.33Z"/><path d="M12.05 2.01C6.49 2.01 2 6.5 2 12.07c0 1.87.51 3.63 1.4 5.14L2 22l4.93-1.36A10.04 10.04 0 0 0 12.05 22C17.61 22 22 17.5 22 11.93 22 6.5 17.61 2.01 12.05 2.01Zm0 18.37a8.34 8.34 0 0 1-4.23-1.15l-.3-.18-3.13.86.86-3.17-.2-.32a8.35 8.35 0 0 1-1.27-4.41c0-4.61 3.72-8.36 8.3-8.36 4.57 0 8.29 3.75 8.29 8.36-.01 4.61-3.72 8.37-8.32 8.37Z"/><path d="m14.5 9-4.5 4.5-2-2" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>; }
 function ClientsIcon({ className }: { className?: string }) { return <svg viewBox="0 0 24 24" className={className} {...ic}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>; }
