@@ -1554,7 +1554,7 @@ function EditUserModal({
                     {role === "user" ? (
                         <EditorBlock title="Indicativos telefónicos">
                             <p className="text-[11px] font-semibold text-[#667085]">
-                                Usa DDDs de Brasil de 2 dígitos o códigos país de 3 dígitos, como 507 para Panamá. Estos clientes aparecerán en Incompletos/Chat.
+                                Usa DDDs de Brasil de 2 dígitos o códigos país de 3 dígitos, como 507 para Panamá. Estos clientes aparecerán en Clientes por recuperar.
                             </p>
                             <div className="flex flex-wrap gap-1.5">
                                 {phoneCodes.length === 0 ? (
@@ -1717,7 +1717,7 @@ function EditUserModal({
                                     {([
                                         { key: "canSeeMap" as keyof UserPermissions, label: "Ver Mapa de prospectos" },
                                         { key: "canSeeHistory" as keyof UserPermissions, label: "Ver Historial de visitas" },
-                                        { key: "canSeeChat" as keyof UserPermissions, label: "Ver Chat de clientes incompletos" },
+                                        { key: "canSeeChat" as keyof UserPermissions, label: "Ver Clientes por recuperar" },
                                         { key: "canChatWithProspects" as keyof UserPermissions, label: "Responder por chat a prospectos pendientes" },
                                         { key: "canSeeSubscriptions" as keyof UserPermissions, label: "Acceder a suscripciones" },
                                         { key: "canSeeCommercialDirectory" as keyof UserPermissions, label: "Acceder a Base Comercial" },

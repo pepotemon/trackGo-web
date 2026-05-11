@@ -17,7 +17,7 @@ const BASE_NAV: { href: string; label: string; icon: NavIconName; permKey?: Vend
     { href: "/user/commercial-directory", label: "Base", icon: "database", permKey: "canSeeCommercialDirectory" },
     { href: "/user/map", label: "Mapa", icon: "map", permKey: "canSeeMap" },
     { href: "/user/history", label: "Historial", icon: "history", permKey: "canSeeHistory" },
-    { href: "/user/chat", label: "Incompl.", icon: "chat", permKey: "canSeeChat" },
+    { href: "/user/chat", label: "Recup.", icon: "chat", permKey: "canSeeChat" },
     { href: "/user/settings", label: "Config.", icon: "settings" },
 ];
 

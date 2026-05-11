@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/features/auth/AuthProvider";
 import {
     dddCity,
@@ -44,9 +44,11 @@ function getNote(leadId: string): string {
     return localStorage.getItem(`lead_note_${leadId}`) ?? "";
 }
 function saveNote(leadId: string, note: string) {
-    note.trim()
-        ? localStorage.setItem(`lead_note_${leadId}`, note.trim())
-        : localStorage.removeItem(`lead_note_${leadId}`);
+    if (note.trim()) {
+        localStorage.setItem(`lead_note_${leadId}`, note.trim());
+    } else {
+        localStorage.removeItem(`lead_note_${leadId}`);
+    }
 }
 
 // ── utils ─────────────────────────────────────────────────────────────────────
@@ -146,6 +148,12 @@ function missingFields(lead: MetaLeadDoc) {
     return missing;
 }
 
+function recoveryBadge(lead: MetaLeadDoc) {
+    if (!lead.business) return "24h sin completar";
+    if (!lead.location?.mapsUrl && !lead.location?.lat) return "Falta ubicacion";
+    return "Por revisar";
+}
+
 // ── page ──────────────────────────────────────────────────────────────────────
 
 export default function UserIncompleteClientsPage() {
@@ -168,6 +176,7 @@ export default function UserIncompleteClientsPage() {
     const [customStart, setCustomStart] = useState("");
     const [customEnd, setCustomEnd] = useState("");
     const [toast, setToast] = useState("");
+    const [recoveryClock, setRecoveryClock] = useState(0);
 
     // modals
     const [actionLead, setActionLead] = useState<MetaLeadDoc | null>(null);
@@ -179,9 +188,20 @@ export default function UserIncompleteClientsPage() {
     const [previewError, setPreviewError] = useState("");
 
     useEffect(() => {
-        if (!phoneCodes.length) { setLoadingIncomplete(false); setLoadingNotSuitable(false); return; }
+        const timer = window.setInterval(() => setRecoveryClock((value) => value + 1), 5 * 60 * 1000);
+        return () => window.clearInterval(timer);
+    }, []);
 
-        setLoadingIncomplete(true);
+    useEffect(() => {
+        if (!phoneCodes.length) {
+            const timer = window.setTimeout(() => {
+                setLoadingIncomplete(false);
+                setLoadingNotSuitable(false);
+            }, 0);
+            return () => window.clearTimeout(timer);
+        }
+
+        const loadingTimer = window.setTimeout(() => setLoadingIncomplete(true), 0);
         const unsubInc = subscribeIncompleteClients(phoneCodes, (data) => {
             setIncomplete(data);
             const noteMap: Record<string, string> = {};
@@ -191,26 +211,35 @@ export default function UserIncompleteClientsPage() {
             setLoadingIncomplete(false);
         });
 
-        setLoadingNotSuitable(true);
+        const loadingNotSuitableTimer = window.setTimeout(() => setLoadingNotSuitable(true), 0);
         const unsubNS = subscribeNotSuitableClients(phoneCodes, (data) => {
             setNotSuitable(data);
             setWaSent((prev) => new Set([...prev, ...getWhatsAppSentIds(data.map((lead) => lead.id))]));
             setLoadingNotSuitable(false);
         });
 
-        return () => { unsubInc(); unsubNS(); };
-    }, [phoneCodes]);
+        return () => {
+            window.clearTimeout(loadingTimer);
+            window.clearTimeout(loadingNotSuitableTimer);
+            unsubInc();
+            unsubNS();
+        };
+    }, [phoneCodes, recoveryClock]);
 
     useEffect(() => {
         if (actionType !== "review" || !actionLead) {
-            setPreviewMessages([]);
-            setPreviewError("");
-            setPreviewLoading(false);
-            return;
+            const timer = window.setTimeout(() => {
+                setPreviewMessages([]);
+                setPreviewError("");
+                setPreviewLoading(false);
+            }, 0);
+            return () => window.clearTimeout(timer);
         }
 
-        setPreviewLoading(true);
-        setPreviewError("");
+        const timer = window.setTimeout(() => {
+            setPreviewLoading(true);
+            setPreviewError("");
+        }, 0);
         const unsub = subscribeLeadMessages(
             actionLead.id,
             (messages) => {
@@ -223,7 +252,10 @@ export default function UserIncompleteClientsPage() {
             }
         );
 
-        return unsub;
+        return () => {
+            window.clearTimeout(timer);
+            unsub();
+        };
     }, [actionLead, actionType]);
 
     const activeList = tab === "incomplete" ? incomplete : notSuitable;
@@ -242,10 +274,14 @@ export default function UserIncompleteClientsPage() {
     }, [activeList, endKey, startKey]);
 
     // reset ddd filter when switching tabs
-    useEffect(() => { setDddFilter("all"); }, [tab]);
+    useEffect(() => {
+        const timer = window.setTimeout(() => setDddFilter("all"), 0);
+        return () => window.clearTimeout(timer);
+    }, [tab]);
     useEffect(() => {
         if (dddFilter !== "all" && !activeDdds.includes(dddFilter)) {
-            setDddFilter("all");
+            const timer = window.setTimeout(() => setDddFilter("all"), 0);
+            return () => window.clearTimeout(timer);
         }
     }, [activeDdds, dddFilter]);
 
@@ -256,7 +292,8 @@ export default function UserIncompleteClientsPage() {
             const q = norm(search.trim());
             list = list.filter((l) =>
                 norm(l.business).includes(q) || norm(l.name).includes(q) ||
-                norm(l.phone).includes(q) || norm(l.location?.address).includes(q)
+                norm(l.phone).includes(q) || norm(l.location?.address).includes(q) ||
+                norm(l.lastInboundText).includes(q)
             );
         }
         return list;
@@ -359,7 +396,7 @@ export default function UserIncompleteClientsPage() {
                 <div className="mb-3 flex items-center justify-between gap-3">
                     <div>
                         <h1 className="text-[20px] font-black tracking-[-0.03em] text-[#101936]">
-                            Clientes Incompletos
+                            Clientes por recuperar
                         </h1>
                         <p className="mt-0.5 text-[11px] font-semibold text-[#66739A]">
                             {phoneCodes.map(dddCity).join(", ")}
@@ -399,7 +436,7 @@ export default function UserIncompleteClientsPage() {
                 {/* TABS */}
                 <div className="mb-3 flex gap-1.5">
                     <TabBtn active={tab === "incomplete"} onClick={() => setTab("incomplete")}>
-                        Incompletos
+                        Recuperar
                         <CountPill active={tab === "incomplete"}>{incomplete.length}</CountPill>
                     </TabBtn>
                     <TabBtn active={tab === "not_suitable"} onClick={() => setTab("not_suitable")}>
@@ -476,7 +513,7 @@ export default function UserIncompleteClientsPage() {
                                 autoFocus
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
-                                placeholder="Negocio, teléfono, dirección..."
+                                placeholder="Negocio, teléfono, mensaje..."
                                 className="min-w-0 flex-1 bg-transparent text-[14px] font-semibold text-[#101936] outline-none placeholder:text-[#98A2B3]"
                             />
                             {search ? <button type="button" onClick={() => setSearch("")} className="text-[18px] text-[#98A2B3]">×</button> : null}
@@ -517,14 +554,14 @@ export default function UserIncompleteClientsPage() {
                 <BottomSheet onClose={() => setInfoOpen(false)}>
                     <div className="mb-4">
                         <span className="inline-flex items-center rounded-full bg-[#f3f0ff] px-2.5 py-1 text-[10px] font-black text-[#7C3AED]">AYUDA</span>
-                        <p className="mt-2 text-[17px] font-black text-[#101936]">Clientes incompletos y no aptos</p>
+                        <p className="mt-2 text-[17px] font-black text-[#101936]">Clientes por recuperar y no aptos</p>
                     </div>
                     <div className="space-y-3 text-[12px] font-semibold leading-relaxed text-[#66739A]">
                         <p>
-                            Aqui aparecen clientes de tu cobertura que no completaron todo el registro o que el bot marco como no aptos.
+                            Aqui aparecen clientes de tu cobertura que no completaron el registro. Si todavia no dejaron negocio, entran despues de 24 horas sin nueva respuesta.
                         </p>
                         <p>
-                            Puedes escribirles por WhatsApp, agregar una nota y tomar los que tengan potencial para pasarlos a tus prospectos.
+                            Puedes revisar la conversacion, agregar una nota, marcar los que no sirven y tomar los que tengan potencial para pasarlos a Prospectos.
                         </p>
                     </div>
                     <button
@@ -542,9 +579,9 @@ export default function UserIncompleteClientsPage() {
                 <BottomSheet onClose={() => setFiltersOpen(false)}>
                     <div className="mb-4">
                         <span className="inline-flex items-center rounded-full bg-[#f3f0ff] px-2.5 py-1 text-[10px] font-black text-[#7C3AED]">FILTROS</span>
-                        <p className="mt-2 text-[17px] font-black text-[#101936]">Filtrar incompletos</p>
+                        <p className="mt-2 text-[17px] font-black text-[#101936]">Filtrar recuperables</p>
                         <p className="mt-1 text-[12px] font-semibold text-[#66739A]">
-                            Por defecto se muestran todos los clientes incompletos con negocio.
+                            Se muestran clientes incompletos con negocio y clientes sin datos despues de 24 horas sin respuesta.
                         </p>
                     </div>
 
@@ -715,7 +752,7 @@ export default function UserIncompleteClientsPage() {
                     </div>
                     <div className="mb-4 rounded-[14px] border border-orange-100 bg-orange-50 px-3 py-3 text-[12px] font-semibold text-orange-800">
                         <p className="font-black">⚠ Esta acción es visible para el administrador.</p>
-                        <p className="mt-1">El cliente pasará a la base de datos de "No Aptos". Ayudarás al sistema a identificar clientes que no son candidatos válidos en tu zona.</p>
+                        <p className="mt-1">El cliente pasara a la base de datos de No Aptos. Ayudaras al sistema a identificar clientes que no son candidatos validos en tu zona.</p>
                     </div>
                     <div className="flex gap-2">
                         <button type="button" onClick={closeAction} className="flex-1 rounded-[14px] border border-[#E8E7FB] py-3 text-[13px] font-black text-[#66739A]">Cancelar</button>
@@ -767,6 +804,7 @@ function ClientCard({
 }) {
     const ddd = extractDDD(lead.phone);
     const hasLocation = !!lead.location?.lat;
+    const missing = missingFields(lead);
 
     return (
         <div className={[
@@ -777,8 +815,8 @@ function ClientCard({
                 {/* Header */}
                 <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                        <p className="truncate text-[14px] font-black text-[#101936]">{lead.business}</p>
-                        {lead.name ? (
+                        <p className="truncate text-[14px] font-black text-[#101936]">{displayName(lead)}</p>
+                        {lead.name && lead.name !== displayName(lead) ? (
                             <p className="truncate text-[11px] font-semibold text-[#66739A]">{lead.name}</p>
                         ) : null}
                     </div>
@@ -804,14 +842,24 @@ function ClientCard({
                     ) : null}
                 </div>
 
-                {/* Missing location badge */}
-                {!hasLocation ? (
-                    <div className="mt-2">
+                {/* Recovery badges */}
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                    {tab === "incomplete" ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-[#7C3AED]">
+                            <span className="h-1.5 w-1.5 rounded-full bg-[#7C3AED]" />{recoveryBadge(lead)}
+                        </span>
+                    ) : null}
+                    {!hasLocation ? (
                         <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">
                             <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />Falta: ubicación
                         </span>
-                    </div>
-                ) : null}
+                    ) : null}
+                    {missing.includes("Falta negocio") ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700">
+                            <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />Falta: negocio
+                        </span>
+                    ) : null}
+                </div>
 
                 {/* Last message */}
                 {lead.lastInboundText ? (
@@ -851,6 +899,7 @@ function ClientCard({
                             {waSent ? <WACheckIcon /> : <WAIcon />}
                         </ActionBtn>
                     )}
+                    <ActionBtn onClick={onNote} tone="violet" title="Nota"><NoteIcon /></ActionBtn>
                     <div className="flex-1" />
                     {tab === "incomplete" ? (
                         <ActionBtn onClick={onNotSuitable} tone="gray" title="Marcar no apto"><BanIcon /></ActionBtn>
@@ -962,10 +1011,10 @@ function LoadingState() {
 function EmptyState({ tab, hasSearch, hasPhoneCodes }: { tab: Tab; hasSearch: boolean; hasPhoneCodes: boolean }) {
     const msg = hasSearch ? "Sin resultados" :
         tab === "not_suitable" ? "Sin clientes no aptos en tu zona" :
-        hasPhoneCodes ? "Sin clientes incompletos en tu zona" : "Sin indicativos configurados";
+        hasPhoneCodes ? "Sin clientes por recuperar en tu zona" : "Sin indicativos configurados";
     const sub = hasSearch ? "Intenta con otro término" :
         tab === "not_suitable" ? "Aquí aparecerán los que marques como No Apto" :
-        hasPhoneCodes ? "Solo aparecen clientes con tipo de negocio registrado, sin asignar" : "Contacta al administrador";
+        hasPhoneCodes ? "Los clientes sin negocio aparecen despues de 24 horas sin respuesta" : "Contacta al administrador";
     return (
         <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f3f0ff]">

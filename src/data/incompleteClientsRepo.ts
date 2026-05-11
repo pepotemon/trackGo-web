@@ -38,6 +38,7 @@ export const BRAZIL_DDDS: Record<string, string> = {
 
 const INTL_COUNTRY_CODES = ["507","502","503","504","505","506","509","593","591","595","598"];
 const INCOMPLETE_STATUSES = ["pending_review", "incomplete"] as const;
+const RECOVERY_WAIT_MS = 24 * 60 * 60 * 1000;
 
 const COUNTRY_NAMES: Record<string, string> = {
     "507": "Panamá", "502": "Guatemala", "503": "El Salvador", "504": "Honduras",
@@ -77,6 +78,18 @@ function phonePrefixesForCode(code: string) {
         return [code, `+${code}`, `55${code}`];
     }
     return [code, `55${code}`, `+55${code}`];
+}
+
+function recoveryActivityMs(lead: MetaLeadDoc) {
+    return lead.lastInboundMessageAt ?? lead.verificationStatusChangedAt ?? lead.updatedAt ?? lead.createdAt ?? 0;
+}
+
+function isRecoverableIncompleteLead(lead: MetaLeadDoc) {
+    if (lead.assignedTo) return false;
+    if (lead.business) return true;
+
+    const activityMs = recoveryActivityMs(lead);
+    return activityMs > 0 && Date.now() - activityMs >= RECOVERY_WAIT_MS;
 }
 
 function subscribeCoverageByPhonePrefixes(
@@ -140,8 +153,9 @@ function subscribeCoverageByPhonePrefixes(
 }
 
 /**
- * Incomplete clients: pending_review, not assigned to anyone, business field filled.
- * These are clients who sent their business type but didn't complete the flow.
+ * Recoverable clients: incomplete/pending leads without an owner.
+ * Leads with business are available immediately; leads without business wait 24h after
+ * their last activity so the client still has time to complete the bot flow.
  */
 export function subscribeIncompleteClients(
     phoneCodes: string[],
@@ -156,8 +170,8 @@ export function subscribeIncompleteClients(
         phoneCodes,
         INCOMPLETE_STATUSES,
         callback,
-        (lead) => !!lead.business && !lead.assignedTo,
-        (lead) => lead.lastInboundMessageAt ?? lead.verificationStatusChangedAt ?? lead.updatedAt ?? lead.createdAt ?? 0
+        isRecoverableIncompleteLead,
+        recoveryActivityMs
     );
 }
 
