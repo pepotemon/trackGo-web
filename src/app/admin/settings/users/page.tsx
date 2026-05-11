@@ -79,6 +79,23 @@ function onlyNumberLike(text: string) {
     return `${parts[0]}.${parts.slice(1).join("")}`;
 }
 
+function dateInputValue(ms?: number) {
+    if (!ms) return "";
+    const date = new Date(ms);
+    return [
+        date.getFullYear(),
+        String(date.getMonth() + 1).padStart(2, "0"),
+        String(date.getDate()).padStart(2, "0"),
+    ].join("-");
+}
+
+function dateInputToMs(value: string) {
+    if (!value) return undefined;
+    const date = new Date(`${value}T00:00:00`);
+    const ms = date.getTime();
+    return Number.isFinite(ms) ? ms : undefined;
+}
+
 function safeNumber(value: unknown, fallback = 0) {
     const n = Number(value);
     return Number.isFinite(n) ? n : fallback;
@@ -1903,13 +1920,42 @@ function EditUserModal({
                                 </div>
                             ) : (
                                 sharedWith.map((entry) => (
-                                    <div key={entry.adminId} className="flex items-center justify-between gap-3 rounded-lg border border-[#e5e7eb] bg-white px-3 py-2">
+                                    <div key={entry.adminId} className="grid gap-2 rounded-lg border border-[#e5e7eb] bg-white px-3 py-2 sm:grid-cols-[1fr_78px_136px_36px] sm:items-center">
                                         <div className="min-w-0">
                                             <div className="truncate text-[12px] font-semibold text-[#171717]">{entry.adminName}</div>
                                             <div className="text-[11px] font-medium text-[#9ca3af]">
-                                                {entry.percentage}% de ganancia{entry.assignedAt ? ` · desde ${new Date(entry.assignedAt).toLocaleDateString("es")}` : ""}
+                                                Socio administrador
                                             </div>
                                         </div>
+                                        <label className="block">
+                                            <span className="mb-1 block text-[9px] font-bold uppercase tracking-[0.08em] text-[#98a2b3]">%</span>
+                                            <input
+                                                value={String(entry.percentage ?? "")}
+                                                onChange={(event) => {
+                                                    const pct = Math.min(100, Math.max(0, safeNumber(onlyNumberLike(event.target.value), 0)));
+                                                    setSharedWith((prev) => prev.map((item) =>
+                                                        item.adminId === entry.adminId ? { ...item, percentage: pct } : item
+                                                    ));
+                                                }}
+                                                className="h-9 w-full rounded-lg border border-[#e5e7eb] bg-white px-2 text-[12px] font-semibold text-[#52525b] outline-none"
+                                            />
+                                        </label>
+                                        <label className="block">
+                                            <span className="mb-1 block text-[9px] font-bold uppercase tracking-[0.08em] text-[#98a2b3]">Desde</span>
+                                            <input
+                                                type="date"
+                                                value={dateInputValue(entry.assignedAt)}
+                                                onChange={(event) => {
+                                                    const nextMs = dateInputToMs(event.target.value);
+                                                    setSharedWith((prev) => prev.map((item) =>
+                                                        item.adminId === entry.adminId
+                                                            ? { ...item, assignedAt: nextMs }
+                                                            : item
+                                                    ));
+                                                }}
+                                                className="h-9 w-full rounded-lg border border-[#e5e7eb] bg-white px-2 text-[12px] font-semibold text-[#52525b] outline-none"
+                                            />
+                                        </label>
                                         <IconButton
                                             icon="trash"
                                             label="Quitar socio"

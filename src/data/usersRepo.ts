@@ -25,6 +25,10 @@ function cleanText(value: unknown) {
     return String(value ?? "").trim();
 }
 
+function withoutUndefined<T>(value: T): T {
+    return JSON.parse(JSON.stringify(value)) as T;
+}
+
 function normalizeText(value: unknown) {
     return cleanText(value)
         .normalize("NFD")
@@ -298,7 +302,7 @@ export async function updateUserPhoneCodes(userId: string, phoneCodes: string[])
 
 export async function updateUserSharedWith(userId: string, sharedWith: UserSharedAdmin[]) {
     await updateDoc(doc(db, "users", userId), {
-        sharedWith,
+        sharedWith: withoutUndefined(sharedWith),
         updatedAt: Date.now(),
     });
 }
