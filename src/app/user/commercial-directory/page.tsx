@@ -68,7 +68,7 @@ function messageTemplates(countryName: string, businessName: string, sellerName:
 }
 
 export default function UserCommercialDirectoryPage() {
-    const { firebaseUser, profile } = useAuth();
+    const { firebaseUser, profile, userPermissions } = useAuth();
     const userId = firebaseUser?.uid ?? "";
     const userName = profile?.name?.split(" ")[0] || "Vendedor";
     const [assignments, setAssignments] = useState<CommercialDirectoryAssignmentDoc[]>([]);
@@ -100,6 +100,7 @@ export default function UserCommercialDirectoryPage() {
     }, []);
 
     useEffect(() => {
+        if (!userPermissions.canSeeCommercialDirectory) return;
         if (!userId) return;
         let disposed = false;
         queueMicrotask(() => setLoading(true));
@@ -123,7 +124,7 @@ export default function UserCommercialDirectoryPage() {
         return () => {
             disposed = true;
         };
-    }, [userId]);
+    }, [userId, userPermissions.canSeeCommercialDirectory]);
 
     const touchMap = useMemo(() => {
         const map = new Map<string, CommercialDirectoryProspectTouchDoc>();
@@ -189,6 +190,10 @@ export default function UserCommercialDirectoryPage() {
         setCopiedId(prospect.id);
         if (copyTimer.current) clearTimeout(copyTimer.current);
         copyTimer.current = setTimeout(() => setCopiedId(null), 1200);
+    }
+
+    if (!userPermissions.canSeeCommercialDirectory) {
+        return <EmptyState title="Sin permiso" body="El administrador debe habilitar tu acceso a Base Comercial." />;
     }
 
     return (

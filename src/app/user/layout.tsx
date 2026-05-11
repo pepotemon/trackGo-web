@@ -10,10 +10,11 @@ import { ResumeRefresh } from "@/components/mobile/ResumeRefresh";
 import { VendorPushPrompt } from "@/components/mobile/VendorPushPrompt";
 
 type NavIconName = "leads" | "database" | "map" | "history" | "chat" | "settings" | "logOut";
+type VendorNavPermission = "canSeeMap" | "canSeeHistory" | "canSeeChat" | "canSeeSubscriptions" | "canSeeCommercialDirectory";
 
-const BASE_NAV: { href: string; label: string; icon: NavIconName; permKey?: "canSeeMap" | "canSeeHistory" | "canSeeChat" | "canSeeSubscriptions" }[] = [
+const BASE_NAV: { href: string; label: string; icon: NavIconName; permKey?: VendorNavPermission }[] = [
     { href: "/user/leads", label: "Prospectos", icon: "leads" },
-    { href: "/user/commercial-directory", label: "Base", icon: "database" },
+    { href: "/user/commercial-directory", label: "Base", icon: "database", permKey: "canSeeCommercialDirectory" },
     { href: "/user/map", label: "Mapa", icon: "map", permKey: "canSeeMap" },
     { href: "/user/history", label: "Historial", icon: "history", permKey: "canSeeHistory" },
     { href: "/user/chat", label: "Incompl.", icon: "chat", permKey: "canSeeChat" },

@@ -247,6 +247,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 canSeeChat: profile?.userPermissions?.canSeeChat ?? true,
                 canChatWithProspects: profile?.userPermissions?.canChatWithProspects ?? false,
                 canSeeSubscriptions: profile?.userPermissions?.canSeeSubscriptions ?? true,
+                canSeeCommercialDirectory: profile?.userPermissions?.canSeeCommercialDirectory ?? true,
             },
             phoneCodes: profile?.phoneCodes ?? [],
             login: async (email, password) => {

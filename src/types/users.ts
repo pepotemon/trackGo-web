@@ -112,14 +112,16 @@ export type UserPermissions = {
     canChatWithProspects: boolean;
     /** Can access subscription purchase/settings screens. */
     canSeeSubscriptions: boolean;
+    /** Can access the assigned commercial directory/base screen. */
+    canSeeCommercialDirectory: boolean;
 };
 
 export function defaultUserPermissions(): UserPermissions {
-    return { canSeeMap: true, canSeeHistory: true, canSeeChat: true, canChatWithProspects: false, canSeeSubscriptions: true };
+    return { canSeeMap: true, canSeeHistory: true, canSeeChat: true, canChatWithProspects: false, canSeeSubscriptions: true, canSeeCommercialDirectory: true };
 }
 
 export function fullUserPermissions(): UserPermissions {
-    return { canSeeMap: true, canSeeHistory: true, canSeeChat: true, canChatWithProspects: true, canSeeSubscriptions: true };
+    return { canSeeMap: true, canSeeHistory: true, canSeeChat: true, canChatWithProspects: true, canSeeSubscriptions: true, canSeeCommercialDirectory: true };
 }
 
 /** Returns a permissions object with everything enabled (used for superadmin). */

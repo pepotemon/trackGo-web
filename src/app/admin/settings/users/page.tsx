@@ -1310,9 +1310,11 @@ function EditUserModal({
         const newRate = safeNumber(ratePerVisit, 0);
         const oldRate = safeNumber(user.ratePerVisit, 0);
         if (newRate === oldRate) {
-            setApplyToCurrentWeek(false);
-            setWeekVisitCount(null);
-            return;
+            const timer = window.setTimeout(() => {
+                setApplyToCurrentWeek(false);
+                setWeekVisitCount(null);
+            }, 0);
+            return () => window.clearTimeout(timer);
         }
         const { startKey, endKey } = weekRangeKeysMonToSun();
         let cancelled = false;
@@ -1701,6 +1703,7 @@ function EditUserModal({
                                         { key: "canSeeChat" as keyof UserPermissions, label: "Ver Chat de clientes incompletos" },
                                         { key: "canChatWithProspects" as keyof UserPermissions, label: "Responder por chat a prospectos pendientes" },
                                         { key: "canSeeSubscriptions" as keyof UserPermissions, label: "Acceder a suscripciones" },
+                                        { key: "canSeeCommercialDirectory" as keyof UserPermissions, label: "Acceder a Base Comercial" },
                                     ]).map(({ key, label }) => (
                                         <PermissionToggle
                                             key={key}
@@ -1722,7 +1725,7 @@ function EditUserModal({
                             </button>
                             <button
                                 type="button"
-                                onClick={() => setUserPermissions({ canSeeMap: false, canSeeHistory: false, canSeeChat: false, canChatWithProspects: false, canSeeSubscriptions: false })}
+                                onClick={() => setUserPermissions({ canSeeMap: false, canSeeHistory: false, canSeeChat: false, canChatWithProspects: false, canSeeSubscriptions: false, canSeeCommercialDirectory: false })}
                                 className="flex-1 rounded-lg border border-red-200 bg-red-50 py-2 text-[12px] font-semibold text-red-600 transition hover:bg-red-100"
                             >
                                 Revocar todo
