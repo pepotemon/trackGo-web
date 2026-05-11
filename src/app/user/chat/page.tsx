@@ -325,8 +325,8 @@ export default function UserIncompleteClientsPage() {
 
     function openWhatsApp(lead: MetaLeadDoc) {
         const msg = isSpanishPhone(lead.phone)
-            ? `¡Buenas tardes! Somos de Crédito Comercial. Nos comunicamos para continuar con la liberación del crédito y el registro de tu negocio. ¡Quedamos atentos! 😊`
-            : `Boa tarde! Somos da Crédito Comercial. Estamos entrando em contato para dar continuidade à liberação do crédito e realização do cadastro. Aguardamos seu retorno! 😊`;
+            ? `¡Hola! Somos de Crédito Comercial. Usted nos contactó anteriormente sobre la liberación de crédito para su negocio. Nos gustaría saber si aún tiene interés. ¡Gracias y disculpe la molestia! 🙏`
+            : `Olá! Somos da Crédito Comercial. Você nos contatou anteriormente sobre a liberação de crédito para o seu comércio. Gostaríamos de saber se ainda tem interesse. Obrigado e desculpe o incômodo! 🙏`;
         window.open(buildWALink(lead.phone, msg), "_blank");
         setWaSent((prev) => new Set(prev).add(lead.id));
     }
@@ -907,11 +907,9 @@ function ClientCard({
                         <ChatIcon /> Revisar
                     </button>
                     <ActionBtn onClick={onNote} tone="violet" title="Nota"><NoteIcon /></ActionBtn>
-                    {tab === "incomplete" ? (
-                        <ActionBtn onClick={onWhatsApp} tone={waSent ? "sent" : "green"} title={waSent ? "Enviado" : "WhatsApp"}>
-                            <WspIcon />
-                        </ActionBtn>
-                    ) : null}
+                    <ActionBtn onClick={onWhatsApp} tone={waSent ? "sent" : "green"} title={waSent ? "Enviado" : "WhatsApp"}>
+                        <WspIcon />
+                    </ActionBtn>
                     <div className="flex-1" />
                     {tab === "incomplete" ? (
                         <ActionBtn onClick={onNotSuitable} tone="gray" title="Marcar no apto"><BanIcon /></ActionBtn>
