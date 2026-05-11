@@ -305,10 +305,18 @@ function exportAccountingSheet(summary: AccountingSummary) {
 function adminSellerAccountingStartMs(user: UserDoc, adminId: string, adminCreatedAt?: number) {
     const share = user.sharedWith?.find((entry) => entry.adminId === adminId);
     if (!share) return null;
-    return Math.max(
+    const startMs = Math.max(
         safeNumber(adminCreatedAt, 0),
         safeNumber(share.assignedAt, 0),
     );
+    return startOfLocalDayMs(startMs);
+}
+
+function startOfLocalDayMs(value: number) {
+    if (!Number.isFinite(value) || value <= 0) return 0;
+    const date = new Date(value);
+    date.setHours(0, 0, 0, 0);
+    return date.getTime();
 }
 
 export default function AccountingPage() {
