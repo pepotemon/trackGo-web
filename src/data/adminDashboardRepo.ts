@@ -15,9 +15,12 @@ import {
 } from "@/data/autoAssignLogsRepo";
 import { getLeadQueuePage } from "@/data/leadsRepo";
 import { listAdminUsers } from "@/data/usersRepo";
+import { getWeeklyInvestment, listPaidSubscriptionsByRange } from "@/data/accountingRepo";
+import { weekRangeKeysMonToSun } from "@/lib/date";
 import type { AutoAssignLogDoc, LeadReviewStatus } from "@/types/leads";
 import type { UserDoc } from "@/types/users";
 import type { AdminDashboardRange, AdminDashboardSnapshot } from "@/types/dashboard";
+import type { WeeklyInvestmentDoc } from "@/types/accounting";
 
 const QUEUE_STATUSES: LeadReviewStatus[] = [
     "pending_review",
@@ -94,6 +97,84 @@ function adminSellerAccountingStartMs(user: UserDoc, adminId: string, adminCreat
     return date.getTime();
 }
 
+function safeMoney(value: unknown) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+}
+
+function clamp2(value: number) {
+    return Math.round((Number.isFinite(value) ? value : 0) * 100) / 100;
+}
+
+function eventAmount(data: Record<string, unknown>, user?: UserDoc) {
+    return safeMoney(
+        data.amount ??
+        data.amountSnapshot ??
+        data.rateApplied ??
+        data.ratePerVisitSnapshot ??
+        user?.ratePerVisit ??
+        0,
+    );
+}
+
+function dayStartMs(key: string) {
+    return new Date(`${key}T00:00:00`).getTime();
+}
+
+function dayEndMs(key: string) {
+    return new Date(`${key}T23:59:59.999`).getTime();
+}
+
+function daysInclusive(startMs: number, endMs: number) {
+    const start = new Date(startMs);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(endMs);
+    end.setHours(0, 0, 0, 0);
+    return Math.max(0, Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1);
+}
+
+function monthWeekRanges(startKey: string, endKey: string) {
+    const out: ReturnType<typeof weekRangeKeysMonToSun>[] = [];
+    const endMs = dayEndMs(endKey);
+    const seen = new Set<string>();
+    let cursor = new Date(`${startKey}T12:00:00`);
+
+    while (cursor.getTime() <= endMs) {
+        const week = weekRangeKeysMonToSun(cursor);
+        if (!seen.has(week.startKey)) {
+            out.push(week);
+            seen.add(week.startKey);
+        }
+        cursor = new Date(week.endDate);
+        cursor.setDate(cursor.getDate() + 1);
+    }
+
+    return out;
+}
+
+function weeklyGroupInvestmentForUser(
+    investment: WeeklyInvestmentDoc | null,
+    userId: string,
+    ratio: number,
+) {
+    if (!investment || ratio <= 0) return 0;
+    const groups = Array.isArray(investment.groups) ? investment.groups : [];
+    if (groups.length) {
+        return groups.reduce((sum, group) => {
+            if (group.status === "inactive") return sum;
+            const userIds = Array.isArray(group.userIds) ? group.userIds.filter(Boolean) : [];
+            if (!userIds.includes(userId) || userIds.length === 0) return sum;
+            return sum + (safeMoney(group.amount) / userIds.length) * ratio;
+        }, 0);
+    }
+
+    return safeMoney(investment.allocations?.[userId]) * ratio;
+}
+
+function weeklyManualInvestment(investment: WeeklyInvestmentDoc | null, ratio: number) {
+    return safeMoney(investment?.amount) * ratio;
+}
+
 async function countTodayAssignmentsForUsers(dayKey: string, userIds: string[] | null) {
     if (userIds === null) {
         return countCollection("autoAssignLogs", [where("dayKey", "==", dayKey)]);
@@ -159,7 +240,10 @@ export async function getMonthlyChartData(
     endKey: string,
     scope?: { adminId?: string | null; adminCreatedAt?: number; isSuperAdmin?: boolean }
 ): Promise<MonthlyChartData> {
-    const [users, logsSnap, eventsSnap] = await Promise.all([
+    const monthStartMs = dayStartMs(startKey);
+    const monthEndMs = dayEndMs(endKey);
+    const weekRanges = monthWeekRanges(startKey, endKey);
+    const [users, logsSnap, eventsSnap, subscriptions, weeklyInvestments] = await Promise.all([
         listAdminUsers(),
         getDocs(query(
             collection(db, "autoAssignLogs"),
@@ -173,8 +257,12 @@ export async function getMonthlyChartData(
             where("dayKey", "<=", endKey),
             limit(10000)
         )),
+        listPaidSubscriptionsByRange({ startMs: monthStartMs, endMs: monthEndMs }),
+        Promise.all(weekRanges.map((week) => getWeeklyInvestment(week.startKey))),
     ]);
     const scopedUsers = getScopedUsers(users, scope?.adminId, scope?.isSuperAdmin === true);
+    const usersById = new Map(users.map((user) => [user.id, user]));
+    const vendors = users.filter((user) => user.role === "user");
     const scopedUserIds = scope?.isSuperAdmin === true || !scope?.adminId
         ? null
         : new Set(scopedUsers.filter((user) => user.role === "user").map((user) => user.id));
@@ -195,23 +283,78 @@ export async function getMonthlyChartData(
     }
 
     const visitsByDay = new Map<string, number>();
-    let totalRevenue = 0;
+    const eventDocs = eventsSnap.docs.map((doc) => ({ id: doc.id, data: doc.data() as Record<string, unknown> }));
     for (const d of eventsSnap.docs) {
         const data = d.data();
         const userId = String(data.userId || "");
         if (scopedUserIds && !scopedUserIds.has(userId)) continue;
         const key = String(data.dayKey ?? "");
-        const amount = typeof data.amount === "number" ? data.amount : 0;
         if (key && data.type === "visited") {
             visitsByDay.set(key, (visitsByDay.get(key) ?? 0) + 1);
-            const eventCreatedAt = typeof data.createdAt === "number" ? data.createdAt : 0;
-            const revenueAllowedFrom = scope?.isSuperAdmin === true || !scope?.adminId
-                ? 0
-                : accountingStartByUser.get(userId) ?? Number.POSITIVE_INFINITY;
-            if (eventCreatedAt >= revenueAllowedFrom) {
-                totalRevenue += amount;
-            }
         }
+    }
+
+    function grossAndCostsForUser(user: UserDoc, startMs: number) {
+        let gross = 0;
+        let subscriptionInvestment = 0;
+        let groupInvestment = 0;
+        const effectiveStart = Math.max(monthStartMs, startMs);
+
+        for (const item of eventDocs) {
+            const data = item.data;
+            if (data.type !== "visited") continue;
+            if (String(data.userId || "") !== user.id) continue;
+            const createdAt = safeMoney(data.createdAt);
+            if (createdAt < effectiveStart || createdAt > monthEndMs) continue;
+            gross += eventAmount(data, user);
+        }
+
+        for (const subscription of subscriptions) {
+            if (subscription.userId !== user.id) continue;
+            if (subscription.createdAt < effectiveStart || subscription.createdAt > monthEndMs) continue;
+            gross += subscription.amount;
+            subscriptionInvestment += subscription.adsBudget;
+        }
+
+        weekRanges.forEach((week, index) => {
+            const overlapStart = Math.max(monthStartMs, effectiveStart, week.startDate.getTime());
+            const overlapEnd = Math.min(monthEndMs, dayEndMs(week.endKey));
+            if (overlapStart > overlapEnd) return;
+            const ratio = daysInclusive(overlapStart, overlapEnd) / 7;
+            groupInvestment += weeklyGroupInvestmentForUser(weeklyInvestments[index], user.id, ratio);
+        });
+
+        return clamp2(gross - subscriptionInvestment - groupInvestment);
+    }
+
+    const totalManualInvestment = scope?.isSuperAdmin === true
+        ? weekRanges.reduce((sum, week, index) => {
+            const overlapStart = Math.max(monthStartMs, week.startDate.getTime());
+            const overlapEnd = Math.min(monthEndMs, dayEndMs(week.endKey));
+            if (overlapStart > overlapEnd) return sum;
+            return sum + weeklyManualInvestment(weeklyInvestments[index], daysInclusive(overlapStart, overlapEnd) / 7);
+        }, 0)
+        : 0;
+
+    let totalRevenue = 0;
+    if (scope?.isSuperAdmin === true || !scope?.adminId) {
+        const totalReal = vendors.reduce((sum, user) => sum + grossAndCostsForUser(user, monthStartMs), 0) - totalManualInvestment;
+        const givenAway = vendors.reduce((sum, user) => {
+            return sum + (user.sharedWith ?? []).reduce((inner, share) => {
+                const admin = usersById.get(share.adminId);
+                const shareStart = adminSellerAccountingStartMs(user, share.adminId, admin?.createdAt);
+                if (shareStart === null) return inner;
+                return inner + grossAndCostsForUser(user, shareStart) * (safeMoney(share.percentage) / 100);
+            }, 0);
+        }, 0);
+        totalRevenue = clamp2(totalReal - givenAway);
+    } else {
+        totalRevenue = scopedUsers.reduce((sum, user) => {
+            const share = user.sharedWith?.find((entry) => entry.adminId === scope.adminId);
+            const startMs = accountingStartByUser.get(user.id);
+            if (!share || startMs == null) return sum;
+            return sum + grossAndCostsForUser(user, startMs) * (safeMoney(share.percentage) / 100);
+        }, 0);
     }
 
     const points: MonthlyChartPoint[] = [];

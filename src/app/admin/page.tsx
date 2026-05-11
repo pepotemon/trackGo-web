@@ -824,7 +824,7 @@ function MonthlyChartCard({
                     <p className="text-[20px] font-black leading-none tracking-[-0.04em] text-[#101936]">
                         {data ? fmtRevenue(data.totalRevenue) : "—"}
                     </p>
-                    <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.1em] text-[#a3acca]">Ingresos</p>
+                    <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.1em] text-[#a3acca]">Mi ganancia</p>
                 </div>
             </div>
         </div>
