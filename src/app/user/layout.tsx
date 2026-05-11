@@ -9,10 +9,11 @@ import { PullToRefresh } from "@/components/mobile/PullToRefresh";
 import { ResumeRefresh } from "@/components/mobile/ResumeRefresh";
 import { VendorPushPrompt } from "@/components/mobile/VendorPushPrompt";
 
-type NavIconName = "leads" | "map" | "history" | "chat" | "settings" | "logOut";
+type NavIconName = "leads" | "database" | "map" | "history" | "chat" | "settings" | "logOut";
 
 const BASE_NAV: { href: string; label: string; icon: NavIconName; permKey?: "canSeeMap" | "canSeeHistory" | "canSeeChat" | "canSeeSubscriptions" }[] = [
     { href: "/user/leads", label: "Prospectos", icon: "leads" },
+    { href: "/user/commercial-directory", label: "Base", icon: "database" },
     { href: "/user/map", label: "Mapa", icon: "map", permKey: "canSeeMap" },
     { href: "/user/history", label: "Historial", icon: "history", permKey: "canSeeHistory" },
     { href: "/user/chat", label: "Incompl.", icon: "chat", permKey: "canSeeChat" },
@@ -54,7 +55,7 @@ export default function UserLayout({ children }: { children: ReactNode }) {
     const userName = profile?.name?.split(" ")[0] ?? "Vendedor";
     const userInitial = userName.slice(0, 1).toUpperCase();
 
-    const colsClass = (["grid-cols-1", "grid-cols-2", "grid-cols-3", "grid-cols-4", "grid-cols-5"] as const)[Math.min(MOBILE_NAV.length, 5) - 1] ?? "grid-cols-5";
+    const colsClass = (["grid-cols-1", "grid-cols-2", "grid-cols-3", "grid-cols-4", "grid-cols-5", "grid-cols-6"] as const)[Math.min(MOBILE_NAV.length, 6) - 1] ?? "grid-cols-5";
 
     return (
         <div className="min-h-screen bg-[#fbfaff] text-[#172033]">
@@ -173,6 +174,13 @@ function NavIcon({ name, size = "sm" }: { name: NavIconName; size?: "sm" | "md" 
                 <>
                     <path {...common} d="M9 18 3 21V6l6-3 6 3 6-3v15l-6 3-6-3Z" />
                     <path {...common} d="M9 3v15M15 6v15" />
+                </>
+            ) : null}
+            {name === "database" ? (
+                <>
+                    <ellipse {...common} cx="12" cy="5" rx="7" ry="3" />
+                    <path {...common} d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5" />
+                    <path {...common} d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" />
                 </>
             ) : null}
             {name === "history" ? (

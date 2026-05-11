@@ -7,9 +7,12 @@ import { AppIcon } from "@/components/ui/AppIcon";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
+import { listAdminUsers } from "@/data/usersRepo";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { usePermissions } from "@/features/auth/usePermissions";
-import type { SubscriptionCity } from "@/types/subscriptions";
+import { SUBSCRIPTION_PLANS } from "@/lib/subscriptionPlans";
+import type { SubscriptionCity, SubscriptionPlanId } from "@/types/subscriptions";
+import type { UserDoc } from "@/types/users";
 
 type CityFormState = {
     id: string;
@@ -26,6 +29,15 @@ type SubscriptionSettings = {
     updatedAt?: number | null;
 };
 
+type ManualSubscriptionForm = {
+    userId: string;
+    cityId: string;
+    plan: SubscriptionPlanId;
+    amount: number;
+    cycleDays: number;
+    syncMeta: boolean;
+};
+
 type OverviewSubscription = {
     id: string;
     userId?: string | null;
@@ -37,6 +49,7 @@ type OverviewSubscription = {
     amount: number;
     adsBudget: number;
     status: string;
+    source?: string | null;
     startDate?: number | null;
     endDate?: number | null;
 };
@@ -77,6 +90,14 @@ const emptyCityForm: CityFormState = {
     status: "available",
     campaignId: "",
 };
+const defaultManualForm: ManualSubscriptionForm = {
+    userId: "",
+    cityId: "",
+    plan: "crecimiento",
+    amount: 400,
+    cycleDays: 5,
+    syncMeta: true,
+};
 
 const inputClass =
     "h-11 w-full rounded-2xl border border-[#e8e7fb] bg-white px-3 text-[13px] font-bold text-[#101936] outline-none transition focus:border-[#8b5cf6] focus:ring-4 focus:ring-[#ede9fe] disabled:bg-[#f8f7ff] disabled:text-[#98a2b3]";
@@ -103,6 +124,12 @@ export default function SubscriptionsAdminPage() {
     const [settingsError, setSettingsError] = useState("");
     const [detailCityId, setDetailCityId] = useState<string | null>(null);
     const [sheetCityId, setSheetCityId] = useState<string | null>(null);
+    const [manualModalOpen, setManualModalOpen] = useState(false);
+    const [manualUsers, setManualUsers] = useState<UserDoc[]>([]);
+    const [manualUsersLoading, setManualUsersLoading] = useState(false);
+    const [manualForm, setManualForm] = useState<ManualSubscriptionForm>(defaultManualForm);
+    const [manualSaving, setManualSaving] = useState(false);
+    const [manualError, setManualError] = useState("");
 
     const canView = permissions.subscriptionsView || permissions.subscriptionsEdit;
     const canManage = permissions.subscriptionsEdit || isSuperAdmin;
@@ -135,7 +162,10 @@ export default function SubscriptionsAdminPage() {
     }, []);
 
     useEffect(() => {
-        void loadOverview();
+        const timer = window.setTimeout(() => {
+            void loadOverview();
+        }, 0);
+        return () => window.clearTimeout(timer);
     }, [loadOverview]);
 
     const activeSubscriptions = useMemo(
@@ -154,7 +184,6 @@ export default function SubscriptionsAdminPage() {
     }, [overview]);
 
     const revenue = activeSubscriptions.reduce((sum, item) => sum + item.amount, 0);
-    const operatingBase = activeSubscriptions.reduce((sum, item) => sum + item.adsBudget, 0);
     const failedCheckouts = overview?.checkouts.filter((item) => item.status === "failed" || item.activationStatus.includes("failed")).length ?? 0;
 
     const sheetCity = useMemo(
@@ -204,6 +233,25 @@ export default function SubscriptionsAdminPage() {
         setCitySaveError("");
         setCampaignValidation({ loading: false, ok: false, message: "" });
         setCityModalOpen(true);
+    }
+
+    async function openManualActivation() {
+        setManualError("");
+        setManualForm({
+            ...defaultManualForm,
+            cycleDays: overview?.settings.cycleDays ?? defaultManualForm.cycleDays,
+        });
+        setManualModalOpen(true);
+        if (manualUsers.length > 0) return;
+        try {
+            setManualUsersLoading(true);
+            const users = await listAdminUsers();
+            setManualUsers(users.filter((item) => item.role === "user" && item.active !== false));
+        } catch (err) {
+            setManualError(err instanceof Error ? err.message : "No se pudieron cargar vendedores.");
+        } finally {
+            setManualUsersLoading(false);
+        }
     }
 
     async function saveCity() {
@@ -278,6 +326,28 @@ export default function SubscriptionsAdminPage() {
             setSettingsError(err instanceof Error ? err.message : "No se pudo guardar la configuracion.");
         } finally {
             setSettingsSaving(false);
+        }
+    }
+
+    async function activateManual() {
+        try {
+            setManualSaving(true);
+            setManualError("");
+            const token = await getAuthToken();
+            const response = await fetch("/api/subscriptions/manual-activate", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify(manualForm),
+            });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.message || "No se pudo activar la suscripcion.");
+            setManualModalOpen(false);
+            setActionMessage("Suscripcion manual activada correctamente.");
+            await loadOverview();
+        } catch (err) {
+            setManualError(err instanceof Error ? humanizeError(err.message) : "No se pudo activar la suscripcion.");
+        } finally {
+            setManualSaving(false);
         }
     }
 
@@ -386,6 +456,10 @@ export default function SubscriptionsAdminPage() {
                                 <Button type="button" variant="secondary" onClick={() => setSettingsModalOpen(true)}>
                                     <AppIcon name="settings" size="sm" plain className="h-4 w-4 text-current" />
                                     <span className="hidden sm:inline">Reglas</span>
+                                </Button>
+                                <Button type="button" variant="secondary" onClick={openManualActivation}>
+                                    <AppIcon name="wallet" size="sm" plain className="h-4 w-4 text-current" />
+                                    <span className="hidden sm:inline">Manual</span>
                                 </Button>
                                 <Button type="button" variant="primary" onClick={openCreateCity}>
                                     <AppIcon name="plus" size="sm" plain className="h-4 w-4 text-current" />
@@ -506,6 +580,20 @@ export default function SubscriptionsAdminPage() {
                 onChange={setSettingsDraft}
                 onSave={saveSettings}
                 onClose={() => setSettingsModalOpen(false)}
+            />
+
+            <ManualActivationModal
+                open={manualModalOpen}
+                users={manualUsers}
+                usersLoading={manualUsersLoading}
+                cities={overview?.cities ?? []}
+                settings={overview?.settings ?? { adsShare: 0.5, cycleDays: 5 }}
+                form={manualForm}
+                saving={manualSaving}
+                error={manualError}
+                onChange={setManualForm}
+                onSave={activateManual}
+                onClose={() => setManualModalOpen(false)}
             />
         </div>
     );
@@ -670,12 +758,14 @@ function SubscriptionRow({ item }: { item: OverviewSubscription }) {
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                     <p className="truncate text-[14px] font-black text-[#101936]">{item.city || item.cityId}</p>
-                    <p className="mt-0.5 truncate text-[11px] font-bold text-[#66739a]">{item.userName}</p>
+                    <p className="mt-0.5 truncate text-[11px] font-bold text-[#66739a]">
+                        {item.userName}{item.source === "manual_admin" ? " - Manual" : ""}
+                    </p>
                     {item.userEmail ? <p className="truncate text-[10px] font-semibold text-[#98a2b3]">{item.userEmail}</p> : null}
                 </div>
                 <div className="shrink-0 text-right">
                     <p className="text-[18px] font-black tracking-[-0.04em] text-[#6d28d9]">{currency.format(item.amount)}</p>
-                    <p className="mt-0.5 text-[10px] font-bold text-[#66739a]">base {currency.format(item.adsBudget)}</p>
+                    <p className="mt-0.5 text-[10px] font-bold text-[#66739a]">inversion {currency.format(item.adsBudget)}</p>
                 </div>
             </div>
         </div>
@@ -720,7 +810,7 @@ function CheckoutRow({
                 <div className="shrink-0 text-right">
                     <StatusPill status={item.activationStatus || item.status} />
                     <p className="mt-1.5 text-[16px] font-black tracking-[-0.04em] text-[#6d28d9]">{currency.format(item.amount)}</p>
-                    <p className="text-[10px] font-bold text-[#66739a]">base {currency.format(item.adsBudget)}</p>
+                    <p className="text-[10px] font-bold text-[#66739a]">inversion {currency.format(item.adsBudget)}</p>
                 </div>
             </div>
             {failed && item.failureReason ? (
@@ -833,6 +923,153 @@ function RulesModal({
                     <Button type="button" variant="ghost" onClick={onClose}>Cerrar</Button>
                     <Button type="button" variant="primary" disabled={!canEdit || saving} onClick={onSave}>
                         {saving ? "Guardando..." : "Guardar reglas"}
+                    </Button>
+                </div>
+            </div>
+        </Modal>
+    );
+}
+
+function ManualActivationModal({
+    open,
+    users,
+    usersLoading,
+    cities,
+    settings,
+    form,
+    saving,
+    error,
+    onChange,
+    onSave,
+    onClose,
+}: {
+    open: boolean;
+    users: UserDoc[];
+    usersLoading: boolean;
+    cities: SubscriptionCity[];
+    settings: SubscriptionSettings;
+    form: ManualSubscriptionForm;
+    saving: boolean;
+    error: string;
+    onChange: (next: ManualSubscriptionForm) => void;
+    onSave: () => void;
+    onClose: () => void;
+}) {
+    const availableCities = cities.filter((city) => city.status === "available");
+    const selectedCity = cities.find((city) => city.id === form.cityId) || null;
+    const selectedPlan = SUBSCRIPTION_PLANS.find((plan) => plan.id === form.plan);
+    const amount = form.plan === "custom" ? form.amount : (selectedPlan?.amount ?? form.amount);
+    const adsBudget = Math.round(amount * settings.adsShare);
+
+    function setPlan(plan: SubscriptionPlanId) {
+        const predefined = SUBSCRIPTION_PLANS.find((item) => item.id === plan);
+        onChange({
+            ...form,
+            plan,
+            amount: predefined?.amount ?? form.amount,
+        });
+    }
+
+    return (
+        <Modal open={open} title="Activacion manual" subtitle="Crea un ciclo activo sin Pix para una ciudad asignada." size="md" onClose={onClose}>
+            <div className="space-y-4">
+                <Notice tone="violet">
+                    Esta accion ocupa la ciudad, crea una suscripcion activa para el vendedor y bloquea nuevas compras mientras el ciclo este vigente.
+                    Con Meta sincronizado, TrackGo usa la fecha final real del conjunto de anuncios.
+                </Notice>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Vendedor">
+                        <select
+                            value={form.userId}
+                            disabled={usersLoading}
+                            onChange={(event) => onChange({ ...form, userId: event.target.value })}
+                            className={inputClass}
+                        >
+                            <option value="">{usersLoading ? "Cargando..." : "Seleccionar vendedor"}</option>
+                            {users.map((user) => (
+                                <option key={user.id} value={user.id}>
+                                    {user.name || user.email || user.id}
+                                </option>
+                            ))}
+                        </select>
+                    </Field>
+                    <Field label="Ciudad">
+                        <select
+                            value={form.cityId}
+                            onChange={(event) => onChange({ ...form, cityId: event.target.value })}
+                            className={inputClass}
+                        >
+                            <option value="">Seleccionar ciudad libre</option>
+                            {availableCities.map((city) => (
+                                <option key={city.id} value={city.id}>
+                                    {[city.name, city.state, city.country].filter(Boolean).join(" - ")}
+                                </option>
+                            ))}
+                        </select>
+                    </Field>
+                    <Field label="Plan">
+                        <select value={form.plan} onChange={(event) => setPlan(event.target.value as SubscriptionPlanId)} className={inputClass}>
+                            {SUBSCRIPTION_PLANS.map((plan) => (
+                                <option key={plan.id} value={plan.id}>
+                                    {plan.name} - {currency.format(plan.amount)}
+                                </option>
+                            ))}
+                            <option value="custom">Personalizado</option>
+                        </select>
+                    </Field>
+                    <Field label="Monto">
+                        <input
+                            type="number"
+                            min={300}
+                            value={form.amount}
+                            disabled={form.plan !== "custom"}
+                            onChange={(event) => onChange({ ...form, amount: Number(event.target.value) })}
+                            className={inputClass}
+                        />
+                    </Field>
+                    <Field label="Duracion">
+                        <input
+                            type="number"
+                            min={1}
+                            max={30}
+                            value={form.cycleDays}
+                            disabled={form.syncMeta}
+                            onChange={(event) => onChange({ ...form, cycleDays: Number(event.target.value) })}
+                            className={inputClass}
+                        />
+                    </Field>
+                    <div className="grid grid-cols-2 gap-2 sm:pt-5">
+                        <MoneyTile label="Cobro" value={currency.format(amount)} />
+                        <MoneyTile label="Inversion" value={currency.format(adsBudget)} />
+                    </div>
+                </div>
+
+                <label className="flex items-start gap-3 rounded-2xl border border-[#e8e7fb] bg-[#fbfaff] p-3">
+                    <input
+                        type="checkbox"
+                        checked={form.syncMeta}
+                        onChange={(event) => onChange({ ...form, syncMeta: event.target.checked })}
+                        className="mt-1 h-4 w-4 accent-[#7c3aed]"
+                    />
+                    <span className="min-w-0">
+                        <span className="block text-[12px] font-black text-[#101936]">Sincronizar con campaña Meta activa</span>
+                        <span className="mt-0.5 block text-[11px] font-semibold leading-snug text-[#66739a]">
+                            {form.syncMeta
+                                ? selectedCity?.campaignId || selectedCity?.activeCampaignId || selectedCity?.baseCampaignId
+                                    ? "Se tomara el fin exacto configurado en Meta y se guardaran campana, adset y anuncios."
+                                    : "La ciudad seleccionada debe tener un ID operativo de Meta."
+                                : "Usa la duracion manual del formulario y no enlaza la campana Meta."}
+                        </span>
+                    </span>
+                </label>
+
+                {availableCities.length === 0 ? <Notice tone="red">No hay ciudades libres para activar manualmente.</Notice> : null}
+                {error ? <Notice tone="red">{error}</Notice> : null}
+                <div className="flex justify-end gap-2">
+                    <Button type="button" variant="ghost" onClick={onClose}>Cerrar</Button>
+                    <Button type="button" variant="primary" disabled={saving || !form.userId || !form.cityId} onClick={onSave}>
+                        {saving ? "Activando..." : "Activar suscripcion"}
                     </Button>
                 </div>
             </div>
@@ -955,8 +1192,9 @@ function CityDetailModal({
                         <DetailRow label="Vendedor" value={subscription.userName} />
                         {subscription.userEmail ? <DetailRow label="Email" value={subscription.userEmail} /> : null}
                         <DetailRow label="Plan" value={subscription.plan || "sin plan"} />
+                        {subscription.source === "manual_admin" ? <DetailRow label="Origen" value="Manual admin" /> : null}
                         <DetailRow label="Monto" value={currency.format(subscription.amount)} />
-                        <DetailRow label="Base operativa" value={currency.format(subscription.adsBudget)} />
+                        <DetailRow label="Inversion" value={currency.format(subscription.adsBudget)} />
                         {subscription.startDate ? <DetailRow label="Inicio" value={dateTime.format(new Date(subscription.startDate))} /> : null}
                         <DetailRow label="Fin del ciclo" value={formatDate(subscription.endDate)} />
                     </DetailSection>

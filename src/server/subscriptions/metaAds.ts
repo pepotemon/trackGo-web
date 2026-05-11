@@ -236,11 +236,23 @@ export async function validateMetaCampaign(campaignId: string) {
 
 export async function validateCityCampaign(campaignId: string) {
     const campaign = await validateMetaCampaign(campaignId);
-    const adsets = await graphGet<{ data?: Array<{ id: string; name?: string; status?: string }> }>(`${campaign.id}/adsets`, {
-        fields: "id,name,status",
+    const adsets = await graphGet<{
+        data?: Array<{
+            id: string;
+            name?: string;
+            status?: string;
+            effective_status?: string;
+            start_time?: string;
+            end_time?: string;
+            daily_budget?: string;
+            lifetime_budget?: string;
+        }>;
+    }>(`${campaign.id}/adsets`, {
+        fields: "id,name,status,effective_status,start_time,end_time,daily_budget,lifetime_budget",
         limit: "50",
     });
     const adsetIds = adsets.data?.map((item) => item.id).filter(Boolean) || [];
+    const primaryAdset = adsets.data?.[0] || null;
     const ads =
         adsetIds.length === 1
             ? await graphGet<{ data?: Array<{ id: string; name?: string; status?: string }> }>(`${adsetIds[0]}/ads`, {
@@ -254,6 +266,20 @@ export async function validateCityCampaign(campaignId: string) {
         ...campaign,
         adsetsCount: adsetIds.length,
         adsetIds,
+        primaryAdset: primaryAdset
+            ? {
+                id: primaryAdset.id,
+                name: primaryAdset.name || null,
+                status: primaryAdset.effective_status || primaryAdset.status || null,
+                startTime: primaryAdset.start_time || null,
+                endTime: primaryAdset.end_time || null,
+                dailyBudget: centsToMoney(primaryAdset.daily_budget),
+                lifetimeBudget: centsToMoney(primaryAdset.lifetime_budget),
+                budgetMode: Number(primaryAdset.daily_budget || 0) > 0 && Number(primaryAdset.lifetime_budget || 0) <= 0
+                    ? "daily"
+                    : "lifetime",
+            }
+            : null,
         adsCount: adIds.length,
         adIds,
         ready: adsetIds.length === 1,
@@ -264,4 +290,50 @@ export async function validateCityCampaign(campaignId: string) {
                     ? "La campana no tiene conjuntos de anuncios."
                     : `La campana tiene ${adsetIds.length} conjuntos de anuncios. Para este flujo debe tener exactamente 1.`,
     };
+}
+
+export async function getActiveCityCampaignSnapshot(campaignId: string) {
+    const campaign = await validateCityCampaign(campaignId);
+    if (!campaign.ready || !campaign.primaryAdset) {
+        throw new ResponseError("campaign_not_ready", campaign.warning || "La campana no esta lista para sincronizar.", 409);
+    }
+
+    if (!campaign.primaryAdset.endTime) {
+        throw new ResponseError(
+            "campaign_missing_end_time",
+            "La campana activa no tiene fecha de finalizacion configurada en Meta.",
+            409,
+        );
+    }
+
+    const endDate = new Date(campaign.primaryAdset.endTime);
+    if (Number.isNaN(endDate.getTime()) || endDate.getTime() <= Date.now()) {
+        throw new ResponseError("campaign_end_time_invalid", "La fecha final de Meta ya vencio o no es valida.", 409);
+    }
+
+    const campaignStatus = String(campaign.status || "").toUpperCase();
+    const adsetStatus = String(campaign.primaryAdset.status || "").toUpperCase();
+    if (campaignStatus && !["ACTIVE", "IN_PROCESS", "WITH_ISSUES"].includes(campaignStatus)) {
+        throw new ResponseError("campaign_not_active", `La campana en Meta no esta activa (${campaign.status}).`, 409);
+    }
+    if (adsetStatus && !["ACTIVE", "IN_PROCESS", "WITH_ISSUES"].includes(adsetStatus)) {
+        throw new ResponseError("adset_not_active", `El conjunto de anuncios no esta activo (${campaign.primaryAdset.status}).`, 409);
+    }
+
+    return {
+        campaignId: campaign.id,
+        campaignName: campaign.name,
+        campaignStatus: campaign.status,
+        adsetIds: campaign.adsetIds,
+        adIds: campaign.adIds,
+        adset: campaign.primaryAdset,
+        startDate: campaign.primaryAdset.startTime ? new Date(campaign.primaryAdset.startTime) : new Date(),
+        endDate,
+    };
+}
+
+function centsToMoney(value?: string) {
+    const cents = Number(value || 0);
+    if (!Number.isFinite(cents) || cents <= 0) return null;
+    return Math.round(cents) / 100;
 }

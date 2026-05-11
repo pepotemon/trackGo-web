@@ -88,6 +88,32 @@ export type CommercialDirectoryImportDoc = {
     createdAt: number;
 };
 
+export type CommercialDirectoryAssignmentDoc = {
+    id: string;
+    userId: string;
+    userName: string;
+    userEmail: string;
+    countryId: string;
+    countryName: string;
+    cityId: string;
+    cityName: string;
+    assignedBy: string;
+    assignedByName: string;
+    createdAt: number;
+    updatedAt: number;
+};
+
+export type CommercialDirectoryProspectTouchDoc = {
+    id: string;
+    userId: string;
+    prospectId: string;
+    cityId: string;
+    contacted: boolean;
+    contactedAt: number | null;
+    note: string;
+    updatedAt: number;
+};
+
 export type CommercialDirectoryParsedRow = {
     rowNumber: number;
     categoryName: string;

@@ -132,7 +132,7 @@ function subscriptionCaption(user: UserDoc) {
 }
 
 function subscriptionAccountingCost(subscription: AccountingSubscriptionDoc) {
-    return subscription.operatingBudget > 0 ? subscription.operatingBudget : subscription.adsBudget;
+    return subscription.adsBudget;
 }
 
 function summarizeSubscriptionsByUser(subscriptions: AccountingSubscriptionDoc[]) {
@@ -597,7 +597,6 @@ export default function AccountingPage() {
                     onPatchEvents={handlePatchEvents}
                     onError={setErr}
                     miGanancia={miGanancia}
-                    isSuperAdmin={isSuperAdmin}
                 />
             </div>
 
@@ -845,7 +844,6 @@ function MobileAccountingPage({
     onPatchEvents,
     onError,
     miGanancia,
-    isSuperAdmin,
 }: {
     week: ReturnType<typeof weekRangeKeysMonToSun>;
     weekOffset: number;
@@ -877,7 +875,6 @@ function MobileAccountingPage({
     onPatchEvents: (patches: { id: string; rateApplied: number; amount: number }[]) => void;
     onError: (msg: string | null) => void;
     miGanancia?: number | null;
-    isSuperAdmin: boolean;
 }) {
     const canInvestmentView = useCan("accountingInvestmentView");
     const canInvestmentEdit = useCan("accountingInvestmentEdit");

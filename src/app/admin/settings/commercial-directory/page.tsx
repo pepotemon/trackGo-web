@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AppIcon, Badge, Button, Card, Field, IconButton, Input, KpiCard, Modal, PageHeader } from "@/components/ui";
 import {
+    assignCommercialDirectoryCity,
     createDirectoryLocation,
     deleteCommercialDirectoryCategory,
     deleteCommercialDirectoryCity,
@@ -10,21 +11,27 @@ import {
     findExistingCommercialDuplicateKeys,
     importCommercialDirectory,
     listDirectoryCategories,
+    listDirectoryAssignmentsForCity,
     listDirectoryImports,
     listDirectoryLocations,
     listDirectoryProspects,
     normalizeDirectoryText,
+    removeCommercialDirectoryAssignment,
+    userMatchesDirectoryCity,
 } from "@/data/commercialDirectoryRepo";
+import { listAdminUsers } from "@/data/usersRepo";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { useCan } from "@/features/auth/usePermissions";
 import type {
     CommercialDirectoryCategoryDoc,
+    CommercialDirectoryAssignmentDoc,
     CommercialDirectoryImportDoc,
     CommercialDirectoryImportPreview,
     CommercialDirectoryLocationDoc,
     CommercialDirectoryParsedRow,
     CommercialDirectoryProspectDoc,
 } from "@/types/commercialDirectory";
+import type { UserDoc } from "@/types/users";
 
 const REQUIRED_COLUMNS = ["Nome", "Telefone", "Endereco", "Latitude", "Longitude", "LinkGoogleMaps"] as const;
 type DeleteTarget = "category" | "neighborhood" | "city";
@@ -171,6 +178,9 @@ export default function CommercialDirectoryPage() {
     const [createOpen, setCreateOpen] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
     const [deleteConfirm, setDeleteConfirm] = useState("");
+    const [assignOpen, setAssignOpen] = useState(false);
+    const [users, setUsers] = useState<UserDoc[]>([]);
+    const [assignments, setAssignments] = useState<CommercialDirectoryAssignmentDoc[]>([]);
 
     const countries = useMemo(() => locations.filter((item) => item.type === "country"), [locations]);
     const cities = useMemo(() => locations.filter((item) => item.type === "city" && item.parentId === countryId), [locations, countryId]);
@@ -206,6 +216,18 @@ export default function CommercialDirectoryPage() {
         }
     }
 
+    async function loadAssignments(city = cityId) {
+        if (!city) {
+            setAssignments([]);
+            return;
+        }
+        try {
+            setAssignments(await listDirectoryAssignmentsForCity(city));
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "No se pudieron cargar las asignaciones.");
+        }
+    }
+
     useEffect(() => {
         queueMicrotask(() => {
             void loadAll();
@@ -221,6 +243,26 @@ export default function CommercialDirectoryPage() {
         if (!cityId || neighborhoods.some((item) => item.id === neighborhoodId)) return;
         queueMicrotask(() => setNeighborhoodId(neighborhoods[0]?.id || ""));
     }, [cityId, neighborhoods, neighborhoodId]);
+
+    useEffect(() => {
+        if (!cityId) {
+            queueMicrotask(() => setAssignments([]));
+            return;
+        }
+
+        let disposed = false;
+        listDirectoryAssignmentsForCity(cityId)
+            .then((data) => {
+                if (!disposed) setAssignments(data);
+            })
+            .catch((err) => {
+                if (!disposed) setError(err instanceof Error ? err.message : "No se pudieron cargar las asignaciones.");
+            });
+
+        return () => {
+            disposed = true;
+        };
+    }, [cityId]);
 
     useEffect(() => {
         queueMicrotask(() => {
@@ -362,6 +404,57 @@ export default function CommercialDirectoryPage() {
         }
     }
 
+    async function openAssignModal() {
+        if (!selectedCity) return;
+        setAssignOpen(true);
+        setError(null);
+        try {
+            const [nextUsers, nextAssignments] = await Promise.all([
+                listAdminUsers(),
+                listDirectoryAssignmentsForCity(selectedCity.id),
+            ]);
+            setUsers(nextUsers);
+            setAssignments(nextAssignments);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "No se pudieron cargar los vendedores.");
+        }
+    }
+
+    async function handleAssign(user: UserDoc) {
+        if (!profile || !selectedCountry || !selectedCity) return;
+        setSaving(true);
+        setError(null);
+        try {
+            await assignCommercialDirectoryCity({
+                user,
+                country: selectedCountry,
+                city: selectedCity,
+                assignedBy: profile.id,
+                assignedByName: profile.name || profile.email || "Admin",
+            });
+            await loadAssignments(selectedCity.id);
+            setMessage(`${selectedCity.name} asignada a ${user.name || user.email || "vendedor"}.`);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "No se pudo asignar la ciudad.");
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    async function handleUnassign(assignmentId: string) {
+        setSaving(true);
+        setError(null);
+        try {
+            await removeCommercialDirectoryAssignment(assignmentId);
+            await loadAssignments(selectedCity?.id || "");
+            setMessage("Asignacion removida.");
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "No se pudo remover la asignacion.");
+        } finally {
+            setSaving(false);
+        }
+    }
+
     if (!canView) {
         return (
             <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 text-center">
@@ -436,6 +529,9 @@ export default function CommercialDirectoryPage() {
 
                     {canEdit ? (
                         <div className="mt-4 flex flex-col gap-2 border-t border-[#eef1f5] pt-4 sm:flex-row sm:flex-wrap">
+                            <Button variant="primary" onClick={openAssignModal} disabled={!selectedCity || saving}>
+                                Asignar ciudad
+                            </Button>
                             <Button variant="danger" onClick={() => setDeleteTarget("city")} disabled={!selectedCity || saving}>
                                 Eliminar ciudad
                             </Button>
@@ -445,6 +541,18 @@ export default function CommercialDirectoryPage() {
                             <Button variant="danger" onClick={() => setDeleteTarget("category")} disabled={!selectedCategory || saving}>
                                 Eliminar categoria
                             </Button>
+                        </div>
+                    ) : null}
+
+                    {selectedCity ? (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                            {assignments.length ? assignments.map((item) => (
+                                <span key={item.id} className="rounded-full border border-violet-100 bg-violet-50 px-2.5 py-1 text-[10px] font-black text-[#7C3AED]">
+                                    {item.userName}
+                                </span>
+                            )) : (
+                                <span className="text-[11px] font-bold text-[#98A2B3]">Ciudad sin vendedores asignados.</span>
+                            )}
                         </div>
                     ) : null}
                 </Card>
@@ -653,6 +761,61 @@ export default function CommercialDirectoryPage() {
                             {saving ? "Eliminando..." : "Eliminar definitivamente"}
                         </Button>
                     </div>
+                </div>
+            </Modal>
+
+            <Modal
+                open={assignOpen}
+                title="Asignar ciudad"
+                subtitle={selectedCity ? `Vendedores con cobertura compatible para ${selectedCity.name}.` : "Selecciona una ciudad."}
+                size="lg"
+                onClose={() => setAssignOpen(false)}
+            >
+                <div className="space-y-3">
+                    <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-[12px] font-bold text-blue-700">
+                        Al asignar una ciudad, el vendedor vera sus barrios, categorias y comercios en su nueva pantalla Base Comercial.
+                    </div>
+
+                    {users
+                        .filter((user) => user.role === "user" && user.active !== false)
+                        .sort((a, b) => Number(userMatchesDirectoryCity(b, selectedCity!)) - Number(userMatchesDirectoryCity(a, selectedCity!)))
+                        .map((user) => {
+                            const assigned = assignments.find((item) => item.userId === user.id);
+                            const matched = selectedCity ? userMatchesDirectoryCity(user, selectedCity) : false;
+                            return (
+                                <div key={user.id} className="flex flex-col gap-3 rounded-xl border border-[#eef1f5] bg-white px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="min-w-0">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <p className="truncate text-[13px] font-black text-[#101936]">{user.name || user.email || user.id}</p>
+                                            {matched ? (
+                                                <Badge tone="green">Cobertura compatible</Badge>
+                                            ) : (
+                                                <Badge tone="gray">Manual</Badge>
+                                            )}
+                                            {assigned ? <Badge tone="purple">Asignado</Badge> : null}
+                                        </div>
+                                        <p className="mt-1 truncate text-[11px] font-semibold text-[#66739A]">
+                                            {user.primaryGeoCoverageLabel || user.geoCoverage?.map((item) => item.displayLabel).filter(Boolean).join(" / ") || "Sin cobertura visible"}
+                                        </p>
+                                    </div>
+                                    {assigned ? (
+                                        <Button variant="danger" onClick={() => handleUnassign(assigned.id)} disabled={saving}>
+                                            Quitar
+                                        </Button>
+                                    ) : (
+                                        <Button variant={matched ? "primary" : "secondary"} onClick={() => handleAssign(user)} disabled={saving}>
+                                            Asignar
+                                        </Button>
+                                    )}
+                                </div>
+                            );
+                        })}
+
+                    {!users.filter((user) => user.role === "user" && user.active !== false).length ? (
+                        <p className="rounded-xl border border-dashed border-[#e4e7ec] px-3 py-8 text-center text-[12px] font-bold text-[#98A2B3]">
+                            No hay vendedores activos.
+                        </p>
+                    ) : null}
                 </div>
             </Modal>
         </main>

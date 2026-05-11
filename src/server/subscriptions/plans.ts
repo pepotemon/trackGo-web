@@ -3,7 +3,7 @@ import { SUBSCRIPTION_PLANS, estimateLeadRange } from "@/lib/subscriptionPlans";
 
 export { SUBSCRIPTION_PLANS, estimateLeadRange };
 
-export const DEFAULT_ADS_BUDGET_RESERVE_PERCENT = 12.5;
+export const DEFAULT_ADS_BUDGET_RESERVE_PERCENT = 0;
 
 export function getPlanAmount(planId: SubscriptionPlanId, customAmount?: number) {
     if (planId === "custom") return sanitizeCustomAmount(customAmount);
@@ -26,11 +26,11 @@ export function calculateAdsBudget(amount: number, adsShare = 0.5) {
 export function calculateAdsBudgetAllocation(
     adsBudget: number,
     cycleDays = 5,
-    reservePercent = DEFAULT_ADS_BUDGET_RESERVE_PERCENT,
+    reservePercent = 0,
 ) {
     const totalBudgetMinorUnits = Math.max(0, Math.round(Number(adsBudget || 0) * 100));
     const safeDays = Number.isFinite(cycleDays) ? Math.max(1, Math.round(cycleDays)) : 5;
-    const safeReservePercent = Number.isFinite(reservePercent) ? Math.min(Math.max(reservePercent, 0), 90) : DEFAULT_ADS_BUDGET_RESERVE_PERCENT;
+    const safeReservePercent = Number.isFinite(reservePercent) ? Math.min(Math.max(reservePercent, 0), 90) : 0;
     const reservedBudgetMinorUnits = Math.round(totalBudgetMinorUnits * (safeReservePercent / 100));
     const operatingBudgetMinorUnits = Math.max(0, totalBudgetMinorUnits - reservedBudgetMinorUnits);
     const dailyBudgetMinorUnits = Math.floor(operatingBudgetMinorUnits / safeDays);

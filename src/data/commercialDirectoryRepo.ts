@@ -12,16 +12,21 @@ import {
 import { db } from "@/lib/firebase";
 import type {
     CommercialDirectoryCategoryDoc,
+    CommercialDirectoryAssignmentDoc,
     CommercialDirectoryImportDoc,
     CommercialDirectoryLocationDoc,
     CommercialDirectoryParsedRow,
     CommercialDirectoryProspectDoc,
+    CommercialDirectoryProspectTouchDoc,
 } from "@/types/commercialDirectory";
+import type { UserDoc } from "@/types/users";
 
 const LOCATIONS = "commercialDirectoryLocations";
 const CATEGORIES = "commercialDirectoryCategories";
 const PROSPECTS = "commercialDirectoryProspects";
 const IMPORTS = "commercialDirectoryImports";
+const ASSIGNMENTS = "commercialDirectoryAssignments";
+const TOUCHES = "commercialDirectoryProspectTouches";
 
 export function normalizeDirectoryText(value: unknown) {
     return String(value ?? "")
@@ -131,6 +136,142 @@ export async function listDirectoryProspects(input: {
 export async function listDirectoryImports(): Promise<CommercialDirectoryImportDoc[]> {
     const snap = await getDocs(query(collection(db, IMPORTS), orderBy("createdAt", "desc"), limit(30)));
     return snap.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<CommercialDirectoryImportDoc, "id">) }));
+}
+
+export function directoryAssignmentId(userId: string, cityId: string) {
+    return `${userId}_${cityId}`;
+}
+
+export function directoryTouchId(userId: string, prospectId: string) {
+    return `${userId}_${prospectId}`;
+}
+
+export function userMatchesDirectoryCity(user: UserDoc, city: CommercialDirectoryLocationDoc) {
+    if (user.role !== "user" || user.active === false) return false;
+    const cityKey = normalizeDirectoryText(city.name);
+    const coverage = Array.isArray(user.geoCoverage) ? user.geoCoverage : [];
+    return coverage.some((item) => {
+        if (item.active === false) return false;
+        const coverageCity = normalizeDirectoryText(item.cityNormalized || item.cityLabel);
+        const coverageLabel = normalizeDirectoryText(item.displayLabel);
+        if (!coverageCity && !coverageLabel) return false;
+        return Boolean(coverageCity && (coverageCity === cityKey || coverageCity.includes(cityKey) || cityKey.includes(coverageCity)))
+            || Boolean(coverageLabel && coverageLabel.includes(cityKey));
+    });
+}
+
+export async function listDirectoryAssignmentsForCity(cityId: string): Promise<CommercialDirectoryAssignmentDoc[]> {
+    if (!cityId) return [];
+    const snap = await getDocs(query(collection(db, ASSIGNMENTS), where("cityId", "==", cityId), limit(300)));
+    return snap.docs
+        .map((item) => ({ id: item.id, ...(item.data() as Omit<CommercialDirectoryAssignmentDoc, "id">) }))
+        .sort((a, b) => a.userName.localeCompare(b.userName));
+}
+
+export async function listMyDirectoryAssignments(userId: string): Promise<CommercialDirectoryAssignmentDoc[]> {
+    if (!userId) return [];
+    const snap = await getDocs(query(collection(db, ASSIGNMENTS), where("userId", "==", userId), limit(100)));
+    return snap.docs
+        .map((item) => ({ id: item.id, ...(item.data() as Omit<CommercialDirectoryAssignmentDoc, "id">) }))
+        .sort((a, b) => a.cityName.localeCompare(b.cityName));
+}
+
+export async function assignCommercialDirectoryCity(input: {
+    user: Pick<UserDoc, "id" | "name" | "email">;
+    country: CommercialDirectoryLocationDoc;
+    city: CommercialDirectoryLocationDoc;
+    assignedBy: string;
+    assignedByName: string;
+}) {
+    const now = Date.now();
+    const id = directoryAssignmentId(input.user.id, input.city.id);
+    const assignment: CommercialDirectoryAssignmentDoc = {
+        id,
+        userId: input.user.id,
+        userName: input.user.name || input.user.email || input.user.id,
+        userEmail: input.user.email || "",
+        countryId: input.country.id,
+        countryName: input.country.name,
+        cityId: input.city.id,
+        cityName: input.city.name,
+        assignedBy: input.assignedBy,
+        assignedByName: input.assignedByName,
+        createdAt: now,
+        updatedAt: now,
+    };
+    const batch = writeBatch(db);
+    batch.set(doc(db, ASSIGNMENTS, id), assignment, { merge: true });
+    await batch.commit();
+    return assignment;
+}
+
+export async function removeCommercialDirectoryAssignment(assignmentId: string) {
+    const batch = writeBatch(db);
+    batch.delete(doc(db, ASSIGNMENTS, assignmentId));
+    await batch.commit();
+}
+
+export async function listDirectoryProspectsForCities(cityIds: string[]): Promise<CommercialDirectoryProspectDoc[]> {
+    const ids = Array.from(new Set(cityIds.filter(Boolean))).slice(0, 30);
+    if (!ids.length) return [];
+
+    const out: CommercialDirectoryProspectDoc[] = [];
+    for (const part of chunks(ids, 10)) {
+        const snap = await getDocs(query(collection(db, PROSPECTS), where("cityId", "in", part), limit(800)));
+        out.push(...snap.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<CommercialDirectoryProspectDoc, "id">) })));
+    }
+
+    return out.sort((a, b) =>
+        a.neighborhoodName.localeCompare(b.neighborhoodName)
+        || a.categoryName.localeCompare(b.categoryName)
+        || a.name.localeCompare(b.name)
+    );
+}
+
+export async function listMyDirectoryTouches(userId: string): Promise<CommercialDirectoryProspectTouchDoc[]> {
+    if (!userId) return [];
+    const snap = await getDocs(query(collection(db, TOUCHES), where("userId", "==", userId), limit(1000)));
+    return snap.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<CommercialDirectoryProspectTouchDoc, "id">) }));
+}
+
+export async function markDirectoryProspectContacted(input: {
+    userId: string;
+    prospectId: string;
+    cityId: string;
+}) {
+    const now = Date.now();
+    const id = directoryTouchId(input.userId, input.prospectId);
+    const batch = writeBatch(db);
+    batch.set(doc(db, TOUCHES, id), {
+        id,
+        userId: input.userId,
+        prospectId: input.prospectId,
+        cityId: input.cityId,
+        contacted: true,
+        contactedAt: now,
+        updatedAt: now,
+    }, { merge: true });
+    await batch.commit();
+}
+
+export async function saveDirectoryProspectNote(input: {
+    userId: string;
+    prospectId: string;
+    cityId: string;
+    note: string;
+}) {
+    const now = Date.now();
+    const id = directoryTouchId(input.userId, input.prospectId);
+    const batch = writeBatch(db);
+    batch.set(doc(db, TOUCHES, id), {
+        id,
+        userId: input.userId,
+        prospectId: input.prospectId,
+        cityId: input.cityId,
+        note: input.note.trim(),
+        updatedAt: now,
+    }, { merge: true });
+    await batch.commit();
 }
 
 export async function createDirectoryLocation(input: {

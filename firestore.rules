@@ -677,6 +677,8 @@ service cloud.firestore {
     match /commercialDirectoryProspects/{prospectId} {
       allow read: if hasAdminPermission("commercialDirectoryView")
         || hasAdminPermission("commercialDirectoryEdit");
+      allow read: if isUser()
+        && exists(/databases/$(database)/documents/commercialDirectoryAssignments/$(request.auth.uid + "_" + resource.data.cityId));
       allow create, update, delete: if hasAdminPermission("commercialDirectoryEdit");
     }
 
@@ -685,6 +687,24 @@ service cloud.firestore {
         || hasAdminPermission("commercialDirectoryEdit");
       allow create: if hasAdminPermission("commercialDirectoryEdit");
       allow update, delete: if false;
+    }
+
+    match /commercialDirectoryAssignments/{assignmentId} {
+      allow read: if hasAdminPermission("commercialDirectoryView")
+        || hasAdminPermission("commercialDirectoryEdit")
+        || (isUser() && resource.data.userId == request.auth.uid);
+      allow create, update, delete: if hasAdminPermission("commercialDirectoryEdit");
+    }
+
+    match /commercialDirectoryProspectTouches/{touchId} {
+      allow read: if hasAdminPermission("commercialDirectoryView")
+        || hasAdminPermission("commercialDirectoryEdit")
+        || (isUser() && resource.data.userId == request.auth.uid);
+      allow create, update: if isUser()
+        && request.resource.data.userId == request.auth.uid
+        && touchId == (request.auth.uid + "_" + request.resource.data.prospectId)
+        && exists(/databases/$(database)/documents/commercialDirectoryAssignments/$(request.auth.uid + "_" + request.resource.data.cityId));
+      allow delete: if false;
     }
 
     // -------------------------

@@ -4,11 +4,12 @@ import { ResponseError } from "@/server/auth";
 import { adminDb } from "@/server/firebaseAdmin";
 import { cancelMercadoPagoPayment, createPixPayment, getMercadoPagoPayment } from "@/server/subscriptions/mercadoPago";
 import { calculateAdsBudget, calculateAdsBudgetAllocation, calculateCycleEnd, getPlanAmount } from "@/server/subscriptions/plans";
-import { configureAndActivateCityCampaign, pauseCityCampaign, resumeCityCampaign } from "@/server/subscriptions/metaAds";
+import { configureAndActivateCityCampaign, getActiveCityCampaignSnapshot, pauseCityCampaign, resumeCityCampaign } from "@/server/subscriptions/metaAds";
 import { sendPushToUser } from "@/server/push";
 import type { PixCheckoutResponse, SubscriptionPlanId } from "@/types/subscriptions";
 
 const RESERVATION_TTL_MS = 30 * 60 * 1000;
+const USER_BLOCKING_SUBSCRIPTION_STATUSES = ["active", "provisioning", "payment_approved_meta_failed", "expiring"];
 
 function nowMs() {
     return Date.now();
@@ -115,6 +116,7 @@ export async function getSubscriptionsOverview() {
             adsShare: Number(data.adsShare ?? 0.5),
             cycleDays: Number(data.cycleDays || 5),
             status: data.status || "unknown",
+            source: data.source || null,
             campaignId: data.campaignId || null,
             startDate: timestampToMs(data.startDate),
             endDate: timestampToMs(data.endDate),
@@ -302,6 +304,21 @@ export async function createPixSubscriptionCheckout(input: {
     const reservationExpiresAt = nowMs() + RESERVATION_TTL_MS;
 
     const cityData = await adminDb.runTransaction(async (tx) => {
+        const activeSubscriptionSnap = await tx.get(
+            adminDb
+                .collection("subscriptions")
+                .where("userId", "==", input.userId)
+                .where("status", "in", USER_BLOCKING_SUBSCRIPTION_STATUSES)
+                .limit(1),
+        );
+        if (!activeSubscriptionSnap.empty) {
+            throw new ResponseError(
+                "active_subscription_exists",
+                "Ya tienes una suscripcion activa o en activacion.",
+                409,
+            );
+        }
+
         const citySnap = await tx.get(cityRef);
         if (!citySnap.exists) {
             throw new ResponseError("city_not_found", "La ciudad seleccionada no existe.", 404);
@@ -449,6 +466,193 @@ export async function createPixSubscriptionCheckout(input: {
         ticketUrl: payment.point_of_interaction?.transaction_data?.ticket_url || null,
         expiresAt: payment.date_of_expiration || null,
     };
+}
+
+export async function activateManualSubscription(input: {
+    userId: string;
+    cityId: string;
+    plan: SubscriptionPlanId;
+    customAmount?: number;
+    cycleDays?: number;
+    syncMeta?: boolean;
+    createdBy: string;
+    createdByName?: string;
+}) {
+    const userId = input.userId.trim();
+    const cityId = input.cityId.trim();
+    if (!userId) throw new ResponseError("user_required", "Selecciona un vendedor.");
+    if (!cityId) throw new ResponseError("city_required", "Selecciona una ciudad.");
+
+    const amount = getPlanAmount(input.plan, input.customAmount);
+    const settings = await getSubscriptionSettings();
+    let cycleDays = Number.isFinite(Number(input.cycleDays))
+        ? Math.min(Math.max(Math.round(Number(input.cycleDays)), 1), 30)
+        : settings.cycleDays;
+    const adsBudget = calculateAdsBudget(amount, settings.adsShare);
+    let startDate = new Date();
+    let endDate = calculateCycleEnd(startDate, cycleDays);
+    let metaSnapshot: Awaited<ReturnType<typeof getActiveCityCampaignSnapshot>> | null = null;
+
+    if (input.syncMeta !== false) {
+        const citySnap = await adminDb.collection("cities").doc(cityId).get();
+        if (!citySnap.exists) throw new ResponseError("city_not_found", "La ciudad seleccionada no existe.", 404);
+        const city = citySnap.data() || {};
+        const campaignId = String(city.activeCampaignId || city.campaignId || city.baseCampaignId || "");
+        if (!campaignId) {
+            throw new ResponseError("campaign_required", "La ciudad no tiene campana Meta para sincronizar.", 409);
+        }
+        metaSnapshot = await getActiveCityCampaignSnapshot(campaignId);
+        startDate = metaSnapshot.startDate.getTime() > 0 ? metaSnapshot.startDate : new Date();
+        endDate = metaSnapshot.endDate;
+        cycleDays = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
+    }
+
+    const budgetAllocation = calculateAdsBudgetAllocation(adsBudget, cycleDays);
+    const subscriptionId = `manual_${userId}_${cityId}_${randomUUID()}`;
+    const subscriptionRef = adminDb.collection("subscriptions").doc(subscriptionId);
+    const cityRef = adminDb.collection("cities").doc(cityId);
+    const userRef = adminDb.collection("users").doc(userId);
+
+    const result = await adminDb.runTransaction(async (tx) => {
+        const [userSnap, citySnap, activeSubscriptionSnap] = await Promise.all([
+            tx.get(userRef),
+            tx.get(cityRef),
+            tx.get(
+                adminDb
+                    .collection("subscriptions")
+                    .where("userId", "==", userId)
+                    .where("status", "in", USER_BLOCKING_SUBSCRIPTION_STATUSES)
+                    .limit(1),
+            ),
+        ]);
+
+        if (!userSnap.exists) throw new ResponseError("user_not_found", "El vendedor no existe.", 404);
+        if (!citySnap.exists) throw new ResponseError("city_not_found", "La ciudad seleccionada no existe.", 404);
+        if (!activeSubscriptionSnap.empty) {
+            throw new ResponseError(
+                "active_subscription_exists",
+                "Este vendedor ya tiene una suscripcion activa o en activacion.",
+                409,
+            );
+        }
+
+        const user = userSnap.data() || {};
+        if (user.role !== "user") {
+            throw new ResponseError("invalid_user_role", "Solo puedes activar suscripciones a vendedores.", 409);
+        }
+        if (user.active === false) {
+            throw new ResponseError("inactive_user", "El vendedor esta inactivo.", 409);
+        }
+
+        const city = citySnap.data() || {};
+        const coverage = Array.isArray(user.geoCoverage) ? (user.geoCoverage as CoverageItem[]) : [];
+        if (!cityMatchesCoverage({ id: citySnap.id, name: city.name, state: city.state, country: city.country }, coverage)) {
+            throw new ResponseError(
+                "city_outside_coverage",
+                "Esta ciudad no esta dentro de la cobertura geografica del vendedor.",
+                403,
+            );
+        }
+
+        const cityStatus = String(city.status || "available");
+        const reservationExpiresAt = Number(city.reservationExpiresAt || 0);
+        const reservationExpired = cityStatus === "reserved" && reservationExpiresAt < nowMs();
+        if (cityStatus === "occupied") {
+            throw new ResponseError("city_occupied", "Esta ciudad ya esta ocupada por otro vendedor.", 409);
+        }
+        if (cityStatus === "reserved" && !reservationExpired) {
+            throw new ResponseError("city_reserved", "Esta ciudad esta reservada por un pago en curso.", 409);
+        }
+
+        const userName = String(user.name || user.email || "Vendedor");
+        const userEmail = String(user.email || "");
+        const cityName = String(city.name || citySnap.id);
+        const now = nowMs();
+
+        tx.set(subscriptionRef, {
+            id: subscriptionId,
+            checkoutId: null,
+            userId,
+            userName,
+            userEmail,
+            cityId,
+            city: cityName,
+            plan: input.plan,
+            amount,
+            adsBudget,
+            dailyBudget: budgetAllocation.dailyBudget,
+            operatingBudget: budgetAllocation.operatingBudget,
+            reservedBudget: budgetAllocation.reservedBudget,
+            totalBudget: budgetAllocation.totalBudget,
+            reservePercent: budgetAllocation.reservePercent,
+            adsShare: settings.adsShare,
+            cycleDays,
+            status: "active",
+            source: "manual_admin",
+            manual: true,
+            metaManagedManually: Boolean(metaSnapshot),
+            campaignId: metaSnapshot?.campaignId || null,
+            campaignName: metaSnapshot?.campaignName || null,
+            campaignStatus: metaSnapshot?.campaignStatus || null,
+            adsetIds: metaSnapshot?.adsetIds || [],
+            adIds: metaSnapshot?.adIds || [],
+            metaAdsetId: metaSnapshot?.adset.id || null,
+            metaAdsetName: metaSnapshot?.adset.name || null,
+            metaAdsetStatus: metaSnapshot?.adset.status || null,
+            metaBudgetMode: metaSnapshot?.adset.budgetMode || null,
+            metaDailyBudget: metaSnapshot?.adset.dailyBudget || null,
+            metaLifetimeBudget: metaSnapshot?.adset.lifetimeBudget || null,
+            createdBy: input.createdBy,
+            createdByName: input.createdByName || input.createdBy,
+            startDate: Timestamp.fromDate(startDate),
+            endDate: Timestamp.fromDate(endDate),
+            createdAt: now,
+            updatedAt: now,
+        });
+
+        tx.set(
+            cityRef,
+            {
+                status: "occupied",
+                ownerUserId: userId,
+                activeSubscriptionId: subscriptionId,
+                activeCampaignId: metaSnapshot?.campaignId || FieldValue.delete(),
+                campaignDeliveryStatus: metaSnapshot ? "active" : FieldValue.delete(),
+                adsetIds: metaSnapshot?.adsetIds || FieldValue.delete(),
+                adIds: metaSnapshot?.adIds || FieldValue.delete(),
+                reservedByCheckoutId: FieldValue.delete(),
+                reservationExpiresAt: FieldValue.delete(),
+                updatedAt: now,
+            },
+            { merge: true },
+        );
+
+        return {
+            id: subscriptionId,
+            userId,
+            userName,
+            userEmail,
+            cityId,
+            city: cityName,
+            plan: input.plan,
+            amount,
+            adsBudget,
+            status: "active",
+            startDate: startDate.getTime(),
+            endDate: endDate.getTime(),
+            createdAt: now,
+            updatedAt: now,
+            source: "manual_admin",
+            campaignId: metaSnapshot?.campaignId || null,
+        };
+    });
+
+    await sendPushToUser(userId, {
+        title: "Suscripcion activa",
+        body: `TrackGo activo manualmente tu suscripcion para ${result.city}.`,
+    }, { url: "/user/settings/subscriptions" }).catch(() => undefined);
+
+    return { ok: true, subscription: result };
 }
 
 export async function getUserSubscriptionPortal(userId: string) {
@@ -1041,8 +1245,11 @@ export async function releaseSubscriptionCity(cityId: string) {
         const freshReservedCheckoutId = String(freshCity.reservedByCheckoutId || reservedCheckoutId || "");
 
         if (freshSubscriptionId) {
+            const subscriptionRef = adminDb.collection("subscriptions").doc(freshSubscriptionId);
+            const subscriptionSnap = await tx.get(subscriptionRef);
+            const checkoutId = String(subscriptionSnap.data()?.checkoutId || "");
             tx.set(
-                adminDb.collection("subscriptions").doc(freshSubscriptionId),
+                subscriptionRef,
                 {
                     status: "released",
                     releasedAt: nowMs(),
@@ -1051,15 +1258,17 @@ export async function releaseSubscriptionCity(cityId: string) {
                 { merge: true },
             );
 
-            tx.set(
-                adminDb.collection("subscriptionCheckouts").doc(freshSubscriptionId),
-                {
-                    activationStatus: "city_released",
-                    releasedAt: nowMs(),
-                    updatedAt: nowMs(),
-                },
-                { merge: true },
-            );
+            if (checkoutId) {
+                tx.set(
+                    adminDb.collection("subscriptionCheckouts").doc(checkoutId),
+                    {
+                        activationStatus: "city_released",
+                        releasedAt: nowMs(),
+                        updatedAt: nowMs(),
+                    },
+                    { merge: true },
+                );
+            }
         }
 
         if (freshReservedCheckoutId) {
@@ -1155,12 +1364,12 @@ export async function expireDueSubscriptions(limit = 20) {
             ? subscription.adsetIds.map((id) => String(id)).filter(Boolean)
             : [];
 
-        if (!cityId || !campaignId) {
+        if (!cityId) {
             await doc.ref.set(
-                { status: "expiration_failed", expirationFailureReason: "missing_city_or_campaign", updatedAt: nowMs() },
+                { status: "expiration_failed", expirationFailureReason: "missing_city", updatedAt: nowMs() },
                 { merge: true },
             );
-            results.push({ subscriptionId, cityId, status: "failed", message: "missing_city_or_campaign" });
+            results.push({ subscriptionId, cityId, status: "failed", message: "missing_city" });
             continue;
         }
 

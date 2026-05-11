@@ -87,9 +87,7 @@ function buildRealSubscriptionsByUser(subscriptions: AccountingSubscriptionDoc[]
             count: 0,
             cities: [],
         };
-        const cost = subscription.operatingBudget > 0
-            ? subscription.operatingBudget
-            : subscription.adsBudget;
+        const cost = subscription.adsBudget;
         const city = String(subscription.city || subscription.cityId || "").trim();
 
         map.set(subscription.userId, {
@@ -343,9 +341,7 @@ export function buildAccountingSummary(input: {
     for (const subscription of input.subscriptions ?? []) {
         const user = usersById.get(subscription.userId);
         if (!user) continue;
-        const cost = subscription.operatingBudget > 0
-            ? subscription.operatingBudget
-            : subscription.adsBudget;
+        const cost = subscription.adsBudget;
 
         subscriptionRows.push({
             subscriptionId: subscription.id,
