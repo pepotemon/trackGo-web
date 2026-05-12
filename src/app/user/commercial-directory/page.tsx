@@ -281,6 +281,13 @@ export default function UserCommercialDirectoryPage() {
                 {/* CATEGORY CHIPS */}
                 {neighborhood !== "all" && categories.length > 0 ? (
                     <div className="mt-2 flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                        <button
+                            type="button"
+                            onClick={() => setCategory("all")}
+                            className={["flex shrink-0 items-center rounded-full border px-3 py-1.5 text-[11px] font-black transition", category === "all" ? "border-[#7C3AED] bg-[#7C3AED] text-white" : "border-[#E8E7FB] bg-white text-[#66739A]"].join(" ")}
+                        >
+                            Todas
+                        </button>
                         {categories.map((item) => (
                             <button
                                 key={item}

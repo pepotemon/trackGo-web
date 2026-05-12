@@ -43,6 +43,14 @@ export default function UserSettingsPage() {
                         body="Activa avisos de clientes nuevos y recordatorios operativos."
                         tone="blue"
                     />
+                    {userPermissions.canSeeHistory ? (
+                        <SettingsTile
+                            href="/user/history"
+                            title="Historial"
+                            body="Revisa el registro de visitas y rechazos de semanas anteriores."
+                            tone="green"
+                        />
+                    ) : null}
                 </div>
 
                 <div className="rounded-3xl border border-[#e8e7fb] bg-white p-4 shadow-[0_16px_38px_rgba(91,33,255,0.08)]">
@@ -77,10 +85,10 @@ function SettingsTile({
     href: string;
     title: string;
     body: string;
-    tone: "purple" | "blue";
+    tone: "purple" | "blue" | "green";
     status?: VendorSubscriptionStatus;
 }) {
-    const cls = tone === "purple" ? "from-[#7c3aed] to-[#4f46e5]" : "from-[#2563eb] to-[#06b6d4]";
+    const cls = tone === "purple" ? "from-[#7c3aed] to-[#4f46e5]" : tone === "green" ? "from-[#059669] to-[#10b981]" : "from-[#2563eb] to-[#06b6d4]";
     return (
         <Link href={href} className="flex items-center gap-3 rounded-3xl border border-[#e8e7fb] bg-white p-4 shadow-[0_16px_38px_rgba(91,33,255,0.08)] active:scale-[0.99]">
             <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${cls} text-white shadow-lg`}>
