@@ -144,6 +144,15 @@ export default function UserCommercialDirectoryPage() {
     const neighborhoods = useMemo(() => Array.from(new Set(baseProspects.map((item) => item.neighborhoodName))).sort(), [baseProspects]);
     const categories = useMemo(() => Array.from(new Set(baseProspects.filter((item) => neighborhood === "all" || item.neighborhoodName === neighborhood).map((item) => item.categoryName))).sort(), [baseProspects, neighborhood]);
 
+    const completedCategories = useMemo(() => {
+        const done = new Set<string>();
+        categories.forEach((cat) => {
+            const inCat = baseProspects.filter((p) => (neighborhood === "all" || p.neighborhoodName === neighborhood) && p.categoryName === cat);
+            if (inCat.length > 0 && inCat.every((p) => touchMap.get(p.id)?.contacted)) done.add(cat);
+        });
+        return done;
+    }, [categories, baseProspects, neighborhood, touchMap]);
+
     const visible = useMemo(() => {
         let list = baseProspects;
         if (neighborhood !== "all") list = list.filter((item) => item.neighborhoodName === neighborhood);
@@ -288,16 +297,21 @@ export default function UserCommercialDirectoryPage() {
                         >
                             Todas
                         </button>
-                        {categories.map((item) => (
-                            <button
-                                key={item}
-                                type="button"
-                                onClick={() => setCategory(category === item ? "all" : item)}
-                                className={["flex shrink-0 items-center rounded-full border px-3 py-1.5 text-[11px] font-black transition", category === item ? "border-[#7C3AED] bg-[#7C3AED] text-white" : "border-[#E8E7FB] bg-white text-[#66739A]"].join(" ")}
-                            >
-                                {item}
-                            </button>
-                        ))}
+                        {categories.map((item) => {
+                            const done = completedCategories.has(item);
+                            const active = category === item;
+                            return (
+                                <button
+                                    key={item}
+                                    type="button"
+                                    onClick={() => setCategory(active ? "all" : item)}
+                                    className={["relative flex shrink-0 items-center rounded-full border px-3 py-1.5 text-[11px] font-black transition", active ? "border-[#7C3AED] bg-[#7C3AED] text-white" : done ? "border-[#C4B5FD] bg-[#f3f0ff] text-[#7C3AED]" : "border-[#E8E7FB] bg-white text-[#66739A]"].join(" ")}
+                                >
+                                    <span className={done ? "line-through opacity-60" : ""}>{item}</span>
+                                    {done ? <span className="ml-1 text-[9px]">✓</span> : null}
+                                </button>
+                            );
+                        })}
                     </div>
                 ) : null}
             </div>
@@ -368,7 +382,12 @@ export default function UserCommercialDirectoryPage() {
                             <button
                                 key={item}
                                 type="button"
-                                onClick={() => { setNeighborhood(item); setCategory("all"); setNeighborhoodFilterOpen(false); }}
+                                onClick={() => {
+                                    const firstCat = [...new Set(baseProspects.filter((p) => p.neighborhoodName === item).map((p) => p.categoryName))].sort()[0] ?? "all";
+                                    setNeighborhood(item);
+                                    setCategory(firstCat);
+                                    setNeighborhoodFilterOpen(false);
+                                }}
                                 className={["flex items-center justify-between rounded-[16px] border px-4 py-3 text-left transition", neighborhood === item ? "border-[#7C3AED] bg-[#f3f0ff]" : "border-[#E8E7FB] bg-white active:bg-[#f8f7ff]"].join(" ")}
                             >
                                 <span className={["text-[14px] font-black", neighborhood === item ? "text-[#7C3AED]" : "text-[#101936]"].join(" ")}>{item}</span>
