@@ -313,7 +313,7 @@ function SettingsTile({
         );
     }
     return (
-        <button type="button" onClick={onClick} className="flex w-full items-center gap-3 rounded-3xl border border-[#e8e7fb] bg-white p-4 shadow-[0_16px_38px_rgba(91,33,255,0.08)] active:scale-[0.99]">
+        <button type="button" onClick={onClick} className="flex w-full items-center gap-3 rounded-3xl border border-[#e8e7fb] bg-white p-4 text-left shadow-[0_16px_38px_rgba(91,33,255,0.08)] active:scale-[0.99]">
             {inner}
         </button>
     );

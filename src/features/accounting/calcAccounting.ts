@@ -297,7 +297,10 @@ export function buildAccountingSummary(input: {
             visited += 1;
             row.visited += 1;
 
-            if (row.billingMode !== "weekly_subscription") {
+            // Count visits when: not in subscription mode, OR in subscription mode but no paid subscription
+            // for this week (handles historical per_visit weeks viewed after a mode change, and unpaid
+            // subscription weeks where visits should still count).
+            if (row.billingMode !== "weekly_subscription" || !row.subscriptionPaid) {
                 const amount = getEventAmount(event, user);
                 row.gross = clamp2(row.gross + amount);
                 grossVisits = clamp2(grossVisits + amount);
