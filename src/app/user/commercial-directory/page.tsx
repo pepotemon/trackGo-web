@@ -81,6 +81,8 @@ export default function UserCommercialDirectoryPage() {
     const [search, setSearch] = useState("");
     const [searchOpen, setSearchOpen] = useState(false);
     const [infoOpen, setInfoOpen] = useState(false);
+    const [cityFilterOpen, setCityFilterOpen] = useState(false);
+    const [neighborhoodFilterOpen, setNeighborhoodFilterOpen] = useState(false);
     const [waProspect, setWaProspect] = useState<CommercialDirectoryProspectDoc | null>(null);
     const [noteProspect, setNoteProspect] = useState<CommercialDirectoryProspectDoc | null>(null);
     const [noteText, setNoteText] = useState("");
@@ -90,6 +92,8 @@ export default function UserCommercialDirectoryPage() {
 
     useBackButtonDismiss(searchOpen, () => setSearchOpen(false));
     useBackButtonDismiss(infoOpen, () => setInfoOpen(false));
+    useBackButtonDismiss(cityFilterOpen, () => setCityFilterOpen(false));
+    useBackButtonDismiss(neighborhoodFilterOpen, () => setNeighborhoodFilterOpen(false));
     useBackButtonDismiss(Boolean(waProspect), () => setWaProspect(null));
     useBackButtonDismiss(Boolean(noteProspect), () => setNoteProspect(null));
 
@@ -114,7 +118,7 @@ export default function UserCommercialDirectoryPage() {
                 setAssignments(nextAssignments);
                 setProspects(nextProspects);
                 setTouches(nextTouches);
-                setCityId((current) => current === "all" ? "all" : current);
+                if (nextAssignments.length === 1) setCityId(nextAssignments[0].cityId);
             } finally {
                 if (!disposed) setLoading(false);
             }
@@ -229,28 +233,66 @@ export default function UserCommercialDirectoryPage() {
                     <p className="mt-1.5 text-[10px] font-bold text-[#66739A]">{dailyTone.text}</p>
                 </div>
 
-                <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    <FilterChip active={cityId === "all"} onClick={() => { setCityId("all"); setNeighborhood("all"); setCategory("all"); }}>Todas</FilterChip>
-                    {cityOptions.map((item) => (
-                        <FilterChip key={item.cityId} active={cityId === item.cityId} onClick={() => { setCityId(item.cityId); setNeighborhood("all"); setCategory("all"); }}>
-                            {item.cityName}
-                        </FilterChip>
-                    ))}
+                {/* FILTER SELECTORS */}
+                <div className="grid grid-cols-2 gap-2">
+                    <button
+                        type="button"
+                        onClick={() => setCityFilterOpen(true)}
+                        className="flex min-w-0 items-center gap-2 rounded-[14px] border border-[#E8E7FB] bg-white px-3 py-2 shadow-sm transition active:bg-[#f3f0ff]"
+                    >
+                        <CityIcon />
+                        <span className="min-w-0 flex-1 text-left">
+                            <span className="block text-[9px] font-black uppercase tracking-[0.06em] text-[#98A2B3]">Ciudad</span>
+                            <span className="block truncate text-[12px] font-black text-[#101936]">
+                                {cityId === "all" ? "Seleccionar" : (cityOptions.find((c) => c.cityId === cityId)?.cityName ?? "—")}
+                            </span>
+                        </span>
+                        <ChevronDownIcon />
+                    </button>
+
+                    <div className={["flex min-w-0 items-center gap-2 overflow-hidden rounded-[14px] border border-[#E8E7FB] bg-white shadow-sm", neighborhoods.length === 0 ? "opacity-40" : ""].join(" ")}>
+                        <button
+                            type="button"
+                            onClick={() => setNeighborhoodFilterOpen(true)}
+                            disabled={neighborhoods.length === 0}
+                            className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 transition active:bg-[#f3f0ff]"
+                        >
+                            <PinSmIcon />
+                            <span className="min-w-0 flex-1 text-left">
+                                <span className="block text-[9px] font-black uppercase tracking-[0.06em] text-[#98A2B3]">Barrio</span>
+                                <span className="block truncate text-[12px] font-black text-[#101936]">
+                                    {neighborhood === "all" ? "Seleccionar" : neighborhood}
+                                </span>
+                            </span>
+                            {neighborhood === "all" ? <ChevronDownIcon /> : null}
+                        </button>
+                        {neighborhood !== "all" ? (
+                            <button
+                                type="button"
+                                onClick={() => { setNeighborhood("all"); setCategory("all"); }}
+                                className="flex h-8 w-8 shrink-0 items-center justify-center text-[#66739A] transition active:bg-[#f3f0ff]"
+                            >
+                                <XSmIcon />
+                            </button>
+                        ) : null}
+                    </div>
                 </div>
 
-                <div className="mt-2 flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    <FilterChip active={neighborhood === "all"} onClick={() => { setNeighborhood("all"); setCategory("all"); }}>Barrios</FilterChip>
-                    {neighborhoods.map((item) => (
-                        <FilterChip key={item} active={neighborhood === item} onClick={() => { setNeighborhood(item); setCategory("all"); }}>{item}</FilterChip>
-                    ))}
-                </div>
-
-                <div className="mt-2 flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    <FilterChip active={category === "all"} onClick={() => setCategory("all")}>Categorias</FilterChip>
-                    {categories.map((item) => (
-                        <FilterChip key={item} active={category === item} onClick={() => setCategory(item)}>{item}</FilterChip>
-                    ))}
-                </div>
+                {/* CATEGORY CHIPS */}
+                {categories.length > 0 ? (
+                    <div className="mt-2 flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                        {categories.map((item) => (
+                            <button
+                                key={item}
+                                type="button"
+                                onClick={() => setCategory(category === item ? "all" : item)}
+                                className={["flex shrink-0 items-center rounded-full border px-3 py-1.5 text-[11px] font-black transition", category === item ? "border-[#7C3AED] bg-[#7C3AED] text-white" : "border-[#E8E7FB] bg-white text-[#66739A]"].join(" ")}
+                            >
+                                {item}
+                            </button>
+                        ))}
+                    </div>
+                ) : null}
             </div>
 
             <div className="flex-1 px-3 pb-4 pt-2 xl:px-6">
@@ -283,6 +325,50 @@ export default function UserCommercialDirectoryPage() {
                     </div>
                 )}
             </div>
+
+            {cityFilterOpen ? (
+                <BottomSheet onClose={() => setCityFilterOpen(false)}>
+                    <div className="mb-4">
+                        <span className="inline-flex items-center rounded-full bg-[#f3f0ff] px-2.5 py-1 text-[10px] font-black text-[#7C3AED]">CIUDAD</span>
+                        <p className="mt-2 text-[17px] font-black text-[#101936]">Seleccionar ciudad</p>
+                    </div>
+                    <div className="grid gap-2">
+                        {cityOptions.map((item) => (
+                            <button
+                                key={item.cityId}
+                                type="button"
+                                onClick={() => { setCityId(item.cityId); setNeighborhood("all"); setCategory("all"); setCityFilterOpen(false); }}
+                                className={["flex items-center justify-between rounded-[16px] border px-4 py-3 text-left transition", cityId === item.cityId ? "border-[#7C3AED] bg-[#f3f0ff]" : "border-[#E8E7FB] bg-white active:bg-[#f8f7ff]"].join(" ")}
+                            >
+                                <span className={["text-[14px] font-black", cityId === item.cityId ? "text-[#7C3AED]" : "text-[#101936]"].join(" ")}>{item.cityName}</span>
+                                {cityId === item.cityId ? <CheckSmIcon /> : null}
+                            </button>
+                        ))}
+                    </div>
+                </BottomSheet>
+            ) : null}
+
+            {neighborhoodFilterOpen ? (
+                <BottomSheet onClose={() => setNeighborhoodFilterOpen(false)}>
+                    <div className="mb-4">
+                        <span className="inline-flex items-center rounded-full bg-[#f3f0ff] px-2.5 py-1 text-[10px] font-black text-[#7C3AED]">BARRIO</span>
+                        <p className="mt-2 text-[17px] font-black text-[#101936]">Seleccionar barrio</p>
+                    </div>
+                    <div className="grid gap-2 pb-2">
+                        {neighborhoods.map((item) => (
+                            <button
+                                key={item}
+                                type="button"
+                                onClick={() => { setNeighborhood(item); setCategory("all"); setNeighborhoodFilterOpen(false); }}
+                                className={["flex items-center justify-between rounded-[16px] border px-4 py-3 text-left transition", neighborhood === item ? "border-[#7C3AED] bg-[#f3f0ff]" : "border-[#E8E7FB] bg-white active:bg-[#f8f7ff]"].join(" ")}
+                            >
+                                <span className={["text-[14px] font-black", neighborhood === item ? "text-[#7C3AED]" : "text-[#101936]"].join(" ")}>{item}</span>
+                                {neighborhood === item ? <CheckSmIcon /> : null}
+                            </button>
+                        ))}
+                    </div>
+                </BottomSheet>
+            ) : null}
 
             {searchOpen ? (
                 <BottomSheet onClose={() => setSearchOpen(false)}>
@@ -387,9 +473,6 @@ function ProspectCard({
     );
 }
 
-function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-    return <button type="button" onClick={onClick} className={["flex shrink-0 items-center rounded-full border px-3 py-1.5 text-[11px] font-black transition", active ? "border-[#7C3AED] bg-[#7C3AED] text-white" : "border-[#E8E7FB] bg-white text-[#66739A]"].join(" ")}>{children}</button>;
-}
 
 function StatPill({ label, value, tone }: { label: string; value: string | number; tone: "green" | "yellow" | "red" | "violet" }) {
     const cls = {
@@ -416,10 +499,16 @@ function InfoLine({ icon, text }: { icon: React.ReactNode; text: string }) {
 }
 
 function BottomSheet({ children, onClose, tall }: { children: React.ReactNode; onClose: () => void; tall?: boolean }) {
+    useEffect(() => {
+        const prev = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+        return () => { document.body.style.overflow = prev; };
+    }, []);
+
     return (
         <div className="fixed inset-0 z-50 flex items-end xl:items-center xl:justify-center">
             <button type="button" className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" onClick={onClose} />
-            <div className={["relative w-full overflow-y-auto rounded-t-[24px] bg-white px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-4 shadow-2xl xl:max-w-md xl:rounded-[24px] xl:pb-6", tall ? "max-h-[88vh]" : "max-h-[72vh]"].join(" ")}>
+            <div className={["relative w-full overscroll-y-contain overflow-y-auto rounded-t-[24px] bg-white px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-4 shadow-2xl xl:max-w-md xl:rounded-[24px] xl:pb-6", tall ? "max-h-[88vh]" : "max-h-[72vh]"].join(" ")}>
                 <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-[#E8E7FB] xl:hidden" />
                 {children}
             </div>
@@ -445,3 +534,8 @@ function CopyIcon() { return <svg viewBox="0 0 24 24" className="h-4 w-4" {...ic
 function CheckIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M20 6 9 17l-5-5" /></svg>; }
 function NoteIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" /><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" /></svg>; }
 function DatabaseIcon() { return <svg viewBox="0 0 24 24" className="h-7 w-7 text-[#7C3AED]" {...ic}><ellipse cx="12" cy="5" rx="7" ry="3" /><path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5" /><path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" /></svg>; }
+function CityIcon() { return <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-[#7C3AED]" {...ic}><path d="M3 21h18M9 21V7l6-4v18M3 21V11l6-4" /><path d="M15 11h2M15 15h2" /></svg>; }
+function PinSmIcon() { return <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-[#7C3AED]" {...ic}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1 1 18 0Z" /><circle cx="12" cy="10" r="3" {...ic} /></svg>; }
+function ChevronDownIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0 text-[#98A2B3]" {...ic}><path d="m6 9 6 6 6-6" /></svg>; }
+function XSmIcon() { return <svg viewBox="0 0 24 24" className="h-3 w-3" {...ic} strokeWidth={2.5}><path d="M18 6 6 18M6 6l12 12" /></svg>; }
+function CheckSmIcon() { return <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#7C3AED]" {...ic}><path d="M20 6 9 17l-5-5" /></svg>; }
