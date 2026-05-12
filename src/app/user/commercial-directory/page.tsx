@@ -279,7 +279,7 @@ export default function UserCommercialDirectoryPage() {
                 </div>
 
                 {/* CATEGORY CHIPS */}
-                {categories.length > 0 ? (
+                {neighborhood !== "all" && categories.length > 0 ? (
                     <div className="mt-2 flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                         {categories.map((item) => (
                             <button
