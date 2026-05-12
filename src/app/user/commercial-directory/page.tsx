@@ -210,7 +210,7 @@ export default function UserCommercialDirectoryPage() {
     }
 
     return (
-        <div className="flex min-h-screen flex-col bg-[radial-gradient(circle_at_top_right,rgba(124,58,237,0.07),transparent_36%),linear-gradient(180deg,#fbfaff_0%,#f4f0ff_50%,#fbfaff_100%)]">
+        <div className="flex min-h-screen flex-col overscroll-y-none bg-[radial-gradient(circle_at_top_right,rgba(124,58,237,0.07),transparent_36%),linear-gradient(180deg,#fbfaff_0%,#f4f0ff_50%,#fbfaff_100%)]">
             <div className="sticky top-0 z-20 bg-[#fbfaff]/96 px-3 pb-3 pt-4 backdrop-blur-md xl:px-6">
                 <div className="mb-3 flex items-center justify-between gap-3">
                     <div className="min-w-0">

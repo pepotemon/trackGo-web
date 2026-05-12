@@ -54,7 +54,8 @@ export default function UserSettingsPage() {
             await updateUserProfile(firebaseUser.uid, { name: profileName.trim(), whatsappPhone: profilePhone.trim() });
             setProfileSuccess(true);
             window.setTimeout(() => { setProfileOpen(false); setProfileSuccess(false); }, 900);
-        } catch {
+        } catch (err) {
+            console.error("[saveProfile]", err);
             setProfileError("No se pudo guardar. Intenta nuevamente.");
         } finally {
             setProfileSaving(false);

@@ -367,6 +367,21 @@ service cloud.firestore {
           || request.resource.data.expoPushTokenUpdatedAt is int
         );
 
+      allow update: if isSelf(uid)
+        && request.resource.data.diff(resource.data).changedKeys()
+          .hasOnly(["name", "whatsappPhone", "updatedAt"])
+        && (
+          !("name" in request.resource.data)
+          || request.resource.data.name == null
+          || request.resource.data.name is string
+        )
+        && (
+          !("whatsappPhone" in request.resource.data)
+          || request.resource.data.whatsappPhone == null
+          || request.resource.data.whatsappPhone is string
+        )
+        && request.resource.data.updatedAt is int;
+
       allow delete: if false;
 
       match /webPushTokens/{tokenId} {
