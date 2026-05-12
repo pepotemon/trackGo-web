@@ -300,6 +300,8 @@ export default function UserCommercialDirectoryPage() {
                     <LoadingState />
                 ) : !assignments.length ? (
                     <EmptyState title="Sin directorio asignado" body="Cuando el administrador te asigne una ciudad, veras sus comercios aqui." />
+                ) : neighborhood === "all" ? (
+                    <EmptyState title="Selecciona un barrio" body="Elige un barrio en el filtro de arriba para ver los comercios disponibles." />
                 ) : !visible.length ? (
                     <EmptyState title="Sin comercios" body="No hay resultados para los filtros actuales." />
                 ) : (
