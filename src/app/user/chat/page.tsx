@@ -14,6 +14,7 @@ import {
 import { subscribeLeadMessages } from "@/data/leadChatRepo";
 import type { LeadMessageDoc, MetaLeadDoc } from "@/types/leads";
 import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
+import { getReviewedIds, getWhatsAppSentIds, markReviewed, markWhatsAppSent } from "@/lib/userContactState";
 
 type Tab = "incomplete" | "not_suitable";
 type RangePreset = "all" | "today" | "week" | "month" | "custom";
@@ -187,8 +188,9 @@ export default function UserIncompleteClientsPage() {
     // pagination
     const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
-    // whatsapp
+    // whatsapp + reviewed
     const [waSent, setWaSent] = useState<Set<string>>(new Set());
+    const [reviewed, setReviewed] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         const timer = window.setInterval(() => setRecoveryClock((value) => value + 1), 5 * 60 * 1000);
@@ -210,12 +212,18 @@ export default function UserIncompleteClientsPage() {
             const noteMap: Record<string, string> = {};
             data.forEach((l) => { const n = getNote(l.id); if (n) noteMap[l.id] = n; });
             setNotes((prev) => ({ ...prev, ...noteMap }));
+            const ids = data.map((l) => l.id);
+            setWaSent((prev) => new Set([...prev, ...getWhatsAppSentIds(ids)]));
+            setReviewed((prev) => new Set([...prev, ...getReviewedIds(ids)]));
             setLoadingIncomplete(false);
         });
 
         const loadingNotSuitableTimer = window.setTimeout(() => setLoadingNotSuitable(true), 0);
         const unsubNS = subscribeNotSuitableClients(phoneCodes, (data) => {
             setNotSuitable(data);
+            const ids = data.map((l) => l.id);
+            setWaSent((prev) => new Set([...prev, ...getWhatsAppSentIds(ids)]));
+            setReviewed((prev) => new Set([...prev, ...getReviewedIds(ids)]));
             setLoadingNotSuitable(false);
         });
 
@@ -328,11 +336,17 @@ export default function UserIncompleteClientsPage() {
             ? `¡Hola! Somos de Crédito Comercial. Usted nos contactó anteriormente sobre la liberación de crédito para su negocio. Nos gustaría saber si aún tiene interés. ¡Gracias y disculpe la molestia! 🙏`
             : `Olá! Somos da Crédito Comercial. Você nos contatou anteriormente sobre a liberação de crédito para o seu comércio. Gostaríamos de saber se ainda tem interesse. Obrigado e desculpe o incômodo! 🙏`;
         window.open(buildWALink(lead.phone, msg), "_blank");
+        markWhatsAppSent(lead.id);
         setWaSent((prev) => new Set(prev).add(lead.id));
     }
 
     function openNotSuitable(lead: MetaLeadDoc) { setActionLead(lead); setActionType("not_suitable"); }
-    function openReview(lead: MetaLeadDoc) { setActionLead(lead); setActionType("review"); }
+    function openReview(lead: MetaLeadDoc) {
+        markReviewed(lead.id);
+        setReviewed((prev) => new Set(prev).add(lead.id));
+        setActionLead(lead);
+        setActionType("review");
+    }
     function closeAction() {
         setActionLead(null);
         setActionType(null);
@@ -499,6 +513,7 @@ export default function UserIncompleteClientsPage() {
                                     note={notes[lead.id]}
                                     tab={tab}
                                     waSent={waSent.has(lead.id)}
+                                    reviewed={reviewed.has(lead.id)}
                                     onNote={() => openNote(lead)}
                                     onNotSuitable={() => openNotSuitable(lead)}
                                     onReview={() => openReview(lead)}
@@ -547,6 +562,7 @@ export default function UserIncompleteClientsPage() {
                                         note={notes[lead.id]}
                                         tab={tab}
                                         waSent={waSent.has(lead.id)}
+                                        reviewed={reviewed.has(lead.id)}
                                         onNote={() => { openNote(lead); setSearchOpen(false); }}
                                         onNotSuitable={() => { openNotSuitable(lead); setSearchOpen(false); }}
                                         onReview={() => { openReview(lead); setSearchOpen(false); }}
@@ -806,13 +822,14 @@ export default function UserIncompleteClientsPage() {
 // ── CLIENT CARD ───────────────────────────────────────────────────────────────
 
 function ClientCard({
-    lead, note, tab, waSent,
+    lead, note, tab, waSent, reviewed,
     onNote, onNotSuitable, onReview, onWhatsApp,
 }: {
     lead: MetaLeadDoc;
     note?: string;
     tab: Tab;
     waSent: boolean;
+    reviewed: boolean;
     onNote: () => void;
     onNotSuitable: () => void;
     onReview: () => void;
@@ -902,9 +919,14 @@ function ClientCard({
                     <button
                         type="button"
                         onClick={onReview}
-                        className="flex h-9 flex-1 items-center justify-center gap-2 rounded-[12px] border border-violet-200 bg-violet-50 text-[12px] font-black text-[#7C3AED] transition active:bg-violet-100"
+                        className={[
+                            "flex h-9 flex-1 items-center justify-center gap-2 rounded-[12px] border text-[12px] font-black transition",
+                            reviewed
+                                ? "border-[#7C3AED] bg-[#7C3AED] text-white"
+                                : "border-violet-200 bg-violet-50 text-[#7C3AED] active:bg-violet-100",
+                        ].join(" ")}
                     >
-                        <ChatIcon /> Revisar
+                        <ChatIcon /> {reviewed ? "Revisado" : "Revisar"}
                     </button>
                     <ActionBtn onClick={onNote} tone="violet" title="Nota"><NoteIcon /></ActionBtn>
                     <ActionBtn onClick={onWhatsApp} tone={waSent ? "sent" : "green"} title={waSent ? "Enviado" : "WhatsApp"}>
@@ -977,7 +999,7 @@ function ActionBtn({ onClick, tone, title, children }: { onClick: () => void; to
         green: "border-emerald-200 bg-emerald-50 text-emerald-700",
         violet: "border-violet-200 bg-violet-50 text-violet-700",
         gray: "border-[#E8E7FB] bg-white text-[#66739A]",
-        sent: "border-emerald-300 bg-emerald-100 text-emerald-700",
+        sent: "border-[#7C3AED] bg-[#7C3AED] text-white",
     };
     return <button type="button" onClick={onClick} title={title} className={`flex h-8 w-8 items-center justify-center rounded-[11px] border transition active:opacity-70 ${cls[tone]}`}>{children}</button>;
 }
