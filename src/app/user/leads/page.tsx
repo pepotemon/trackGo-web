@@ -335,7 +335,7 @@ export default function UserLeadsPage() {
             {/* ── STICKY HEADER ───────────────────────────────────────── */}
             <div className="sticky top-0 z-20 bg-[#fbfaff]/96 px-3 pb-3 pt-4 backdrop-blur-md xl:px-6">
 
-                {/* GREETING + SEARCH */}
+                {/* GREETING + ACTIONS */}
                 <div className="mb-3 flex items-center justify-between gap-3">
                     <div className="min-w-0">
                         <h1 className="text-[20px] font-black tracking-[-0.03em] text-[#101936]">
@@ -349,6 +349,17 @@ export default function UserLeadsPage() {
                         {userPermissions.canSeeSubscriptions ? <HeaderSubscriptionBadge status={subscriptionStatus} /> : null}
                         <button
                             type="button"
+                            onClick={() => setFiltersOpen(true)}
+                            className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-white shadow-sm transition active:bg-[#f3f0ff]"
+                            aria-label="Filtrar"
+                        >
+                            <FilterIcon />
+                            {filter !== "pending" ? (
+                                <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[#7C3AED]" />
+                            ) : null}
+                        </button>
+                        <button
+                            type="button"
                             onClick={() => setSearchOpen(true)}
                             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-white shadow-sm transition active:bg-[#f3f0ff]"
                             aria-label="Buscar"
@@ -359,31 +370,28 @@ export default function UserLeadsPage() {
                 </div>
 
                 {/* STATS ROW */}
-                <div className="mb-3 grid grid-cols-4 gap-2">
+                <div className="mb-2 grid grid-cols-4 gap-2">
                     <StatPill label="Hoy visit." value={stats.todayVisited} tone="green" />
                     <StatPill label="Hoy rech." value={stats.todayRejected} tone="red" />
                     <StatPill label="Sem. visit." value={stats.weekVisited} tone="green" />
                     <StatPill label="Sem. rech." value={stats.weekRejected} tone="red" />
                 </div>
 
-                {/* FILTER ROW */}
+                {/* ACTIVE FILTER CHIP */}
                 {(() => {
                     const labels: Record<StatusFilter, string> = { pending: "Pendientes", visited: "Visitados", rejected: "Rechazados", all: "Todos" };
                     return (
-                        <div className="flex items-center gap-2">
-                            <button
-                                type="button"
-                                onClick={() => setFiltersOpen(true)}
-                                className="flex flex-1 items-center gap-2 rounded-[14px] border border-[#E8E7FB] bg-white px-3 py-2 shadow-sm transition active:bg-[#f3f0ff]"
-                            >
-                                <FilterIcon />
-                                <span className="flex-1 text-left text-[12px] font-black text-[#101936]">{labels[filter]}</span>
-                                <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#f3f0ff] px-1.5 text-[10px] font-black text-[#7C3AED]">
-                                    {counts[filter]}
-                                </span>
-                                <ChevronDownIcon />
-                            </button>
-                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setFiltersOpen(true)}
+                            className="flex items-center gap-1.5 rounded-full border border-[#E8E7FB] bg-white px-3 py-1 shadow-sm transition active:bg-[#f3f0ff]"
+                        >
+                            <span className="text-[11px] font-black text-[#66739A]">{labels[filter]}</span>
+                            <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#f3f0ff] px-1 text-[9px] font-black text-[#7C3AED]">
+                                {counts[filter]}
+                            </span>
+                            <ChevronDownIcon />
+                        </button>
                     );
                 })()}
             </div>
