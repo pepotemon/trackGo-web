@@ -377,23 +377,6 @@ export default function UserLeadsPage() {
                     <StatPill label="Sem. rech." value={stats.weekRejected} tone="red" />
                 </div>
 
-                {/* ACTIVE FILTER CHIP */}
-                {(() => {
-                    const labels: Record<StatusFilter, string> = { pending: "Pendientes", visited: "Visitados", rejected: "Rechazados", all: "Todos" };
-                    return (
-                        <button
-                            type="button"
-                            onClick={() => setFiltersOpen(true)}
-                            className="flex items-center gap-1.5 rounded-full border border-[#E8E7FB] bg-white px-3 py-1 shadow-sm transition active:bg-[#f3f0ff]"
-                        >
-                            <span className="text-[11px] font-black text-[#66739A]">{labels[filter]}</span>
-                            <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#f3f0ff] px-1 text-[9px] font-black text-[#7C3AED]">
-                                {counts[filter]}
-                            </span>
-                            <ChevronDownIcon />
-                        </button>
-                    );
-                })()}
             </div>
 
             {/* ── LEAD LIST ───────────────────────────────────────────── */}

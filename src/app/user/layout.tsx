@@ -14,7 +14,7 @@ type VendorNavPermission = "canSeeMap" | "canSeeHistory" | "canSeeChat" | "canSe
 
 const BASE_NAV: { href: string; label: string; icon: NavIconName; permKey?: VendorNavPermission }[] = [
     { href: "/user/leads", label: "Prospectos", icon: "leads" },
-    { href: "/user/commercial-directory", label: "Base", icon: "database", permKey: "canSeeCommercialDirectory" },
+    { href: "/user/commercial-directory", label: "Directorio", icon: "database", permKey: "canSeeCommercialDirectory" },
     { href: "/user/map", label: "Mapa", icon: "map", permKey: "canSeeMap" },
     { href: "/user/history", label: "Historial", icon: "history", permKey: "canSeeHistory" },
     { href: "/user/chat", label: "Recup.", icon: "chat", permKey: "canSeeChat" },

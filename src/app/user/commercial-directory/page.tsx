@@ -193,7 +193,7 @@ export default function UserCommercialDirectoryPage() {
     }
 
     if (!userPermissions.canSeeCommercialDirectory) {
-        return <EmptyState title="Sin permiso" body="El administrador debe habilitar tu acceso a Base Comercial." />;
+        return <EmptyState title="Sin permiso" body="El administrador debe habilitar tu acceso al Directorio Comercial." />;
     }
 
     return (
@@ -201,7 +201,7 @@ export default function UserCommercialDirectoryPage() {
             <div className="sticky top-0 z-20 bg-[#fbfaff]/96 px-3 pb-3 pt-4 backdrop-blur-md xl:px-6">
                 <div className="mb-3 flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                        <h1 className="text-[20px] font-black tracking-[-0.03em] text-[#101936]">Base Comercial</h1>
+                        <h1 className="text-[20px] font-black tracking-[-0.03em] text-[#101936]">Directorio Comercial</h1>
                         <p className="mt-0.5 truncate text-[11px] font-semibold text-[#66739A]">
                             {cityOptions.length ? cityOptions.map((item) => item.cityName).join(", ") : "Sin ciudades asignadas"}
                         </p>
@@ -257,7 +257,7 @@ export default function UserCommercialDirectoryPage() {
                 {loading ? (
                     <LoadingState />
                 ) : !assignments.length ? (
-                    <EmptyState title="Sin base asignada" body="Cuando el administrador te asigne una ciudad, veras sus comercios aqui." />
+                    <EmptyState title="Sin directorio asignado" body="Cuando el administrador te asigne una ciudad, veras sus comercios aqui." />
                 ) : !visible.length ? (
                     <EmptyState title="Sin comercios" body="No hay resultados para los filtros actuales." />
                 ) : (
