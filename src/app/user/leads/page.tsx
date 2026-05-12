@@ -126,6 +126,9 @@ export default function UserLeadsPage() {
     const [copiedLeadId, setCopiedLeadId] = useState<string | null>(null);
     const copyToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+    const [filtersOpen, setFiltersOpen] = useState(false);
+    const [waConfirmLead, setWaConfirmLead] = useState<MetaLeadDoc | null>(null);
+
     const [actionLead, setActionLead] = useState<MetaLeadDoc | null>(null);
     const [actionType, setActionType] = useState<"visit" | "reject" | "note" | "manage" | null>(null);
     const [noteText, setNoteText] = useState("");
@@ -230,6 +233,8 @@ export default function UserLeadsPage() {
     }
     function closeAction() { setActionLead(null); setActionType(null); setSaving(false); }
     useBackButtonDismiss(searchOpen, () => setSearchOpen(false));
+    useBackButtonDismiss(filtersOpen, () => setFiltersOpen(false));
+    useBackButtonDismiss(Boolean(waConfirmLead), () => setWaConfirmLead(null));
     useBackButtonDismiss(Boolean(actionType), closeAction);
 
     function saveLeadNote() {
@@ -270,12 +275,19 @@ export default function UserLeadsPage() {
     }
 
     function openWhatsApp(lead: MetaLeadDoc) {
+        setWaConfirmLead(lead);
+    }
+
+    function confirmWhatsApp() {
+        if (!waConfirmLead) return;
+        const lead = waConfirmLead;
         const msg = isSpanishPhone(lead.phone)
             ? `¡Buenas tardes! Somos de Crédito Comercial. Nos comunicamos para continuar con la liberación del crédito y el registro de tu negocio. ¡Quedamos atentos! 😊`
             : `Boa tarde! Somos da Crédito Comercial. Estamos entrando em contato para dar continuidade à liberação do crédito e realização do cadastro. Aguardamos seu retorno! 😊`;
         window.open(buildWALink(lead.phone, msg), "_blank");
         markWhatsAppSent(lead.id);
         setWaSent((prev) => new Set(prev).add(lead.id));
+        setWaConfirmLead(null);
     }
 
     function openMaps(lead: MetaLeadDoc) {
@@ -354,35 +366,26 @@ export default function UserLeadsPage() {
                     <StatPill label="Sem. rech." value={stats.weekRejected} tone="red" />
                 </div>
 
-                {/* FILTER TABS */}
-                <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    {(["pending", "visited", "rejected", "all"] as StatusFilter[]).map((f) => {
-                        const labels: Record<StatusFilter, string> = { pending: "Pendientes", visited: "Visitados", rejected: "Rechazados", all: "Todos" };
-                        const count = counts[f];
-                        const active = filter === f;
-                        return (
+                {/* FILTER ROW */}
+                {(() => {
+                    const labels: Record<StatusFilter, string> = { pending: "Pendientes", visited: "Visitados", rejected: "Rechazados", all: "Todos" };
+                    return (
+                        <div className="flex items-center gap-2">
                             <button
-                                key={f}
                                 type="button"
-                                onClick={() => setFilter(f)}
-                                className={[
-                                    "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-black transition",
-                                    active
-                                        ? "border-[#7C3AED] bg-[#7C3AED] text-white"
-                                        : "border-[#E8E7FB] bg-white text-[#66739A] hover:border-[#7C3AED]/40 hover:text-[#7C3AED]",
-                                ].join(" ")}
+                                onClick={() => setFiltersOpen(true)}
+                                className="flex flex-1 items-center gap-2 rounded-[14px] border border-[#E8E7FB] bg-white px-3 py-2 shadow-sm transition active:bg-[#f3f0ff]"
                             >
-                                {labels[f]}
-                                <span className={[
-                                    "flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[9px] font-black",
-                                    active ? "bg-white/25 text-white" : "bg-[#f3f0ff] text-[#7C3AED]",
-                                ].join(" ")}>
-                                    {count}
+                                <FilterIcon />
+                                <span className="flex-1 text-left text-[12px] font-black text-[#101936]">{labels[filter]}</span>
+                                <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#f3f0ff] px-1.5 text-[10px] font-black text-[#7C3AED]">
+                                    {counts[filter]}
                                 </span>
+                                <ChevronDownIcon />
                             </button>
-                        );
-                    })}
-                </div>
+                        </div>
+                    );
+                })()}
             </div>
 
             {/* ── LEAD LIST ───────────────────────────────────────────── */}
@@ -467,6 +470,64 @@ export default function UserLeadsPage() {
                         )}
                     </div>
                 </div>
+            ) : null}
+
+            {/* ── FILTER MODAL ────────────────────────────────────────── */}
+            {filtersOpen ? (
+                <BottomSheet onClose={() => setFiltersOpen(false)}>
+                    <div className="mb-4">
+                        <span className="inline-flex items-center rounded-full bg-[#f3f0ff] px-2.5 py-1 text-[10px] font-black text-[#7C3AED]">FILTRAR</span>
+                        <p className="mt-2 text-[17px] font-black text-[#101936]">Ver prospectos</p>
+                    </div>
+                    <div className="grid gap-2">
+                        {(["pending", "visited", "rejected", "all"] as StatusFilter[]).map((f) => {
+                            const labels: Record<StatusFilter, string> = { pending: "Pendientes", visited: "Visitados", rejected: "Rechazados", all: "Todos" };
+                            const descs: Record<StatusFilter, string> = { pending: "Sin gestionar esta semana", visited: "Marcados como visitados", rejected: "Cerrados con motivo", all: "Todos los asignados" };
+                            const active = filter === f;
+                            return (
+                                <button
+                                    key={f}
+                                    type="button"
+                                    onClick={() => { setFilter(f); setFiltersOpen(false); }}
+                                    className={[
+                                        "flex items-center justify-between rounded-[16px] border px-4 py-3 text-left transition",
+                                        active ? "border-[#7C3AED] bg-[#f3f0ff]" : "border-[#E8E7FB] bg-white active:bg-[#f8f7ff]",
+                                    ].join(" ")}
+                                >
+                                    <span>
+                                        <span className={["block text-[14px] font-black", active ? "text-[#7C3AED]" : "text-[#101936]"].join(" ")}>{labels[f]}</span>
+                                        <span className="block text-[11px] font-semibold text-[#66739A]">{descs[f]}</span>
+                                    </span>
+                                    <span className={["flex h-6 min-w-[24px] items-center justify-center rounded-full px-1.5 text-[11px] font-black", active ? "bg-[#7C3AED] text-white" : "bg-[#f3f0ff] text-[#7C3AED]"].join(" ")}>
+                                        {counts[f]}
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </BottomSheet>
+            ) : null}
+
+            {/* ── WHATSAPP CONFIRM MODAL ───────────────────────────────── */}
+            {waConfirmLead ? (
+                <BottomSheet onClose={() => setWaConfirmLead(null)}>
+                    <div className="mb-4">
+                        <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-700">WHATSAPP</span>
+                        <p className="mt-2 text-[17px] font-black text-[#101936]">{displayName(waConfirmLead)}</p>
+                        <p className="mt-0.5 text-[12px] font-semibold text-[#66739A]">{waConfirmLead.phone}</p>
+                    </div>
+                    <p className="mb-4 rounded-[14px] border border-emerald-100 bg-emerald-50 px-3 py-2.5 text-[12px] font-semibold text-emerald-700">
+                        ¿Confirmas que vas a enviar el mensaje de WhatsApp a este prospecto?
+                    </p>
+                    <div className="flex gap-2">
+                        <button type="button" onClick={() => setWaConfirmLead(null)} className="flex-1 rounded-[14px] border border-[#E8E7FB] py-3 text-[13px] font-black text-[#66739A]">
+                            Cancelar
+                        </button>
+                        <button type="button" onClick={confirmWhatsApp} className="flex-1 rounded-[14px] bg-emerald-600 py-3 text-[13px] font-black text-white">
+                            Sí, enviar
+                        </button>
+                    </div>
+                </BottomSheet>
             ) : null}
 
             {actionType === "manage" && actionLead ? (
@@ -848,11 +909,17 @@ function ActionBtn({ onClick, title, tone, children }: { onClick: () => void; ti
 }
 
 function BottomSheet({ children, onClose, tall }: { children: React.ReactNode; onClose: () => void; tall?: boolean }) {
+    useEffect(() => {
+        const prev = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+        return () => { document.body.style.overflow = prev; };
+    }, []);
+
     return (
         <div className="fixed inset-0 z-50 flex items-end xl:items-center xl:justify-center">
             <button type="button" className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" onClick={onClose} />
             <div className={[
-                "relative w-full overflow-y-auto rounded-t-[24px] bg-white px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-4 shadow-2xl xl:max-w-md xl:rounded-[24px] xl:pb-6",
+                "relative w-full overscroll-y-contain overflow-y-auto rounded-t-[24px] bg-white px-4 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-4 shadow-2xl xl:max-w-md xl:rounded-[24px] xl:pb-6",
                 tall ? "max-h-[85vh]" : "max-h-[70vh]",
             ].join(" ")}>
                 <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-[#E8E7FB] xl:hidden" />
@@ -921,6 +988,12 @@ const ic = { fill: "none", stroke: "currentColor", strokeLinecap: "round" as con
 
 function SearchIcon() {
     return <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#7C3AED]" {...ic}><path d="m21 21-4.3-4.3M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16Z" /></svg>;
+}
+function FilterIcon() {
+    return <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-[#7C3AED]" {...ic}><path d="M4 6h16M7 12h10M10 18h4" /></svg>;
+}
+function ChevronDownIcon() {
+    return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0 text-[#98A2B3]" {...ic}><path d="m6 9 6 6 6-6" /></svg>;
 }
 function PhoneIcon() {
     return <svg viewBox="0 0 24 24" className="h-3 w-3 shrink-0" {...ic}><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.1-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.8.4 1.6.7 2.4a2 2 0 0 1-.5 2.1L8.1 9.4a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.8.3 1.6.5 2.4.7a2 2 0 0 1 1.7 2Z" /></svg>;

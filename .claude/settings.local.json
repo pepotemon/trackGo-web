@@ -17,7 +17,8 @@
       "Bash(npm install *)",
       "Bash(firebase projects:list)",
       "Bash(npx firebase *)",
-      "Bash(grep -E \"\\\\.\\(tsx|ts\\)$\")"
+      "Bash(grep -E \"\\\\.\\(tsx|ts\\)$\")",
+      "Bash(git push *)"
     ]
   }
 }
