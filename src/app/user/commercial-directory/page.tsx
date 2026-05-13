@@ -38,7 +38,7 @@ function dayKey(ms?: number | null) {
 }
 
 function contactTone(count: number) {
-    if (count <= 15) return { label: "Saludable", tone: "green" as const, text: "Mantente en este ritmo." };
+    if (count < 15) return { label: "Saludable", tone: "green" as const, text: "Mantente en este ritmo." };
     if (count <= 25) return { label: "Riesgo", tone: "yellow" as const, text: "Baja la velocidad para evitar bloqueos." };
     return { label: "Detener", tone: "red" as const, text: "Pausa los envios por hoy." };
 }
@@ -166,6 +166,7 @@ export default function UserCommercialDirectoryPage() {
 
     const todayContacts = useMemo(() => touches.filter((item) => item.contacted && dayKey(item.contactedAt) === todayKey()).length, [touches]);
     const dailyTone = contactTone(todayContacts);
+    const dailyLimitReached = todayContacts >= 15;
     const totalContacted = visible.filter((item) => touchMap.get(item.id)?.contacted).length;
     const completion = visible.length ? Math.round((totalContacted / visible.length) * 100) : 0;
 
@@ -241,6 +242,10 @@ export default function UserCommercialDirectoryPage() {
                     </div>
                     <p className="mt-1.5 text-[10px] font-bold text-[#66739A]">{dailyTone.text}</p>
                 </div>
+
+                {dailyLimitReached ? (
+                    <DailyLimitAlert count={todayContacts} compact />
+                ) : null}
 
                 {/* FILTER SELECTORS */}
                 <div className="grid grid-cols-2 gap-2">
@@ -413,6 +418,9 @@ export default function UserCommercialDirectoryPage() {
                         <p>Esta base viene de informacion publica. Estos comercios todavia no pidieron contacto directo dentro de TrackGo.</p>
                         <p>El envio de mensajes frios es responsabilidad del vendedor. Para reducir riesgo de bloqueos en WhatsApp, evita textos repetidos en masa, personaliza cuando puedas y no insistas si no hay respuesta.</p>
                         <p>Recomendacion operativa: hasta 15 mensajes al dia es saludable, de 16 a 25 ya es zona de riesgo, y por encima de 25 conviene detener los envios por ese dia.</p>
+                        <div className="rounded-[16px] border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
+                            Recomendamos usar un numero alterno o de reciclaje para estos envios. Como el comercio no hizo el primer contacto, algunos clientes pueden reportar el mensaje; cuida tu numero principal.
+                        </div>
                     </div>
                     <button type="button" onClick={() => setInfoOpen(false)} className="mt-4 h-11 w-full rounded-[14px] bg-[#7C3AED] text-[13px] font-black text-white">Entendido</button>
                 </BottomSheet>
@@ -422,6 +430,9 @@ export default function UserCommercialDirectoryPage() {
                 <BottomSheet onClose={() => setWaProspect(null)} tall>
                     <h2 className="text-[17px] font-black text-[#101936]">Enviar WhatsApp</h2>
                     <p className="mt-1 text-[12px] font-semibold text-[#66739A]">{waProspect.name}</p>
+                    {dailyLimitReached ? (
+                        <DailyLimitAlert count={todayContacts} />
+                    ) : null}
                     <div className="mt-3 space-y-2">
                         {messageTemplates(waProspect.countryName, waProspect.name, userName).map((message, index) => (
                             <button key={message} type="button" onClick={() => openWhatsApp(waProspect, message)} className="w-full rounded-[14px] border border-[#E8E7FB] bg-white px-3 py-2.5 text-left text-[12px] font-semibold leading-relaxed text-[#344054] active:bg-[#f3f0ff]">
@@ -510,6 +521,20 @@ function StatPill({ label, value, tone }: { label: string; value: string | numbe
         violet: "border-violet-100 bg-violet-50 text-[#7C3AED]",
     }[tone];
     return <div className={`rounded-[12px] border px-1.5 py-1.5 text-center ${cls}`}><div className="text-[15px] font-black">{value}</div><div className="mt-0.5 text-[9px] font-black leading-none opacity-70">{label}</div></div>;
+}
+
+function DailyLimitAlert({ count, compact = false }: { count: number; compact?: boolean }) {
+    return (
+        <div className={[
+            "rounded-[14px] border border-amber-200 bg-amber-50 text-amber-800 shadow-sm",
+            compact ? "mb-2 px-3 py-2" : "mt-3 px-3 py-2.5",
+        ].join(" ")}>
+            <p className="text-[11px] font-black uppercase tracking-[0.08em]">Atencion: limite recomendado alcanzado</p>
+            <p className="mt-1 text-[12px] font-bold leading-snug">
+                Ya llevas {count} contactos hoy. Desde ahora, cualquier envio adicional queda bajo tu responsabilidad; recomendamos pausar o continuar con un numero alterno.
+            </p>
+        </div>
+    );
 }
 
 function ActionBtn({ onClick, title, tone, children }: { onClick: () => void; title: string; tone: "green" | "blue" | "violet" | "sent"; children: React.ReactNode }) {
