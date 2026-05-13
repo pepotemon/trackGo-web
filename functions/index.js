@@ -57,7 +57,7 @@ const {
     resumeBotForClient,
 } = require("./src/whatsapp/manualReply");
 
-const { notifyAssignedUser, notifyLeadQueueAdmins } = require("./src/push/expoPush");
+const { notifyAssignedUser, notifyAssignedLeadAdmins } = require("./src/push/expoPush");
 
 const business = require("./src/bot/business");
 const namesFactory = require("./src/bot/names");
@@ -454,17 +454,11 @@ exports.onClientCreatedAssigned = onDocumentCreated("clients/{clientId}", async 
     const clientId = event.params.clientId;
     const after = event.data?.data() || {};
 
-    if (!after.assignedTo) {
-        try {
-            await notifyLeadQueueAdmins({ clientId, after });
-        } catch (e) {
-            console.log("[PUSH] admin create error:", e);
-        }
-        return;
-    }
+    if (!after.assignedTo) return;
 
     try {
         await notifyAssignedUser({ clientId, after });
+        await notifyAssignedLeadAdmins({ clientId, after });
     } catch (e) {
         console.log("[PUSH] create error:", e);
     }
@@ -483,6 +477,7 @@ exports.onClientReassigned = onDocumentUpdated("clients/{clientId}", async (even
 
     try {
         await notifyAssignedUser({ clientId, after });
+        await notifyAssignedLeadAdmins({ clientId, after });
     } catch (e) {
         console.log("[PUSH] update error:", e);
     }

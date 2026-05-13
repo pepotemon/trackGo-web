@@ -132,9 +132,7 @@ async function notifyAssignedUser({ clientId, after }) {
 
     const user = userSnap.data() || {};
     const expoToken = user.expoPushToken;
-    const { body } = notificationText(after);
-    const assignedUserName = cleanString(user.name || user.email || "Vendedor");
-    const title = `Nuevo cliente - ${assignedUserName}`;
+    const { title, body } = notificationText(after);
 
     await sendWebPush({ uid: afterUid, clientId, title, body });
 
@@ -148,24 +146,27 @@ async function notifyAssignedUser({ clientId, after }) {
     }
 }
 
-async function notifyLeadQueueAdmins({ clientId, after }) {
-    if (after.assignedTo) return;
-    const source = cleanString(after.source);
-    if (source && source !== "whatsapp_meta") return;
+async function notifyAssignedLeadAdmins({ clientId, after }) {
+    const afterUid = after.assignedTo || null;
+    if (!afterUid) return;
 
-    const { title, body } = notificationText(after);
+    const userSnap = await db.doc(`users/${afterUid}`).get();
+    const user = userSnap.exists ? userSnap.data() || {} : {};
+    const assignedUserName = cleanString(user.name || user.email || "Vendedor");
+    const { body } = notificationText(after);
     const targets = await getAdminPushTargets();
+
     await Promise.all(
         targets.map((target) =>
             sendWebPush({
                 uid: target.id,
                 clientId,
-                title: title.replace("Cliente nuevo", "Prospecto nuevo"),
+                title: `Cliente nuevo - ${assignedUserName}`,
                 body,
                 linkPath: `/admin/leads/${encodeURIComponent(clientId)}?from=leads`,
-                type: "admin_lead_queue",
+                type: "admin_client_assigned",
             }).catch((error) => {
-                console.log("[PUSH] admin target error", target.id, error);
+                console.log("[PUSH] admin assigned target error", target.id, error);
             })
         )
     );
@@ -175,5 +176,5 @@ module.exports = {
     sendExpoPush,
     sendWebPush,
     notifyAssignedUser,
-    notifyLeadQueueAdmins,
+    notifyAssignedLeadAdmins,
 };
