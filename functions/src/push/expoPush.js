@@ -132,7 +132,9 @@ async function notifyAssignedUser({ clientId, after }) {
 
     const user = userSnap.data() || {};
     const expoToken = user.expoPushToken;
-    const { title, body } = notificationText(after);
+    const { body } = notificationText(after);
+    const assignedUserName = cleanString(user.name || user.email || "Vendedor");
+    const title = `Nuevo cliente - ${assignedUserName}`;
 
     await sendWebPush({ uid: afterUid, clientId, title, body });
 
