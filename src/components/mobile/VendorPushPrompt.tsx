@@ -5,9 +5,15 @@ import { enableWebPushForUser, getWebPushState, refreshWebPushTokenForUser, type
 
 type Props = {
     userId: string;
+    title?: string;
+    body?: string;
 };
 
-export function VendorPushPrompt({ userId }: Props) {
+export function VendorPushPrompt({
+    userId,
+    title = "Activa avisos de clientes nuevos",
+    body = "Te avisaremos cuando recibas un prospecto asignado.",
+}: Props) {
     const [state, setState] = useState<WebPushState | "checking">("checking");
     const [busy, setBusy] = useState(false);
     const [dismissed, setDismissed] = useState(false);
@@ -48,9 +54,9 @@ export function VendorPushPrompt({ userId }: Props) {
                     <BellIcon />
                 </div>
                 <div className="min-w-0 flex-1">
-                    <p className="text-[13px] font-black text-[#101936]">Activa avisos de clientes nuevos</p>
+                    <p className="text-[13px] font-black text-[#101936]">{title}</p>
                     <p className="mt-0.5 text-[11px] font-semibold leading-snug text-[#66739A]">
-                        Te avisaremos cuando recibas un prospecto asignado.
+                        {body}
                     </p>
                     {missingVapid ? (
                         <p className="mt-1 text-[10px] font-bold text-amber-700">Falta configurar la clave VAPID en el entorno.</p>

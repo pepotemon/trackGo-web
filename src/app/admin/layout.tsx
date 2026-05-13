@@ -8,6 +8,7 @@ import { usePermissions } from "@/features/auth/usePermissions";
 import { TrackGoLogo } from "@/components/brand/TrackGoLogo";
 import { PullToRefresh } from "@/components/mobile/PullToRefresh";
 import { ResumeRefresh } from "@/components/mobile/ResumeRefresh";
+import { VendorPushPrompt } from "@/components/mobile/VendorPushPrompt";
 import type { AdminPermissions } from "@/types/users";
 
 type NavIconName =
@@ -155,6 +156,11 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             <div className="xl:pl-[228px]">
                 <ResumeRefresh />
                 <PullToRefresh disabled={pathname.startsWith("/admin/leads/") && pathname !== "/admin/leads/assignments"} />
+                <VendorPushPrompt
+                    userId={firebaseUser.uid}
+                    title="Activa avisos administrativos"
+                    body="Te avisaremos en este dispositivo cuando entren prospectos nuevos o haya movimiento importante."
+                />
                 <MobileDrawer
                     open={mobileMenuOpen}
                     onClose={() => setMobileMenuOpen(false)}

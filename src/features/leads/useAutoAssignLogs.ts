@@ -75,7 +75,11 @@ function filterLogs(logs: AutoAssignLogDoc[], filters: AutoAssignLogFilters) {
     const queryText = norm(filters.search);
     const queryDigits = digits(filters.search);
 
-    return logs.filter((log) => logMatchesSearch(log, queryText, queryDigits));
+    return sortLogsByCreatedAtDesc(logs.filter((log) => logMatchesSearch(log, queryText, queryDigits)));
+}
+
+function sortLogsByCreatedAtDesc(logs: AutoAssignLogDoc[]) {
+    return [...logs].sort((a, b) => Number(b.createdAt ?? 0) - Number(a.createdAt ?? 0));
 }
 
 function hasClientSideFilters(filters: AutoAssignLogFilters) {
@@ -173,7 +177,7 @@ export function useAutoAssignLogs() {
             }
 
             if (requestId === requestSeq.current) {
-                setLogs(Array.from(map.values()));
+                setLogs(sortLogsByCreatedAtDesc(Array.from(map.values())));
                 setCursor(nextCursor);
                 setHasMore(nextHasMore);
             }

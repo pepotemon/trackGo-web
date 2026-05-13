@@ -131,6 +131,14 @@ export default function UserChatDetailPage() {
         if (url) window.open(url, "_blank");
     }
 
+    function goBackToPreviousScreen() {
+        if (typeof window !== "undefined" && window.history.length > 1) {
+            router.back();
+            return;
+        }
+        router.replace("/user/leads");
+    }
+
     const ddd = lead ? extractDDD(lead.phone) : null;
     const dayGroups = groupByDay(messages);
     const canReply =
@@ -152,7 +160,7 @@ export default function UserChatDetailPage() {
         return (
             <div className="fixed inset-0 z-50 flex h-dvh flex-col items-center justify-center bg-[#fbfaff] px-6 text-center">
                 <p className="text-[15px] font-black text-[#101936]">Cliente no encontrado</p>
-                <button type="button" onClick={() => router.back()} className="mt-4 text-[13px] font-bold text-[#7C3AED]">Volver</button>
+                <button type="button" onClick={goBackToPreviousScreen} className="mt-4 text-[13px] font-bold text-[#7C3AED]">Volver</button>
             </div>
         );
     }
@@ -165,7 +173,7 @@ export default function UserChatDetailPage() {
                 <div className="flex items-center gap-3 px-3 py-3">
                 <button
                     type="button"
-                    onClick={() => router.back()}
+                    onClick={goBackToPreviousScreen}
                     className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-[#E8E7FB] bg-white transition active:bg-[#f3f0ff]"
                 >
                     <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">

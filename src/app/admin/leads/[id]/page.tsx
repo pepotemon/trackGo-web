@@ -241,6 +241,14 @@ export default function LeadChatPage() {
         setQuickActionsOpen(false);
     }
 
+    function goBackToPreviousScreen() {
+        if (typeof window !== "undefined" && window.history.length > 1) {
+            router.back();
+            return;
+        }
+        router.replace(returnTo);
+    }
+
     const canSend = useMemo(() => {
         return canChat && mode === "human" && !!draft.trim() && !sending;
     }, [canChat, draft, mode, sending]);
@@ -389,7 +397,7 @@ export default function LeadChatPage() {
                     <div className="flex items-center gap-2 px-3 py-2.5">
                         <button
                             type="button"
-                            onClick={() => router.replace(returnTo)}
+                            onClick={goBackToPreviousScreen}
                             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] transition active:bg-[#f3f0ff]"
                             aria-label="Volver"
                         >

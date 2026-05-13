@@ -160,6 +160,20 @@ export async function getMetaCampaignTotalSpend(campaignId: string) {
     return Number.isFinite(spend) ? Math.round(spend * 100) / 100 : 0;
 }
 
+export async function getMetaCampaignSpendForRange(input: {
+    campaignId: string;
+    since: string;
+    until: string;
+}) {
+    const campaign = await validateMetaCampaign(input.campaignId);
+    const insights = await graphGet<{ data?: Array<{ spend?: string }> }>(`${campaign.id}/insights`, {
+        fields: "spend",
+        time_range: JSON.stringify({ since: input.since, until: input.until }),
+    });
+    const spend = Number(insights.data?.[0]?.spend || 0);
+    return Number.isFinite(spend) ? Math.round(spend * 100) / 100 : 0;
+}
+
 export async function getMetaCampaignCycleSpend(input: {
     campaignId: string;
     spendBaseline?: number | null;

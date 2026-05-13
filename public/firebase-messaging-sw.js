@@ -15,7 +15,7 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
   const title = payload.notification?.title || payload.data?.title || "TrackGo";
   const body = payload.notification?.body || payload.data?.body || "";
-  const url = payload.fcmOptions?.link || payload.data?.link || "/user/leads";
+  const url = payload.webpush?.fcmOptions?.link || payload.fcmOptions?.link || payload.data?.link || payload.data?.url || "/user/leads";
 
   self.registration.showNotification(title, {
     body,

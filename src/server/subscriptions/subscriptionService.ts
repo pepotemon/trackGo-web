@@ -4,7 +4,7 @@ import { ResponseError } from "@/server/auth";
 import { adminDb } from "@/server/firebaseAdmin";
 import { cancelMercadoPagoPayment, createPixPayment, getMercadoPagoPayment } from "@/server/subscriptions/mercadoPago";
 import { calculateAdsBudget, calculateAdsBudgetAllocation, calculateCycleEnd, getPlanAmount } from "@/server/subscriptions/plans";
-import { configureAndActivateCityCampaign, getActiveCityCampaignSnapshot, getMetaCampaignCycleSpend, pauseCityCampaign, resumeCityCampaign } from "@/server/subscriptions/metaAds";
+import { configureAndActivateCityCampaign, getActiveCityCampaignSnapshot, getMetaCampaignCycleSpend, getMetaCampaignSpendForRange, pauseCityCampaign, resumeCityCampaign } from "@/server/subscriptions/metaAds";
 import { sendPushToUser } from "@/server/push";
 import type { PixCheckoutResponse, SubscriptionPlanId } from "@/types/subscriptions";
 
@@ -105,9 +105,19 @@ export async function getSubscriptionsOverview(scope?: { adminId?: string; isSup
         listScopedSubscriptionDocs("subscriptionCheckouts", scopedUserIds, 40),
     ]);
 
-    const subscriptions = subscriptionsDocs.map((doc) => {
+    const todayKey = dayKeyFromMs(Date.now());
+    const subscriptions = await Promise.all(subscriptionsDocs.map(async (doc) => {
         const data = doc.data();
         const user = users.get(String(data.userId || ""));
+        const status = data.status || "unknown";
+        const campaignId = data.campaignId || null;
+        const spendSnapshot = await getSubscriptionSpendSnapshot({
+            status,
+            campaignId,
+            spendBaseline: Number(data.spendBaseline ?? data.metaSpendBaseline ?? 0),
+            storedCycleSpend: Number(data.cycleSpend ?? 0),
+            todayKey,
+        });
         return {
             id: doc.id,
             userId: data.userId || null,
@@ -120,15 +130,24 @@ export async function getSubscriptionsOverview(scope?: { adminId?: string; isSup
             adsBudget: Number(data.adsBudget || 0),
             adsShare: Number(data.adsShare ?? 0.5),
             cycleDays: Number(data.cycleDays || 5),
-            status: data.status || "unknown",
+            status,
             source: data.source || null,
-            campaignId: data.campaignId || null,
+            campaignId,
+            campaignName: data.campaignName || null,
+            dailyBudget: Number(data.dailyBudget || data.metaDailyBudget || 0),
+            targetSpend: Number(data.targetSpend || data.adsBudget || 0),
+            spendPauseThreshold: Number(data.spendPauseThreshold || 0),
+            cycleSpend: spendSnapshot.cycleSpend,
+            todaySpend: spendSnapshot.todaySpend,
+            totalSpend: spendSnapshot.totalSpend,
+            spendUpdatedAt: spendSnapshot.updatedAt,
+            spendStatus: spendSnapshot.status,
             startDate: timestampToMs(data.startDate),
             endDate: timestampToMs(data.endDate),
             createdAt: Number(data.createdAt || 0) || null,
             updatedAt: Number(data.updatedAt || 0) || null,
         };
-    });
+    }));
 
     const checkouts = checkoutsDocs.map((doc) => {
         const data = doc.data();
@@ -215,6 +234,64 @@ async function listScopedSubscriptionDocs(
         .flatMap((snap) => snap.docs)
         .sort((a, b) => Number(b.data().updatedAt || 0) - Number(a.data().updatedAt || 0))
         .slice(0, limit);
+}
+
+function dayKeyFromMs(ms: number) {
+    const date = new Date(ms);
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+}
+
+async function getSubscriptionSpendSnapshot(input: {
+    status: string;
+    campaignId?: string | null;
+    spendBaseline: number;
+    storedCycleSpend: number;
+    todayKey: string;
+}) {
+    const active = input.status === "active" || input.status === "expiring";
+    if (!active || !input.campaignId) {
+        return {
+            cycleSpend: Number.isFinite(input.storedCycleSpend) ? input.storedCycleSpend : 0,
+            todaySpend: 0,
+            totalSpend: null as number | null,
+            updatedAt: null as number | null,
+            status: input.campaignId ? "stored" : "missing_campaign",
+        };
+    }
+
+    try {
+        const [cycle, todaySpend] = await Promise.all([
+            getMetaCampaignCycleSpend({
+                campaignId: input.campaignId,
+                spendBaseline: Number.isFinite(input.spendBaseline) ? input.spendBaseline : 0,
+            }),
+            getMetaCampaignSpendForRange({
+                campaignId: input.campaignId,
+                since: input.todayKey,
+                until: input.todayKey,
+            }),
+        ]);
+
+        return {
+            cycleSpend: cycle.cycleSpend,
+            todaySpend,
+            totalSpend: cycle.totalSpend,
+            updatedAt: Date.now(),
+            status: "live",
+        };
+    } catch (error) {
+        console.warn("[subscriptions:spendSnapshot]", input.campaignId, error);
+        return {
+            cycleSpend: Number.isFinite(input.storedCycleSpend) ? input.storedCycleSpend : 0,
+            todaySpend: 0,
+            totalSpend: null as number | null,
+            updatedAt: null as number | null,
+            status: "error",
+        };
+    }
 }
 
 function timestampToMs(value: unknown) {

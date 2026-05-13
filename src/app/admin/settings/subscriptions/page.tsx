@@ -48,6 +48,16 @@ type OverviewSubscription = {
     plan?: string | null;
     amount: number;
     adsBudget: number;
+    dailyBudget?: number | null;
+    targetSpend?: number | null;
+    spendPauseThreshold?: number | null;
+    cycleSpend?: number | null;
+    todaySpend?: number | null;
+    totalSpend?: number | null;
+    spendUpdatedAt?: number | null;
+    spendStatus?: string | null;
+    campaignName?: string | null;
+    campaignId?: string | null;
     status: string;
     source?: string | null;
     startDate?: number | null;
@@ -514,6 +524,8 @@ export default function SubscriptionsAdminPage() {
                 </Card>
             </section>
 
+            <CampaignSpendPanel subscriptions={activeSubscriptions} onRefresh={loadOverview} loading={loading} />
+
             <Card>
                 <CardHeader title="Pagos recientes" subtitle="Pix, reservas, activaciones y errores de operacion." />
                 <CardContent className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
@@ -768,6 +780,125 @@ function SubscriptionRow({ item }: { item: OverviewSubscription }) {
                     <p className="mt-0.5 text-[10px] font-bold text-[#66739a]">inversion {currency.format(item.adsBudget)}</p>
                 </div>
             </div>
+        </div>
+    );
+}
+
+function CampaignSpendPanel({
+    subscriptions,
+    onRefresh,
+    loading,
+}: {
+    subscriptions: OverviewSubscription[];
+    onRefresh: () => void;
+    loading: boolean;
+}) {
+    const rows = subscriptions
+        .filter((item) => item.campaignId || item.cycleSpend || item.todaySpend)
+        .sort((a, b) => Number(b.todaySpend || 0) - Number(a.todaySpend || 0));
+
+    const totals = rows.reduce(
+        (acc, item) => ({
+            today: acc.today + Number(item.todaySpend || 0),
+            cycle: acc.cycle + Number(item.cycleSpend || 0),
+            target: acc.target + Number(item.targetSpend || item.adsBudget || 0),
+        }),
+        { today: 0, cycle: 0, target: 0 },
+    );
+
+    return (
+        <Card>
+            <CardHeader
+                title="Monitoreo Meta"
+                subtitle="Gasto real diario y acumulado de campanas activas."
+                action={
+                    <Button type="button" variant="secondary" onClick={onRefresh} disabled={loading}>
+                        <AppIcon name="refresh" size="sm" plain className="h-4 w-4 text-current" />
+                        Actualizar
+                    </Button>
+                }
+            />
+            <CardContent className="space-y-3">
+                <div className="grid grid-cols-3 gap-2">
+                    <SpendMetric label="Hoy" value={totals.today} tone="blue" />
+                    <SpendMetric label="Ciclo" value={totals.cycle} tone="purple" />
+                    <SpendMetric label="Meta" value={totals.target} tone="green" />
+                </div>
+
+                <div className="grid gap-2 lg:grid-cols-2">
+                    {rows.map((item) => {
+                        const target = Number(item.targetSpend || item.adsBudget || 0);
+                        const cycle = Number(item.cycleSpend || 0);
+                        const pct = target > 0 ? Math.min(100, Math.round((cycle / target) * 100)) : 0;
+                        const status = item.spendStatus === "live" ? "En vivo" : item.spendStatus === "error" ? "Sin lectura" : "Guardado";
+                        return (
+                            <div key={item.id} className="rounded-2xl border border-[#e8e7fb] bg-white p-3">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                        <p className="truncate text-[13px] font-black text-[#101936]">{item.city || item.cityId}</p>
+                                        <p className="mt-0.5 truncate text-[11px] font-bold text-[#66739a]">{item.userName}</p>
+                                        <p className="mt-0.5 truncate text-[10px] font-semibold text-[#98a2b3]">{item.campaignName || item.campaignId || "Sin campana"}</p>
+                                    </div>
+                                    <span className={[
+                                        "shrink-0 rounded-full px-2 py-1 text-[9px] font-black uppercase",
+                                        item.spendStatus === "live" ? "bg-emerald-50 text-emerald-700" : item.spendStatus === "error" ? "bg-red-50 text-red-700" : "bg-[#f3f0ff] text-[#6d28d9]",
+                                    ].join(" ")}>
+                                        {status}
+                                    </span>
+                                </div>
+
+                                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                                    <SpendMetric label="Hoy" value={item.todaySpend || 0} tone="blue" compact />
+                                    <SpendMetric label="Ciclo" value={cycle} tone="purple" compact />
+                                    <SpendMetric label="Diario" value={item.dailyBudget || 0} tone="orange" compact />
+                                </div>
+
+                                <div className="mt-3">
+                                    <div className="mb-1 flex items-center justify-between text-[10px] font-black text-[#66739a]">
+                                        <span>{pct}% usado</span>
+                                        <span>{currency.format(cycle)} / {currency.format(target)}</span>
+                                    </div>
+                                    <div className="h-2 overflow-hidden rounded-full bg-[#eef1f5]">
+                                        <div
+                                            className={pct >= 95 ? "h-full rounded-full bg-red-500" : pct >= 80 ? "h-full rounded-full bg-amber-500" : "h-full rounded-full bg-[#7C3AED]"}
+                                            style={{ width: `${pct}%` }}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                    {!rows.length ? <EmptyInline text="No hay campanas activas para monitorear." /> : null}
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
+
+function SpendMetric({
+    label,
+    value,
+    tone,
+    compact = false,
+}: {
+    label: string;
+    value: number;
+    tone: "blue" | "purple" | "green" | "orange";
+    compact?: boolean;
+}) {
+    const toneClass = {
+        blue: "text-blue-700 bg-blue-50",
+        purple: "text-[#6d28d9] bg-[#f3f0ff]",
+        green: "text-emerald-700 bg-emerald-50",
+        orange: "text-orange-700 bg-orange-50",
+    }[tone];
+
+    return (
+        <div className={`rounded-2xl px-2 py-2 ${toneClass}`}>
+            <p className="text-[9px] font-black uppercase tracking-[0.08em] opacity-75">{label}</p>
+            <p className={`${compact ? "text-[13px]" : "text-[16px]"} mt-0.5 font-black tracking-[-0.04em]`}>
+                {currency.format(value)}
+            </p>
         </div>
     );
 }

@@ -466,23 +466,25 @@ export default function CommercialDirectoryPage() {
     }
 
     return (
-        <main className="mx-auto flex w-full max-w-[1240px] flex-col gap-4 pb-4">
-            <PageHeader
-                title="Directorio Comercial"
-                subtitle="Base de prospectos frios por pais, ciudad, barrio y categoria."
-                icon={<AppIcon name="map" plain className="h-5 w-5 text-current" />}
-                actions={
-                    <div className="flex gap-2">
-                        {canEdit ? <IconButton icon="plus" label="Crear estructura" variant="primary" onClick={() => setCreateOpen(true)} /> : null}
-                        <IconButton icon="refresh" label="Actualizar" variant="primary" onClick={loadAll} disabled={loading} />
-                    </div>
-                }
-            />
+        <main className="mx-auto flex w-full max-w-[1240px] flex-col gap-3 pb-4 xl:gap-4">
+            <div className="sticky top-0 z-30 -mx-3 border-b border-[#e8e7fb] bg-[#fbfaff]/95 px-3 pb-3 pt-2 backdrop-blur-xl sm:-mx-5 sm:px-5 xl:static xl:mx-0 xl:border-0 xl:bg-transparent xl:p-0 xl:backdrop-blur-0">
+                <PageHeader
+                    title="Directorio Comercial"
+                    subtitle="Base de prospectos frios por pais, ciudad, barrio y categoria."
+                    icon={<AppIcon name="map" plain className="h-5 w-5 text-current" />}
+                    actions={
+                        <div className="flex gap-2">
+                            {canEdit ? <IconButton icon="plus" label="Crear estructura" variant="primary" onClick={() => setCreateOpen(true)} /> : null}
+                            <IconButton icon="refresh" label="Actualizar" variant="primary" onClick={loadAll} disabled={loading} />
+                        </div>
+                    }
+                />
+            </div>
 
             {error ? <Notice tone="red">{error}</Notice> : null}
             {message ? <Notice tone="green">{message}</Notice> : null}
 
-            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <section className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1 [&>*]:min-w-[158px] sm:-mx-5 sm:px-5 xl:mx-0 xl:grid xl:grid-cols-4 xl:gap-3 xl:overflow-visible xl:px-0 xl:pb-0 xl:[&>*]:min-w-0">
                 <KpiCard label="Paises" value={stats.countries} caption="Carpetas raiz" icon="map" tone="blue" />
                 <KpiCard label="Barrios" value={stats.neighborhoods} caption="Zonas disponibles" icon="location" tone="green" />
                 <KpiCard label="Categorias" value={stats.categories} caption="Del barrio activo" icon="filter" tone="purple" />
@@ -490,7 +492,7 @@ export default function CommercialDirectoryPage() {
             </section>
 
             <section className="space-y-4">
-                <Card className="p-4">
+                <Card className="p-3 xl:p-4">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                         <div>
                             <h2 className="text-[14px] font-black text-[#101936]">Carpeta de trabajo</h2>
@@ -505,7 +507,7 @@ export default function CommercialDirectoryPage() {
                         ) : null}
                     </div>
 
-                    <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:mt-4 xl:grid-cols-4 xl:gap-3">
                         <SelectField label="Pais" value={countryId} onChange={(value) => setCountryId(value)}>
                             <option value="">Seleccionar pais...</option>
                             {countries.map((item) => <option key={item.id} value={item.id}>{item.name} ({locationCount(item)})</option>)}
@@ -528,7 +530,7 @@ export default function CommercialDirectoryPage() {
                     </div>
 
                     {canEdit ? (
-                        <div className="mt-4 flex flex-col gap-2 border-t border-[#eef1f5] pt-4 sm:flex-row sm:flex-wrap">
+                        <div className="mt-3 grid grid-cols-2 gap-2 border-t border-[#eef1f5] pt-3 sm:flex-row sm:flex-wrap xl:mt-4 xl:flex xl:pt-4">
                             <Button variant="primary" onClick={openAssignModal} disabled={!selectedCity || saving}>
                                 Asignar ciudad
                             </Button>
@@ -559,13 +561,13 @@ export default function CommercialDirectoryPage() {
 
                 <div className="space-y-4">
                     {canEdit ? (
-                        <Card className="p-4">
+                        <Card className="p-3 xl:p-4">
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                 <div>
                                     <h2 className="text-[14px] font-black text-[#101936]">Importar Excel</h2>
                                     <p className="mt-1 text-[12px] font-semibold text-[#66739A]">Cada hoja crea una categoria automaticamente.</p>
                                 </div>
-                                <label className="inline-flex min-h-10 cursor-pointer items-center justify-center rounded-[14px] border border-[#ded8ff] bg-white px-3 py-2 text-[12px] font-bold text-[#312e81] shadow-sm transition hover:bg-[#f8f7ff]">
+                                <label className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-[14px] border border-[#ded8ff] bg-[#f8f7ff] px-3 py-2 text-[12px] font-bold text-[#312e81] shadow-sm transition hover:bg-[#f3f0ff]">
                                     {parsing ? "Leyendo..." : "Seleccionar .xlsx"}
                                     <input
                                         type="file"
@@ -644,7 +646,7 @@ export default function CommercialDirectoryPage() {
                             <Badge tone="purple">{prospects.length} visibles</Badge>
                         </div>
 
-                        <div className="overflow-x-auto">
+                        <div className="hidden overflow-x-auto sm:block">
                             <table className="w-full min-w-[760px] text-left text-[12px]">
                                 <thead className="bg-[#f8f7ff] text-[#66739A]">
                                     <tr>
@@ -681,9 +683,35 @@ export default function CommercialDirectoryPage() {
                                 </tbody>
                             </table>
                         </div>
+
+                        <div className="grid gap-2 p-3 sm:hidden">
+                            {prospects.map((item) => (
+                                <div key={item.id} className="rounded-[16px] border border-[#e8e7fb] bg-white p-3">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="min-w-0">
+                                            <p className="truncate text-[13px] font-black text-[#101936]">{item.name}</p>
+                                            <p className="mt-0.5 truncate text-[11px] font-semibold text-[#66739A]">{item.categoryName}</p>
+                                        </div>
+                                        <Badge tone="blue">Nuevo</Badge>
+                                    </div>
+                                    <p className="mt-2 truncate text-[12px] font-semibold text-[#344054]">{item.phone || "Sin telefono"}</p>
+                                    <p className="mt-1 line-clamp-2 text-[11px] font-semibold leading-snug text-[#66739A]">{item.address || "Sin direccion"}</p>
+                                    {item.googleMapsLink ? (
+                                        <a href={item.googleMapsLink} target="_blank" rel="noreferrer" className="mt-2 inline-flex min-h-9 items-center rounded-[12px] bg-emerald-50 px-3 text-[12px] font-black text-emerald-700">
+                                            Abrir Maps
+                                        </a>
+                                    ) : null}
+                                </div>
+                            ))}
+                            {!prospects.length ? (
+                                <p className="rounded-[16px] border border-[#e8e7fb] bg-white px-3 py-8 text-center text-[12px] font-bold text-[#98A2B3]">
+                                    {loading ? "Cargando..." : "No hay prospectos en esta vista."}
+                                </p>
+                            ) : null}
+                        </div>
                     </Card>
 
-                    <Card className="p-4">
+                    <Card className="p-3 xl:p-4">
                         <h2 className="text-[14px] font-black text-[#101936]">Ultimas importaciones</h2>
                         <div className="mt-3 grid gap-2">
                             {imports.map((item) => (

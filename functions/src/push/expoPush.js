@@ -53,7 +53,7 @@ async function getWebPushTokens(uid) {
         .filter((item) => item.token);
 }
 
-async function sendWebPush({ uid, clientId, title, body }) {
+async function sendWebPush({ uid, clientId, title, body, linkPath, type }) {
     const tokens = await getWebPushTokens(uid);
     if (!tokens.length) {
         console.log("[PUSH] user has no webPushTokens", uid);
@@ -61,12 +61,13 @@ async function sendWebPush({ uid, clientId, title, body }) {
     }
 
     const appUrl = cleanString(process.env.TRACKGO_APP_URL) || "https://trackgo.co";
-    const link = `${appUrl}/user/leads?clientId=${encodeURIComponent(clientId)}`;
+    const fallbackPath = `/user/leads?clientId=${encodeURIComponent(clientId)}`;
+    const link = `${appUrl}${linkPath || fallbackPath}`;
     const messages = tokens.map((item) => ({
         token: item.token,
         notification: { title, body },
         data: {
-            type: "client_assigned",
+            type: type || "client_assigned",
             clientId,
             link,
         },
@@ -106,6 +107,22 @@ async function sendWebPush({ uid, clientId, title, body }) {
     });
 }
 
+async function getAdminPushTargets() {
+    const snap = await db
+        .collection("users")
+        .where("role", "==", "admin")
+        .where("active", "==", true)
+        .get();
+
+    return snap.docs
+        .map((doc) => ({ id: doc.id, data: doc.data() || {} }))
+        .filter((item) => {
+            if (item.data.isSuperAdmin === true) return true;
+            const permissions = item.data.permissions || {};
+            return permissions.prospectos === true || permissions.chatView === true;
+        });
+}
+
 async function notifyAssignedUser({ clientId, after }) {
     const afterUid = after.assignedTo || null;
     if (!afterUid) return;
@@ -129,8 +146,32 @@ async function notifyAssignedUser({ clientId, after }) {
     }
 }
 
+async function notifyLeadQueueAdmins({ clientId, after }) {
+    if (after.assignedTo) return;
+    const source = cleanString(after.source);
+    if (source && source !== "whatsapp_meta") return;
+
+    const { title, body } = notificationText(after);
+    const targets = await getAdminPushTargets();
+    await Promise.all(
+        targets.map((target) =>
+            sendWebPush({
+                uid: target.id,
+                clientId,
+                title: title.replace("Cliente nuevo", "Prospecto nuevo"),
+                body,
+                linkPath: `/admin/leads/${encodeURIComponent(clientId)}?from=leads`,
+                type: "admin_lead_queue",
+            }).catch((error) => {
+                console.log("[PUSH] admin target error", target.id, error);
+            })
+        )
+    );
+}
+
 module.exports = {
     sendExpoPush,
     sendWebPush,
     notifyAssignedUser,
+    notifyLeadQueueAdmins,
 };
