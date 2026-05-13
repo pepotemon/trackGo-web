@@ -300,7 +300,6 @@ function detectUnsupportedProfileSignals(text) {
             "rappi",
             "loggi",
             "indriver",
-            "delivery",
             "repartidor de app",
             "conductor de app",
         ]) ||

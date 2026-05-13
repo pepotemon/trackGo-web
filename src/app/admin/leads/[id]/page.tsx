@@ -10,8 +10,9 @@ import {
     subscribeLeadClient,
     subscribeLeadMessages,
 } from "@/data/leadChatRepo";
-import { assignLeadToUser, updateLeadStatus } from "@/data/leadsRepo";
+import { assignLeadToUser, deleteLead, updateLeadStatus } from "@/data/leadsRepo";
 import { LeadEditModal } from "@/features/leads/LeadEditModal";
+import { AssignUserModal } from "@/features/leads/AssignUserModal";
 import { listAdminUsers } from "@/data/usersRepo";
 import { useCan } from "@/features/auth/usePermissions";
 import { useAuth } from "@/features/auth/AuthProvider";
@@ -20,7 +21,14 @@ import { phoneMatchesCoverageCodes } from "@/lib/phoneCoverage";
 import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
 import type { LeadChatMode, LeadMessageDoc, LeadReviewStatus, MetaLeadDoc } from "@/types/leads";
 import type { UserDoc } from "@/types/users";
-import { AppIcon, Badge, Button, Card, CardHeader, IconButton, Input, PageHeader } from "@/components/ui";
+import { AppIcon, Badge, Button, Card, CardHeader, IconButton, Input, Modal, PageHeader } from "@/components/ui";
+
+const STATUS_OPTIONS: { value: LeadReviewStatus; label: string }[] = [
+    { value: "pending_review", label: "Por revisar" },
+    { value: "incomplete", label: "Incompleto" },
+    { value: "not_suitable", label: "No apto" },
+    { value: "verified", label: "Verificado" },
+];
 
 const statusLabel: Record<LeadReviewStatus, string> = {
     pending_review: "Por revisar",
@@ -97,6 +105,8 @@ export default function LeadChatPage() {
     const canAssign = useCan("leadsAssign");
     const canMaps = useCan("activityMaps");
     const canWhatsapp = useCan("leadsWhatsapp");
+    const canStatusManage = useCan("leadsStatusManage");
+    const canDelete = useCan("leadsDelete");
     const canClientView = useCan("activityClientView") || canChatView;
 
     const [lead, setLead] = useState<MetaLeadDoc | null>(null);
@@ -104,10 +114,15 @@ export default function LeadChatPage() {
     const [users, setUsers] = useState<UserDoc[]>([]);
     const [draft, setDraft] = useState("");
     const [editOpen, setEditOpen] = useState(false);
+    const [assignOpen, setAssignOpen] = useState(false);
+    const [statusOpen, setStatusOpen] = useState(false);
     const [loadingLead, setLoadingLead] = useState(true);
     const [loadingMessages, setLoadingMessages] = useState(true);
     const [sending, setSending] = useState(false);
     const [busyMode, setBusyMode] = useState(false);
+    const [assigningUser, setAssigningUser] = useState(false);
+    const [savingStatus, setSavingStatus] = useState(false);
+    const [deletingLead, setDeletingLead] = useState(false);
     const [err, setErr] = useState<string | null>(null);
     const [mobileQueue, setMobileQueue] = useState<string[]>([]);
     const [quickActionsOpen, setQuickActionsOpen] = useState(false);
@@ -117,7 +132,9 @@ export default function LeadChatPage() {
     useEffect(() => {
         try {
             const raw = sessionStorage.getItem("leads_mobile_queue");
-            if (raw) setMobileQueue(JSON.parse(raw) as string[]);
+            if (raw) {
+                queueMicrotask(() => setMobileQueue(JSON.parse(raw) as string[]));
+            }
         } catch {}
     }, []);
 
@@ -289,6 +306,7 @@ export default function LeadChatPage() {
     async function assign(userId: string) {
         if (!canAssign || !userId) return;
         setErr(null);
+        setAssigningUser(true);
 
         try {
             await updateLeadStatus(clientId, {
@@ -298,8 +316,65 @@ export default function LeadChatPage() {
                 verifiedAt: Date.now(),
             });
             await assignLeadToUser(clientId, userId);
+            setAssignOpen(false);
         } catch (error) {
             setErr(error instanceof Error ? error.message : "No se pudo asignar el lead.");
+        } finally {
+            setAssigningUser(false);
+        }
+    }
+
+    async function changeReviewStatus(status: LeadReviewStatus, notSuitableReason?: string | null) {
+        if (!lead || !canStatusManage) return;
+        if (lead.assignedTo) {
+            setErr("No se puede cambiar el estado de un cliente ya asignado.");
+            setStatusOpen(false);
+            return;
+        }
+
+        setSavingStatus(true);
+        setErr(null);
+
+        try {
+            await updateLeadStatus(clientId, {
+                verificationStatus: status,
+                leadQuality:
+                    status === "verified"
+                        ? "valid"
+                        : status === "not_suitable"
+                            ? "not_suitable"
+                            : status === "pending_review"
+                                ? "review"
+                                : "unknown",
+                notSuitableReason:
+                    status === "not_suitable"
+                        ? notSuitableReason || lead.notSuitableReason || "Perfil no apto"
+                        : "",
+                verifiedAt: status === "verified" ? Date.now() : null,
+            });
+            setStatusOpen(false);
+        } catch (error) {
+            setErr(error instanceof Error ? error.message : "No se pudo cambiar el estado.");
+        } finally {
+            setSavingStatus(false);
+        }
+    }
+
+    async function removeLead() {
+        if (!lead || !canDelete) return;
+        const ok = window.confirm(`¿Eliminar el lead "${displayName(lead)}"? Esta acción no se puede deshacer.`);
+        if (!ok) return;
+
+        setDeletingLead(true);
+        setErr(null);
+
+        try {
+            await deleteLead(clientId);
+            router.replace(returnTo);
+        } catch (error) {
+            setErr(error instanceof Error ? error.message : "No se pudo eliminar el lead.");
+        } finally {
+            setDeletingLead(false);
         }
     }
 
@@ -446,45 +521,79 @@ export default function LeadChatPage() {
 
                 {/* QUICK ACTIONS BOTTOM SHEET */}
                 {quickActionsOpen ? (
-                    <div className="fixed inset-0 z-50 flex items-end">
-                        <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" onClick={() => setQuickActionsOpen(false)} />
-                        <div className="relative w-full rounded-t-[24px] bg-white px-4 pb-8 pt-4 shadow-2xl">
-                            <div className="mb-4 flex items-start justify-between gap-3">
+                    <>
+                        <button
+                            type="button"
+                            onClick={() => setQuickActionsOpen(false)}
+                            className="fixed inset-0 z-40 bg-black/40 xl:hidden"
+                            aria-label="Cerrar"
+                        />
+                        <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-[24px] bg-white px-4 pb-8 pt-4 shadow-[0_-8px_40px_rgba(0,0,0,0.18)] xl:hidden">
+                            <div className="mx-auto mb-4 h-1 w-12 rounded-full bg-[#E8E7FB]" />
+                            <div className="mb-4 min-w-0">
                                 <div className="min-w-0">
-                                    <h3 className="truncate text-[16px] font-black text-[#101936]">{displayName(lead)}</h3>
+                                    <h3 className="truncate text-[15px] font-black text-[#101936]">{displayName(lead)}</h3>
                                     <p className="mt-0.5 truncate text-[12px] font-semibold text-[#66739A]">
                                         {[lead?.phone, lead?.location?.displayLabel].filter(Boolean).join(" · ") || "Sin datos"}
                                     </p>
                                 </div>
-                                <button
-                                    type="button"
-                                    onClick={() => setQuickActionsOpen(false)}
-                                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f3f0ff] text-[20px] text-[#7C3AED] transition active:bg-violet-200"
-                                >
-                                    ×
-                                </button>
                             </div>
 
-                            <div className="grid grid-cols-4 gap-3">
-                                <Link
-                                    href={`/admin/clients/${clientId}`}
-                                    className="flex flex-col items-center gap-2 rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] py-4 transition active:bg-[#f3f0ff]"
-                                    onClick={closeQuickActionsForNavigation}
-                                >
-                                    <AppIcon name="users" tone="purple" size="sm" className="h-6 w-6 bg-transparent text-[#7C3AED] ring-0" />
-                                    <span className="text-[10px] font-black text-[#66739A]">Ver cliente</span>
-                                </Link>
+                            <div className="grid gap-2">
+                                {canClientView ? (
+                                    <Link
+                                        href={`/admin/clients/${clientId}`}
+                                        className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#f3f0ff] px-4 text-[14px] font-bold text-[#101936] transition active:bg-violet-200"
+                                        onClick={closeQuickActionsForNavigation}
+                                    >
+                                        <AppIcon name="users" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#7C3AED] ring-0" />
+                                        Ver cliente
+                                    </Link>
+                                ) : null}
+
+                                {canEdit ? (
+                                    <button
+                                        type="button"
+                                        className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#fff7ed] px-4 text-[14px] font-bold text-[#101936] transition active:bg-orange-100"
+                                        onClick={() => { setQuickActionsOpen(false); setEditOpen(true); }}
+                                    >
+                                        <AppIcon name="edit" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-orange-600 ring-0" />
+                                        Editar
+                                    </button>
+                                ) : null}
+
+                                {canAssign ? (
+                                    <button
+                                        type="button"
+                                        className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#f3f0ff] px-4 text-[14px] font-bold text-[#101936] transition active:bg-violet-200"
+                                        onClick={() => { setQuickActionsOpen(false); setAssignOpen(true); }}
+                                    >
+                                        <AppIcon name="assign" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-[#7C3AED] ring-0" />
+                                        Asignar a usuario
+                                    </button>
+                                ) : null}
+
+                                {canStatusManage && !lead?.assignedTo ? (
+                                    <button
+                                        type="button"
+                                        className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-blue-50 px-4 text-[14px] font-bold text-[#101936] transition active:bg-blue-100"
+                                        onClick={() => { setQuickActionsOpen(false); setStatusOpen(true); }}
+                                    >
+                                        <AppIcon name="settings" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-blue-600 ring-0" />
+                                        Estado
+                                    </button>
+                                ) : null}
 
                                 {lead?.location?.mapsUrl && canMaps ? (
                                     <Link
                                         href={lead.location.mapsUrl}
                                         target="_blank"
                                         rel="noreferrer"
-                                        className="flex flex-col items-center gap-2 rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] py-4 transition active:bg-[#f3f0ff]"
+                                        className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-emerald-50 px-4 text-[14px] font-bold text-[#101936] transition active:bg-emerald-100"
                                         onClick={closeQuickActionsForNavigation}
                                     >
-                                        <AppIcon name="map" tone="green" size="sm" className="h-6 w-6 bg-transparent text-emerald-600 ring-0" />
-                                        <span className="text-[10px] font-black text-[#66739A]">Maps</span>
+                                        <AppIcon name="map" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-emerald-600 ring-0" />
+                                        Maps
                                     </Link>
                                 ) : null}
 
@@ -493,27 +602,36 @@ export default function LeadChatPage() {
                                         href={buildWhatsAppUrl(lead.phone)}
                                         target="_blank"
                                         rel="noreferrer"
-                                        className="flex flex-col items-center gap-2 rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] py-4 transition active:bg-[#f3f0ff]"
+                                        className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-emerald-50 px-4 text-[14px] font-bold text-[#101936] transition active:bg-emerald-100"
                                         onClick={closeQuickActionsForNavigation}
                                     >
-                                        <AppIcon name="chat" tone="green" size="sm" className="h-6 w-6 bg-transparent text-emerald-600 ring-0" />
-                                        <span className="text-[10px] font-black text-[#66739A]">WhatsApp</span>
+                                        <AppIcon name="chat" tone="slate" size="sm" className="h-5 w-5 bg-transparent text-emerald-600 ring-0" />
+                                        WhatsApp
                                     </Link>
                                 ) : null}
 
-                                {canEdit ? (
+                                {canDelete ? (
                                     <button
                                         type="button"
-                                        className="flex flex-col items-center gap-2 rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] py-4 transition active:bg-[#f3f0ff]"
-                                        onClick={() => { setQuickActionsOpen(false); setEditOpen(true); }}
+                                        className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-red-50 px-4 text-[14px] font-bold text-[#101936] transition active:bg-red-100 disabled:opacity-50"
+                                        onClick={() => { setQuickActionsOpen(false); void removeLead(); }}
+                                        disabled={deletingLead}
                                     >
-                                        <AppIcon name="edit" tone="purple" size="sm" className="h-6 w-6 bg-transparent text-[#7C3AED] ring-0" />
-                                        <span className="text-[10px] font-black text-[#66739A]">Editar</span>
+                                        <AppIcon name="trash" tone="red" size="sm" className="h-5 w-5 bg-transparent ring-0" />
+                                        Eliminar lead
                                     </button>
                                 ) : null}
                             </div>
+
+                            <button
+                                type="button"
+                                onClick={() => setQuickActionsOpen(false)}
+                                className="mt-3 min-h-[48px] w-full rounded-[14px] border border-[#E8E7FB] bg-[#f8f7ff] text-[14px] font-bold text-[#66739A] transition active:bg-[#f3f0ff]"
+                            >
+                                Cancelar
+                            </button>
                         </div>
-                    </div>
+                    </>
                 ) : null}
             </div>
 
@@ -530,12 +648,39 @@ export default function LeadChatPage() {
                             {lead?.location?.mapsUrl && canMaps ? (
                                 <QuickLink href={lead.location.mapsUrl} icon="map" label="Maps" external />
                             ) : null}
+                            {lead?.phone && canWhatsapp ? (
+                                <QuickLink href={buildWhatsAppUrl(lead.phone)} icon="chat" label="WhatsApp" external />
+                            ) : null}
                             {canEdit ? (
                                 <IconButton
                                     icon="edit"
                                     label="Editar lead"
                                     onClick={() => setEditOpen(true)}
                                     disabled={!lead}
+                                />
+                            ) : null}
+                            {canAssign ? (
+                                <IconButton
+                                    icon="assign"
+                                    label="Asignar usuario"
+                                    onClick={() => setEditOpen(true)}
+                                    disabled={!lead}
+                                />
+                            ) : null}
+                            {canStatusManage && !lead?.assignedTo ? (
+                                <IconButton
+                                    icon="settings"
+                                    label="Cambiar estado"
+                                    onClick={() => setStatusOpen(true)}
+                                    disabled={!lead}
+                                />
+                            ) : null}
+                            {canDelete ? (
+                                <IconButton
+                                    icon="trash"
+                                    label="Eliminar lead"
+                                    onClick={() => void removeLead()}
+                                    disabled={!lead || deletingLead}
                                 />
                             ) : null}
                             {canChat ? (
@@ -718,7 +863,120 @@ export default function LeadChatPage() {
                 users={users}
                 onAssign={(_lead, userId) => assign(userId)}
             />
+
+            <LeadStatusModal
+                lead={statusOpen && canStatusManage && !lead?.assignedTo ? lead : null}
+                saving={savingStatus}
+                onClose={() => setStatusOpen(false)}
+                onSave={(_lead, status, notSuitableReason) => changeReviewStatus(status, notSuitableReason)}
+            />
+
+            <AssignUserModal
+                open={assignOpen && canAssign}
+                onClose={() => setAssignOpen(false)}
+                users={users}
+                onAssign={(userId) => void assign(userId)}
+                saving={assigningUser}
+            />
         </div>
+    );
+}
+
+function LeadStatusModal({
+    lead,
+    saving,
+    onClose,
+    onSave,
+}: {
+    lead: MetaLeadDoc | null;
+    saving: boolean;
+    onClose: () => void;
+    onSave: (lead: MetaLeadDoc, status: LeadReviewStatus, notSuitableReason?: string | null) => Promise<void>;
+}) {
+    const [status, setStatus] = useState<LeadReviewStatus>("pending_review");
+    const [reason, setReason] = useState("");
+
+    useEffect(() => {
+        if (!lead) return;
+        queueMicrotask(() => {
+            setStatus(lead.verificationStatus);
+            setReason(lead.notSuitableReason || "");
+        });
+    }, [lead]);
+
+    if (!lead) return null;
+
+    const needsReason = status === "not_suitable";
+
+    return (
+        <Modal
+            open={!!lead}
+            onClose={onClose}
+            title="Cambiar estado"
+            subtitle={displayName(lead)}
+            size="sm"
+        >
+            <div className="space-y-4">
+                <div className="rounded-2xl border border-[#eef0f6] bg-[#fbfcff] p-3">
+                    <div className="text-[11px] font-bold uppercase tracking-[0.06em] text-[#98a2b3]">Estado actual</div>
+                    <div className="mt-2 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                            <div className="truncate text-[13px] font-black text-[#101936]">{displayName(lead)}</div>
+                            <div className="truncate text-[12px] font-semibold text-[#66739a]">{lead.business || lead.phone}</div>
+                        </div>
+                        <Badge tone={statusTone[lead.verificationStatus]}>{statusLabel[lead.verificationStatus]}</Badge>
+                    </div>
+                </div>
+
+                <div className="grid gap-2">
+                    {STATUS_OPTIONS.map((option) => {
+                        const active = status === option.value;
+                        return (
+                            <button
+                                key={option.value}
+                                type="button"
+                                onClick={() => setStatus(option.value)}
+                                className={[
+                                    "flex items-center justify-between rounded-2xl border px-3 py-3 text-left transition",
+                                    active
+                                        ? "border-violet-200 bg-[#f5f1ff] text-[#6d28d9]"
+                                        : "border-[#e8eaf3] bg-white text-[#172033] hover:border-violet-100 hover:bg-[#fbfaff]",
+                                ].join(" ")}
+                            >
+                                <span className="text-[13px] font-black">{option.label}</span>
+                                {active ? <AppIcon name="check" tone="purple" size="sm" /> : null}
+                            </button>
+                        );
+                    })}
+                </div>
+
+                {needsReason ? (
+                    <label className="block">
+                        <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.06em] text-[#98a2b3]">Motivo</span>
+                        <textarea
+                            value={reason}
+                            onChange={(event) => setReason(event.target.value)}
+                            rows={3}
+                            placeholder="Ej: fuera de perfil, asalariado, motorista..."
+                            className="w-full resize-none rounded-2xl border border-[#e8eaf3] bg-white px-3 py-2.5 text-[13px] font-semibold text-[#172033] outline-none transition placeholder:text-[#98a2b3] focus:border-violet-300 focus:ring-4 focus:ring-violet-50"
+                        />
+                    </label>
+                ) : null}
+
+                <div className="flex justify-end gap-2 pt-1">
+                    <Button variant="ghost" onClick={onClose} disabled={saving}>
+                        Cancelar
+                    </Button>
+                    <Button
+                        variant="primary"
+                        onClick={() => onSave(lead, status, needsReason ? reason.trim() || null : null)}
+                        disabled={saving || (status === lead.verificationStatus && (!needsReason || reason.trim() === (lead.notSuitableReason || "")))}
+                    >
+                        {saving ? "Guardando..." : "Guardar"}
+                    </Button>
+                </div>
+            </div>
+        </Modal>
     );
 }
 
@@ -729,7 +987,7 @@ function QuickLink({
     external = false,
 }: {
     href: string;
-    icon: "lead" | "users" | "map";
+    icon: "lead" | "users" | "map" | "chat";
     label: string;
     external?: boolean;
 }) {
@@ -742,7 +1000,7 @@ function QuickLink({
             title={label}
             className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#e4e7ec] bg-white text-[#344054] shadow-sm transition hover:bg-[#f8f7ff] hover:text-[#4f46e5]"
         >
-            <AppIcon name={icon} tone={icon === "map" ? "green" : "purple"} size="sm" plain />
+            <AppIcon name={icon} tone={icon === "map" || icon === "chat" ? "green" : "purple"} size="sm" plain />
         </Link>
     );
 }
