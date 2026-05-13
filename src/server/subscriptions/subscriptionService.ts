@@ -4,7 +4,7 @@ import { ResponseError } from "@/server/auth";
 import { adminDb } from "@/server/firebaseAdmin";
 import { cancelMercadoPagoPayment, createPixPayment, getMercadoPagoPayment } from "@/server/subscriptions/mercadoPago";
 import { calculateAdsBudget, calculateAdsBudgetAllocation, calculateCycleEnd, getPlanAmount } from "@/server/subscriptions/plans";
-import { configureAndActivateCityCampaign, getActiveCityCampaignSnapshot, pauseCityCampaign, resumeCityCampaign } from "@/server/subscriptions/metaAds";
+import { configureAndActivateCityCampaign, getActiveCityCampaignSnapshot, getMetaCampaignCycleSpend, pauseCityCampaign, resumeCityCampaign } from "@/server/subscriptions/metaAds";
 import { sendPushToUser } from "@/server/push";
 import type { PixCheckoutResponse, SubscriptionPlanId } from "@/types/subscriptions";
 
@@ -439,6 +439,8 @@ export async function createPixSubscriptionCheckout(input: {
             reservedBudget: budgetAllocation.reservedBudget,
             totalBudget: budgetAllocation.totalBudget,
             reservePercent: budgetAllocation.reservePercent,
+            targetSpend: budgetAllocation.totalBudget,
+            spendPauseThreshold: Math.round(budgetAllocation.totalBudget * 0.98 * 100) / 100,
             adsShare: settings.adsShare,
             cycleDays: settings.cycleDays,
             paymentId: "",
@@ -564,6 +566,7 @@ export async function activateManualSubscription(input: {
     }
 
     const budgetAllocation = calculateAdsBudgetAllocation(adsBudget, cycleDays);
+    const spendPauseThreshold = Math.round(budgetAllocation.totalBudget * 0.98 * 100) / 100;
     const subscriptionId = `manual_${userId}_${cityId}_${randomUUID()}`;
     const subscriptionRef = adminDb.collection("subscriptions").doc(subscriptionId);
     const cityRef = adminDb.collection("cities").doc(cityId);
@@ -641,6 +644,11 @@ export async function activateManualSubscription(input: {
             reservedBudget: budgetAllocation.reservedBudget,
             totalBudget: budgetAllocation.totalBudget,
             reservePercent: budgetAllocation.reservePercent,
+            targetSpend: budgetAllocation.totalBudget,
+            spendPauseThreshold,
+            spendBaseline: metaSnapshot?.spendBaseline ?? 0,
+            cycleSpend: 0,
+            lastSpendCheckedAt: now,
             adsShare: settings.adsShare,
             cycleDays,
             status: "active",
@@ -658,6 +666,7 @@ export async function activateManualSubscription(input: {
             metaBudgetMode: metaSnapshot?.adset.budgetMode || null,
             metaDailyBudget: metaSnapshot?.adset.dailyBudget || null,
             metaLifetimeBudget: metaSnapshot?.adset.lifetimeBudget || null,
+            metaSpendBaseline: metaSnapshot?.spendBaseline ?? null,
             createdBy: input.createdBy,
             createdByName: input.createdByName || input.createdBy,
             startDate: Timestamp.fromDate(startDate),
@@ -894,6 +903,8 @@ export async function processMercadoPagoPayment(paymentId: string) {
             plan: freshCheckout.plan,
             amount: freshCheckout.amount,
             adsBudget: freshCheckout.adsBudget,
+            targetSpend: freshCheckout.targetSpend || freshCheckout.adsBudget,
+            spendPauseThreshold: freshCheckout.spendPauseThreshold || Math.round(Number(freshCheckout.adsBudget || 0) * 0.98 * 100) / 100,
             status: "provisioning",
             startDate: Timestamp.fromDate(startDate),
             endDate: Timestamp.fromDate(calculateCycleEnd(startDate, cycleDays)),
@@ -944,6 +955,11 @@ export async function processMercadoPagoPayment(paymentId: string) {
                     lifetimeBudget: campaign.lifetimeBudget,
                     budgetMode: campaign.budgetMode,
                     reservePercent: campaign.reservePercent,
+                    targetSpend: campaign.targetSpend,
+                    spendPauseThreshold: campaign.spendPauseThreshold,
+                    spendBaseline: campaign.spendBaseline,
+                    cycleSpend: 0,
+                    lastSpendCheckedAt: nowMs(),
                     startDate: Timestamp.fromDate(campaign.startDate),
                     endDate: Timestamp.fromDate(campaign.endDate),
                     updatedAt: nowMs(),
@@ -961,6 +977,11 @@ export async function processMercadoPagoPayment(paymentId: string) {
                     lifetimeBudget: campaign.lifetimeBudget,
                     budgetMode: campaign.budgetMode,
                     reservePercent: campaign.reservePercent,
+                    targetSpend: campaign.targetSpend,
+                    spendPauseThreshold: campaign.spendPauseThreshold,
+                    spendBaseline: campaign.spendBaseline,
+                    cycleSpend: 0,
+                    lastSpendCheckedAt: nowMs(),
                     updatedAt: nowMs(),
                 },
                 { merge: true },
@@ -1165,6 +1186,11 @@ export async function retryMetaActivation(checkoutId: string) {
                     lifetimeBudget: campaign.lifetimeBudget,
                     budgetMode: campaign.budgetMode,
                     reservePercent: campaign.reservePercent,
+                    targetSpend: campaign.targetSpend,
+                    spendPauseThreshold: campaign.spendPauseThreshold,
+                    spendBaseline: campaign.spendBaseline,
+                    cycleSpend: 0,
+                    lastSpendCheckedAt: nowMs(),
                     startDate: Timestamp.fromDate(campaign.startDate),
                     endDate: Timestamp.fromDate(campaign.endDate),
                     updatedAt: nowMs(),
@@ -1183,6 +1209,11 @@ export async function retryMetaActivation(checkoutId: string) {
                     lifetimeBudget: campaign.lifetimeBudget,
                     budgetMode: campaign.budgetMode,
                     reservePercent: campaign.reservePercent,
+                    targetSpend: campaign.targetSpend,
+                    spendPauseThreshold: campaign.spendPauseThreshold,
+                    spendBaseline: campaign.spendBaseline,
+                    cycleSpend: 0,
+                    lastSpendCheckedAt: nowMs(),
                     updatedAt: nowMs(),
                 },
                 { merge: true },
@@ -1366,7 +1397,6 @@ export async function releaseSubscriptionCity(cityId: string) {
 }
 
 export async function expireDueSubscriptions(limit = 20) {
-    const now = Timestamp.now();
     const nowMillis = nowMs();
     // Stuck "expiring" docs older than 10 min are considered safe to resume.
     const stuckThresholdMs = nowMillis - 10 * 60 * 1000;
@@ -1382,8 +1412,7 @@ export async function expireDueSubscriptions(limit = 20) {
     const activeSnap = await adminDb
         .collection("subscriptions")
         .where("status", "==", "active")
-        .where("endDate", "<=", now)
-        .limit(limit)
+        .limit(Math.max(limit, 50))
         .get();
 
     // ── 2. Stuck "expiring" (process crashed between lock and completion) ─────
@@ -1412,6 +1441,7 @@ export async function expireDueSubscriptions(limit = 20) {
 
     // ── Process active ────────────────────────────────────────────────────────
     for (const doc of activeSnap.docs) {
+        if (results.filter((item) => item.status !== "skipped").length >= limit) break;
         const subscriptionId = doc.id;
         const subscription = doc.data();
         const cityId = String(subscription.cityId || "");
@@ -1429,6 +1459,48 @@ export async function expireDueSubscriptions(limit = 20) {
             continue;
         }
 
+        const endDateMs = timestampToMs(subscription.endDate);
+        let expirationReason: "target_spend_reached" | "safety_deadline" | null =
+            endDateMs !== null && endDateMs <= nowMillis ? "safety_deadline" : null;
+        let spendSnapshot: Awaited<ReturnType<typeof getMetaCampaignCycleSpend>> | null = null;
+
+        if (!expirationReason && campaignId) {
+            const spendPauseThreshold = Number(subscription.spendPauseThreshold || subscription.targetSpend || subscription.adsBudget || 0);
+            if (Number.isFinite(spendPauseThreshold) && spendPauseThreshold > 0) {
+                try {
+                    spendSnapshot = await getMetaCampaignCycleSpend({
+                        campaignId,
+                        spendBaseline: Number(subscription.spendBaseline || 0),
+                    });
+                    await doc.ref.set(
+                        {
+                            cycleSpend: spendSnapshot.cycleSpend,
+                            metaTotalSpend: spendSnapshot.totalSpend,
+                            spendBaseline: spendSnapshot.spendBaseline,
+                            lastSpendCheckedAt: nowMs(),
+                            lastSpendCheckFailure: FieldValue.delete(),
+                            updatedAt: nowMs(),
+                        },
+                        { merge: true },
+                    );
+                    if (spendSnapshot.cycleSpend >= spendPauseThreshold) {
+                        expirationReason = "target_spend_reached";
+                    }
+                } catch (error) {
+                    await doc.ref.set(
+                        {
+                            lastSpendCheckedAt: nowMs(),
+                            lastSpendCheckFailure: error instanceof Error ? error.message : "meta_spend_check_failed",
+                            updatedAt: nowMs(),
+                        },
+                        { merge: true },
+                    );
+                }
+            }
+        }
+
+        if (!expirationReason) continue;
+
         const locked = await adminDb.runTransaction(async (tx) => {
             const fresh = await tx.get(doc.ref);
             const data = fresh.data() || {};
@@ -1442,7 +1514,10 @@ export async function expireDueSubscriptions(limit = 20) {
             continue;
         }
 
-        results.push(await expireWithCampaign(doc.ref, subscriptionId, subscription, cityId, campaignId, adsetIds));
+        results.push(await expireWithCampaign(doc.ref, subscriptionId, subscription, cityId, campaignId, adsetIds, {
+            reason: expirationReason,
+            spendSnapshot,
+        }));
     }
 
     // ── Process stuck expiring ────────────────────────────────────────────────
@@ -1474,7 +1549,10 @@ export async function expireDueSubscriptions(limit = 20) {
             continue;
         }
 
-        results.push(await expireWithCampaign(doc.ref, subscriptionId, subscription, cityId, campaignId, adsetIds));
+        results.push(await expireWithCampaign(doc.ref, subscriptionId, subscription, cityId, campaignId, adsetIds, {
+            reason: "safety_deadline",
+            spendSnapshot: null,
+        }));
     }
 
     // ── Process provisioning / meta_failed past endDate ───────────────────────
@@ -1543,6 +1621,10 @@ async function expireWithCampaign(
     cityId: string,
     campaignId: string,
     adsetIds: string[],
+    meta?: {
+        reason?: "target_spend_reached" | "safety_deadline";
+        spendSnapshot?: Awaited<ReturnType<typeof getMetaCampaignCycleSpend>> | null;
+    },
 ): Promise<{ subscriptionId: string; cityId: string; status: "expired" | "failed"; message?: string }> {
     try {
         if (campaignId) {
@@ -1559,7 +1641,20 @@ async function expireWithCampaign(
                     city.ownerUserId === subscription.userId &&
                     (city.activeCampaignId === campaignId || city.campaignId === campaignId));
 
-            tx.set(docRef, { status: "expired", endedAt: nowMs(), updatedAt: nowMs() }, { merge: true });
+            tx.set(docRef, {
+                status: "expired",
+                endedAt: nowMs(),
+                expirationReason: meta?.reason || "safety_deadline",
+                ...(meta?.spendSnapshot
+                    ? {
+                        cycleSpend: meta.spendSnapshot.cycleSpend,
+                        metaTotalSpend: meta.spendSnapshot.totalSpend,
+                        spendBaseline: meta.spendSnapshot.spendBaseline,
+                        lastSpendCheckedAt: nowMs(),
+                    }
+                    : {}),
+                updatedAt: nowMs(),
+            }, { merge: true });
 
             if (citySnap.exists && belongsToSubscription) {
                 tx.set(cityRef, {
@@ -1567,6 +1662,8 @@ async function expireWithCampaign(
                     ownerUserId: null,
                     activeSubscriptionId: FieldValue.delete(),
                     activeCampaignId: FieldValue.delete(),
+                    campaignDeliveryStatus: FieldValue.delete(),
+                    campaignDeliveryUpdatedAt: FieldValue.delete(),
                     adsetIds: FieldValue.delete(),
                     adIds: FieldValue.delete(),
                     reservedByCheckoutId: FieldValue.delete(),

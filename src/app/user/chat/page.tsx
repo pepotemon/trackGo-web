@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/features/auth/AuthProvider";
 import {
     dddCity,
@@ -164,6 +164,7 @@ export default function UserIncompleteClientsPage() {
     const [loadingIncomplete, setLoadingIncomplete] = useState(true);
     const [loadingNotSuitable, setLoadingNotSuitable] = useState(true);
     const [notes, setNotes] = useState<Record<string, string>>({});
+    const [copiedLeadId, setCopiedLeadId] = useState<string | null>(null);
     const [search, setSearch] = useState("");
     const [searchOpen, setSearchOpen] = useState(false);
     const [infoOpen, setInfoOpen] = useState(false);
@@ -184,6 +185,7 @@ export default function UserIncompleteClientsPage() {
     const [previewLoading, setPreviewLoading] = useState(false);
     const [previewError, setPreviewError] = useState("");
     const [confirmTakeOpen, setConfirmTakeOpen] = useState(false);
+    const copyToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // pagination
     const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -195,6 +197,12 @@ export default function UserIncompleteClientsPage() {
     useEffect(() => {
         const timer = window.setInterval(() => setRecoveryClock((value) => value + 1), 5 * 60 * 1000);
         return () => window.clearInterval(timer);
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            if (copyToastTimer.current) clearTimeout(copyToastTimer.current);
+        };
     }, []);
 
     useEffect(() => {
@@ -396,6 +404,32 @@ export default function UserIncompleteClientsPage() {
         }
     }
 
+    async function copyLead(lead: MetaLeadDoc) {
+        const mapsUrl = lead.location?.mapsUrl || (
+            lead.location?.lat != null && lead.location?.lng != null
+                ? `https://maps.google.com/?q=${lead.location.lat},${lead.location.lng}`
+                : ""
+        );
+        const text = [
+            lead.name ? `Nombre: ${lead.name}` : "",
+            lead.phone ? `Telefono: ${lead.phone}` : "",
+            lead.business ? `Negocio: ${lead.business}` : "",
+            lead.location?.address ? `Direccion: ${lead.location.address}` : "",
+            mapsUrl ? `Maps: ${mapsUrl}` : "",
+            lead.lastInboundText ? `Mensaje: ${lead.lastInboundText}` : "",
+        ].filter(Boolean).join("\n");
+
+        try {
+            await navigator.clipboard.writeText(text);
+        } catch {
+            window.prompt("Copia los datos del cliente", text);
+        }
+
+        setCopiedLeadId(lead.id);
+        if (copyToastTimer.current) clearTimeout(copyToastTimer.current);
+        copyToastTimer.current = setTimeout(() => setCopiedLeadId(null), 1200);
+    }
+
 
     if (!phoneCodes.length && !loadingIncomplete) {
         return (
@@ -514,10 +548,12 @@ export default function UserIncompleteClientsPage() {
                                     tab={tab}
                                     waSent={waSent.has(lead.id)}
                                     reviewed={reviewed.has(lead.id)}
+                                    copied={copiedLeadId === lead.id}
                                     onNote={() => openNote(lead)}
                                     onNotSuitable={() => openNotSuitable(lead)}
                                     onReview={() => openReview(lead)}
                                     onWhatsApp={() => openWhatsApp(lead)}
+                                    onCopy={() => copyLead(lead)}
                                 />
                             ))}
                         </div>
@@ -563,10 +599,12 @@ export default function UserIncompleteClientsPage() {
                                         tab={tab}
                                         waSent={waSent.has(lead.id)}
                                         reviewed={reviewed.has(lead.id)}
+                                        copied={copiedLeadId === lead.id}
                                         onNote={() => { openNote(lead); setSearchOpen(false); }}
                                         onNotSuitable={() => { openNotSuitable(lead); setSearchOpen(false); }}
                                         onReview={() => { openReview(lead); setSearchOpen(false); }}
                                         onWhatsApp={() => { openWhatsApp(lead); setSearchOpen(false); }}
+                                        onCopy={() => copyLead(lead)}
                                     />
                                 ))}
                             </div>
@@ -822,18 +860,20 @@ export default function UserIncompleteClientsPage() {
 // ── CLIENT CARD ───────────────────────────────────────────────────────────────
 
 function ClientCard({
-    lead, note, tab, waSent, reviewed,
-    onNote, onNotSuitable, onReview, onWhatsApp,
+    lead, note, tab, waSent, reviewed, copied,
+    onNote, onNotSuitable, onReview, onWhatsApp, onCopy,
 }: {
     lead: MetaLeadDoc;
     note?: string;
     tab: Tab;
     waSent: boolean;
     reviewed: boolean;
+    copied: boolean;
     onNote: () => void;
     onNotSuitable: () => void;
     onReview: () => void;
     onWhatsApp: () => void;
+    onCopy: () => void;
 }) {
     const ddd = extractDDD(lead.phone);
     const hasLocation = !!lead.location?.lat;
@@ -929,6 +969,16 @@ function ClientCard({
                         <ChatIcon /> {reviewed ? "Revisado" : "Revisar"}
                     </button>
                     <ActionBtn onClick={onNote} tone="violet" title="Nota"><NoteIcon /></ActionBtn>
+                    <div className="relative">
+                        <ActionBtn onClick={onCopy} tone={copied ? "sent" : "violet"} title={copied ? "Copiado" : "Copiar"}>
+                            {copied ? <CheckIcon /> : <CopyIcon />}
+                        </ActionBtn>
+                        {copied ? (
+                            <span className="pointer-events-none absolute -top-7 left-1/2 -translate-x-1/2 rounded-full border border-emerald-200 bg-white px-2 py-1 text-[9px] font-black text-emerald-700 shadow-[0_8px_22px_rgba(16,185,129,0.16)]">
+                                Copiado
+                            </span>
+                        ) : null}
+                    </div>
                     <ActionBtn onClick={onWhatsApp} tone={waSent ? "sent" : "green"} title={waSent ? "Enviado" : "WhatsApp"}>
                         <WspIcon />
                     </ActionBtn>
@@ -1063,6 +1113,8 @@ function SearchIcon() { return <svg viewBox="0 0 24 24" className="h-4 w-4 text-
 function FilterIcon() { return <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#7C3AED]" {...ic}><path d="M4 6h16M7 12h10M10 18h4" /></svg>; }
 function PhoneIcon() { return <svg viewBox="0 0 24 24" className="h-3 w-3 shrink-0" {...ic}><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.1-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.8.4 1.6.7 2.4a2 2 0 0 1-.5 2.1L8.1 9.4a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.8.3 1.6.5 2.4.7a2 2 0 0 1 1.7 2Z" /></svg>; }
 function PinIcon() { return <svg viewBox="0 0 24 24" className="h-3 w-3 shrink-0" {...ic}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1 1 18 0Z" /><circle cx="12" cy="10" r="3" {...ic} /></svg>; }
+function CheckIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M20 6 9 17l-5-5" /></svg>; }
+function CopyIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>; }
 function NoteIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" /><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" /></svg>; }
 function BanIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><circle cx="12" cy="12" r="10" /><path d="m4.9 4.9 14.2 14.2" /></svg>; }
 function ChatIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z" /><path d="M8 9h8M8 13h5" /></svg>; }

@@ -90,6 +90,7 @@ export async function configureAndActivateCityCampaign({
     cycleDays?: number;
 }) {
     const campaign = await validateMetaCampaign(campaignId);
+    const spendBaseline = await getMetaCampaignTotalSpend(campaign.id).catch(() => 0);
     const adsets = await graphGet<{ data?: Array<{ id: string; name?: string; status?: string; daily_budget?: string; lifetime_budget?: string }> }>(`${campaign.id}/adsets`, {
         fields: "id,name,status,daily_budget,lifetime_budget",
         limit: "50",
@@ -111,12 +112,10 @@ export async function configureAndActivateCityCampaign({
     const start = new Date();
     const end = calculateCycleEnd(start, cycleDays);
     const budgetAllocation = calculateAdsBudgetAllocation(adsBudget, cycleDays);
-    if (budgetAllocation.operatingBudgetMinorUnits <= 0) {
+    if (budgetAllocation.dailyBudgetMinorUnits <= 0) {
         throw new ResponseError("invalid_ads_budget", "El presupuesto operativo para Meta debe ser mayor a cero.");
     }
     const adsetId = adsetIds[0];
-    const adset = adsets.data?.find((item) => item.id === adsetId);
-    const usesDailyBudget = Number(adset?.daily_budget || 0) > 0 && Number(adset?.lifetime_budget || 0) <= 0;
     const ads = await graphGet<{ data?: Array<{ id: string; name?: string; status?: string }> }>(`${adsetId}/ads`, {
         fields: "id,name,status",
         limit: "50",
@@ -125,10 +124,7 @@ export async function configureAndActivateCityCampaign({
 
     await graphPost(`${adsetId}`, {
         name: `TrackGo - ${cityName} - ${userId}`,
-        ...(usesDailyBudget
-            ? { daily_budget: budgetAllocation.dailyBudgetMinorUnits }
-            : { lifetime_budget: budgetAllocation.operatingBudgetMinorUnits }),
-        end_time: end.toISOString(),
+        daily_budget: budgetAllocation.dailyBudgetMinorUnits,
         status: "ACTIVE",
     });
 
@@ -145,9 +141,36 @@ export async function configureAndActivateCityCampaign({
         reservedBudget: budgetAllocation.reservedBudget,
         totalBudget: budgetAllocation.totalBudget,
         dailyBudgetMinorUnits: budgetAllocation.dailyBudgetMinorUnits,
-        lifetimeBudget: usesDailyBudget ? null : budgetAllocation.operatingBudgetMinorUnits,
-        budgetMode: usesDailyBudget ? "daily" : "lifetime",
+        lifetimeBudget: null,
+        budgetMode: "daily",
         reservePercent: budgetAllocation.reservePercent,
+        targetSpend: budgetAllocation.totalBudget,
+        spendPauseThreshold: Math.round(budgetAllocation.totalBudget * 0.98 * 100) / 100,
+        spendBaseline,
+    };
+}
+
+export async function getMetaCampaignTotalSpend(campaignId: string) {
+    const campaign = await validateMetaCampaign(campaignId);
+    const insights = await graphGet<{ data?: Array<{ spend?: string }> }>(`${campaign.id}/insights`, {
+        fields: "spend",
+        date_preset: "maximum",
+    });
+    const spend = Number(insights.data?.[0]?.spend || 0);
+    return Number.isFinite(spend) ? Math.round(spend * 100) / 100 : 0;
+}
+
+export async function getMetaCampaignCycleSpend(input: {
+    campaignId: string;
+    spendBaseline?: number | null;
+}) {
+    const totalSpend = await getMetaCampaignTotalSpend(input.campaignId);
+    const baseline = Number(input.spendBaseline || 0);
+    const cycleSpend = Math.max(0, totalSpend - (Number.isFinite(baseline) ? baseline : 0));
+    return {
+        totalSpend,
+        spendBaseline: Number.isFinite(baseline) ? baseline : 0,
+        cycleSpend: Math.round(cycleSpend * 100) / 100,
     };
 }
 
@@ -298,19 +321,6 @@ export async function getActiveCityCampaignSnapshot(campaignId: string) {
         throw new ResponseError("campaign_not_ready", campaign.warning || "La campana no esta lista para sincronizar.", 409);
     }
 
-    if (!campaign.primaryAdset.endTime) {
-        throw new ResponseError(
-            "campaign_missing_end_time",
-            "La campana activa no tiene fecha de finalizacion configurada en Meta.",
-            409,
-        );
-    }
-
-    const endDate = new Date(campaign.primaryAdset.endTime);
-    if (Number.isNaN(endDate.getTime()) || endDate.getTime() <= Date.now()) {
-        throw new ResponseError("campaign_end_time_invalid", "La fecha final de Meta ya vencio o no es valida.", 409);
-    }
-
     const campaignStatus = String(campaign.status || "").toUpperCase();
     const adsetStatus = String(campaign.primaryAdset.status || "").toUpperCase();
     if (campaignStatus && !["ACTIVE", "IN_PROCESS", "WITH_ISSUES"].includes(campaignStatus)) {
@@ -320,6 +330,12 @@ export async function getActiveCityCampaignSnapshot(campaignId: string) {
         throw new ResponseError("adset_not_active", `El conjunto de anuncios no esta activo (${campaign.primaryAdset.status}).`, 409);
     }
 
+    const now = new Date();
+    const endDate = campaign.primaryAdset.endTime ? new Date(campaign.primaryAdset.endTime) : calculateCycleEnd(now, 5);
+    const safeEndDate = Number.isNaN(endDate.getTime()) || endDate.getTime() <= Date.now()
+        ? calculateCycleEnd(now, 5)
+        : endDate;
+
     return {
         campaignId: campaign.id,
         campaignName: campaign.name,
@@ -327,8 +343,9 @@ export async function getActiveCityCampaignSnapshot(campaignId: string) {
         adsetIds: campaign.adsetIds,
         adIds: campaign.adIds,
         adset: campaign.primaryAdset,
-        startDate: campaign.primaryAdset.startTime ? new Date(campaign.primaryAdset.startTime) : new Date(),
-        endDate,
+        startDate: now,
+        endDate: safeEndDate,
+        spendBaseline: await getMetaCampaignTotalSpend(campaign.id).catch(() => 0),
     };
 }
 

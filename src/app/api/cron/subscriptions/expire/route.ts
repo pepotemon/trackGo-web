@@ -1,4 +1,4 @@
-import { errorResponse, requireServerUser, requireSuperAdmin, ResponseError } from "@/server/auth";
+import { errorResponse, requireServerUser, requireSuperAdmin } from "@/server/auth";
 import { expireDueSubscriptions } from "@/server/subscriptions/subscriptionService";
 
 function isCronAuthorized(request: Request) {
