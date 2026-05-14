@@ -221,6 +221,28 @@ async function requireActivePanelUser(req) {
     return { uid, user };
 }
 
+const LATAM_COUNTRY_CODES = ["507", "502", "503", "504", "505", "506", "509", "593", "591", "595", "598"];
+
+function extractPhoneCoverageCode(phone) {
+    const value = String(phone || "").replace(/\D/g, "");
+
+    if (value.startsWith("55")) {
+        const stripped = value.slice(2);
+        for (const cc of LATAM_COUNTRY_CODES) {
+            if (stripped.startsWith(cc)) return cc;
+        }
+    }
+
+    for (const cc of LATAM_COUNTRY_CODES) {
+        if (value.startsWith(cc)) return cc;
+    }
+
+    if (value.startsWith("55") && value.length >= 12) return value.slice(2, 4);
+    if (value.length >= 10 && value.length <= 11) return value.slice(0, 2);
+
+    return "";
+}
+
 async function assertCanSendManualMessage({ uid, user, clientId }) {
     if (user.role === "admin") return;
 
@@ -236,15 +258,38 @@ async function assertCanSendManualMessage({ uid, user, clientId }) {
     const assignedTo = String(client.assignedTo || "").trim();
     const takenFromIncompleteAt = Number(client.takenFromIncompleteAt || 0);
     const status = String(client.status || "pending").trim() || "pending";
+    const verificationStatus = String(client.verificationStatus || "").trim();
     const userPermissions = user.userPermissions && typeof user.userPermissions === "object"
         ? user.userPermissions
         : {};
     const canChatWithProspects = userPermissions.canChatWithProspects === true;
 
     if (assignedTo !== uid) {
-        const err = new Error("client_not_assigned_to_user");
-        err.statusCode = 403;
-        throw err;
+        if (assignedTo) {
+            const err = new Error("client_not_assigned_to_user");
+            err.statusCode = 403;
+            throw err;
+        }
+
+        const allowedRecoveryStatuses = new Set(["pending_review", "incomplete", "not_suitable"]);
+        const phoneCode = extractPhoneCoverageCode(client.phone || client.waId || "");
+        const userPhoneCodes = Array.isArray(user.phoneCodes)
+            ? user.phoneCodes.map((item) => String(item || "").replace(/\D/g, "")).filter(Boolean)
+            : [];
+
+        if (!allowedRecoveryStatuses.has(verificationStatus)) {
+            const err = new Error("client_chat_not_enabled");
+            err.statusCode = 403;
+            throw err;
+        }
+
+        if (!phoneCode || !userPhoneCodes.includes(phoneCode)) {
+            const err = new Error("client_out_of_user_coverage");
+            err.statusCode = 403;
+            throw err;
+        }
+
+        return;
     }
 
     if (Number.isFinite(takenFromIncompleteAt) && takenFromIncompleteAt > 0) {

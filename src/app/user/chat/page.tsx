@@ -11,7 +11,7 @@ import {
     takeIncompleteClient,
     takeNotSuitableClient,
 } from "@/data/incompleteClientsRepo";
-import { subscribeLeadMessages } from "@/data/leadChatRepo";
+import { sendManualLeadMessage, subscribeLeadMessages } from "@/data/leadChatRepo";
 import type { LeadMessageDoc, MetaLeadDoc } from "@/types/leads";
 import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
 import { getReviewedIds, getWhatsAppSentIds, markReviewed, markWhatsAppSent } from "@/lib/userContactState";
@@ -184,6 +184,11 @@ export default function UserIncompleteClientsPage() {
     const [previewMessages, setPreviewMessages] = useState<LeadMessageDoc[]>([]);
     const [previewLoading, setPreviewLoading] = useState(false);
     const [previewError, setPreviewError] = useState("");
+    const [reviewDraft, setReviewDraft] = useState("");
+    const [reviewSending, setReviewSending] = useState(false);
+    const [reviewSendError, setReviewSendError] = useState("");
+    const [reviewNoteOpen, setReviewNoteOpen] = useState(false);
+    const [reviewTouchStartX, setReviewTouchStartX] = useState<number | null>(null);
     const [confirmTakeOpen, setConfirmTakeOpen] = useState(false);
     const copyToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -353,6 +358,10 @@ export default function UserIncompleteClientsPage() {
         markReviewed(lead.id);
         setReviewed((prev) => new Set(prev).add(lead.id));
         setActionLead(lead);
+        setNoteText(notes[lead.id] ?? "");
+        setReviewDraft("");
+        setReviewSendError("");
+        setReviewNoteOpen(false);
         setActionType("review");
     }
     function closeAction() {
@@ -362,6 +371,11 @@ export default function UserIncompleteClientsPage() {
         setPreviewMessages([]);
         setPreviewError("");
         setPreviewLoading(false);
+        setReviewDraft("");
+        setReviewSending(false);
+        setReviewSendError("");
+        setReviewNoteOpen(false);
+        setReviewTouchStartX(null);
     }
     useBackButtonDismiss(searchOpen, () => setSearchOpen(false));
     useBackButtonDismiss(infoOpen, () => setInfoOpen(false));
@@ -402,6 +416,77 @@ export default function UserIncompleteClientsPage() {
             window.setTimeout(() => setToast(""), 2800);
             setSaving(false);
         }
+    }
+
+    function saveReviewNote() {
+        if (!actionLead) return;
+        saveNote(actionLead.id, noteText);
+        setNotes((prev) => ({ ...prev, [actionLead.id]: noteText.trim() }));
+        setReviewNoteOpen(false);
+        setToast("Nota guardada.");
+        window.setTimeout(() => setToast(""), 1800);
+    }
+
+    async function sendReviewMessage() {
+        if (!actionLead || !reviewDraft.trim() || reviewSending) return;
+        setReviewSending(true);
+        setReviewSendError("");
+        try {
+            await sendManualLeadMessage(actionLead.id, reviewDraft.trim());
+            setReviewDraft("");
+        } catch (error) {
+            const raw = error instanceof Error ? error.message : "";
+            const message = raw === "client_not_assigned_to_user"
+                ? "Este cliente ya no esta disponible para responder."
+                : raw === "client_out_of_user_coverage"
+                    ? "Este cliente no pertenece a tus indicativos."
+                    : "No se pudo enviar el mensaje.";
+            setReviewSendError(message);
+        } finally {
+            setReviewSending(false);
+        }
+    }
+
+    const reviewIndex = actionLead ? visible.findIndex((lead) => lead.id === actionLead.id) : -1;
+    const reviewPrevLead = reviewIndex > 0 ? visible[reviewIndex - 1] : null;
+    const reviewNextLead = reviewIndex >= 0 && reviewIndex < visible.length - 1 ? visible[reviewIndex + 1] : null;
+
+    useEffect(() => {
+        if (actionType !== "review") return;
+
+        function onKeyDown(event: KeyboardEvent) {
+            if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+            const target = event.target as HTMLElement | null;
+            const tagName = target?.tagName?.toLowerCase();
+            if (tagName === "input" || tagName === "textarea" || target?.isContentEditable) return;
+            if (event.key === "ArrowLeft") {
+                event.preventDefault();
+                goReviewLead(reviewPrevLead);
+            }
+            if (event.key === "ArrowRight") {
+                event.preventDefault();
+                goReviewLead(reviewNextLead);
+            }
+        }
+
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+        // goReviewLead only wraps openReview; the concrete prev/next leads drive this listener.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [actionType, reviewNextLead, reviewPrevLead]);
+
+    function goReviewLead(nextLead: MetaLeadDoc | null) {
+        if (!nextLead) return;
+        openReview(nextLead);
+    }
+
+    function finishReviewSwipe(clientX: number) {
+        if (reviewTouchStartX === null) return;
+        const delta = clientX - reviewTouchStartX;
+        setReviewTouchStartX(null);
+        if (Math.abs(delta) < 70) return;
+        if (delta > 0) goReviewLead(reviewPrevLead);
+        if (delta < 0) goReviewLead(reviewNextLead);
     }
 
     async function copyLead(lead: MetaLeadDoc) {
@@ -751,20 +836,49 @@ export default function UserIncompleteClientsPage() {
             {actionType === "review" && actionLead ? (
                 <BottomSheet onClose={closeAction} fixedFooter={
                     <div>
-                        <p className="mb-2 rounded-[14px] border border-violet-100 bg-violet-50 px-3 py-2 text-[11px] font-semibold text-[#5B21FF]">
-                            Para responder, primero toma el cliente. Luego lo veras en Prospectos.
-                        </p>
-                        <button
-                            type="button"
-                            onClick={() => setConfirmTakeOpen(true)}
-                            disabled={saving || previewLoading}
-                            className="w-full rounded-[14px] bg-emerald-600 py-3 text-[13px] font-black text-white disabled:opacity-60"
-                        >
-                            Tomar cliente
-                        </button>
+                        {reviewSendError ? (
+                            <p className="mb-2 rounded-[12px] border border-red-200 bg-red-50 px-3 py-2 text-[11px] font-bold text-red-600">
+                                {reviewSendError}
+                            </p>
+                        ) : null}
+                        <div className="flex items-end gap-2">
+                            <textarea
+                                value={reviewDraft}
+                                onChange={(event) => setReviewDraft(event.target.value)}
+                                onKeyDown={(event) => {
+                                    if (event.key === "Enter" && !event.shiftKey) {
+                                        event.preventDefault();
+                                        void sendReviewMessage();
+                                    }
+                                }}
+                                rows={1}
+                                placeholder="Responder desde TrackGo..."
+                                className="min-h-[40px] flex-1 resize-none rounded-[14px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 py-2.5 text-[13px] font-semibold text-[#101936] outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-violet-100"
+                                style={{ maxHeight: "112px" }}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => void sendReviewMessage()}
+                                disabled={!reviewDraft.trim() || reviewSending}
+                                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-[#7C3AED] text-white shadow-md transition active:bg-[#6d28d9] disabled:opacity-40"
+                                title="Enviar"
+                            >
+                                {reviewSending ? (
+                                    <svg className="tg-spin h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                                        <path d="M21 12a9 9 0 1 1-3.1-6.8" />
+                                    </svg>
+                                ) : (
+                                    <SendIcon />
+                                )}
+                            </button>
+                        </div>
                     </div>
                 }>
-                    <div className="flex min-h-0 flex-1 flex-col">
+                    <div
+                        className="flex min-h-0 flex-1 flex-col"
+                        onTouchStart={(event) => setReviewTouchStartX(event.touches[0]?.clientX ?? null)}
+                        onTouchEnd={(event) => finishReviewSwipe(event.changedTouches[0]?.clientX ?? 0)}
+                    >
                         <div className="mb-2 flex items-start justify-between gap-3">
                             <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-1.5">
@@ -774,6 +888,42 @@ export default function UserIncompleteClientsPage() {
                                     ))}
                                 </div>
                                 <p className="mt-1.5 truncate text-[15px] font-black text-[#101936]">{reviewClientName(actionLead)}</p>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-1.5">
+                                <button
+                                    type="button"
+                                    onClick={() => goReviewLead(reviewPrevLead)}
+                                    disabled={!reviewPrevLead}
+                                    className="flex h-8 w-8 items-center justify-center rounded-[11px] border border-[#E8E7FB] bg-white text-[#66739A] disabled:opacity-35"
+                                    title="Anterior"
+                                >
+                                    <ArrowLeftIcon />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => goReviewLead(reviewNextLead)}
+                                    disabled={!reviewNextLead}
+                                    className="flex h-8 w-8 items-center justify-center rounded-[11px] border border-[#E8E7FB] bg-white text-[#66739A] disabled:opacity-35"
+                                    title="Siguiente"
+                                >
+                                    <ArrowRightIcon />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setReviewNoteOpen((value) => !value)}
+                                    className="flex h-8 w-8 items-center justify-center rounded-[11px] border border-violet-200 bg-violet-50 text-violet-700"
+                                    title="Nota"
+                                >
+                                    <NoteIcon />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setConfirmTakeOpen(true)}
+                                    disabled={saving || previewLoading}
+                                    className="rounded-[11px] bg-emerald-600 px-2.5 py-2 text-[10px] font-black text-white disabled:opacity-60"
+                                >
+                                    Tomar
+                                </button>
                             </div>
                         </div>
 
@@ -785,6 +935,22 @@ export default function UserIncompleteClientsPage() {
                                 </div>
                             ))}
                         </div>
+
+                        {reviewNoteOpen ? (
+                            <div className="mb-2 rounded-[14px] border border-violet-100 bg-violet-50 p-2">
+                                <textarea
+                                    className="w-full rounded-[12px] border border-violet-100 bg-white px-3 py-2 text-[12px] font-semibold text-[#101936] outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-violet-100"
+                                    rows={3}
+                                    placeholder="Nota para este cliente..."
+                                    value={noteText}
+                                    onChange={(event) => setNoteText(event.target.value)}
+                                />
+                                <div className="mt-2 flex justify-end gap-2">
+                                    <button type="button" onClick={() => setReviewNoteOpen(false)} className="rounded-[10px] px-3 py-1.5 text-[11px] font-black text-[#66739A]">Cerrar</button>
+                                    <button type="button" onClick={saveReviewNote} className="rounded-[10px] bg-[#7C3AED] px-3 py-1.5 text-[11px] font-black text-white">Guardar</button>
+                                </div>
+                            </div>
+                        ) : null}
 
                         <div className="min-h-[260px] flex-1 overflow-y-auto overscroll-contain rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 py-3">
                             {previewLoading ? (
@@ -1118,5 +1284,8 @@ function CopyIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {.
 function NoteIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" /><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" /></svg>; }
 function BanIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><circle cx="12" cy="12" r="10" /><path d="m4.9 4.9 14.2 14.2" /></svg>; }
 function ChatIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z" /><path d="M8 9h8M8 13h5" /></svg>; }
+function SendIcon() { return <svg viewBox="0 0 24 24" className="h-4 w-4" {...ic}><path d="m22 2-7 20-4-9-9-4 20-7Z" /><path d="M22 2 11 13" /></svg>; }
+function ArrowLeftIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="m15 18-6-6 6-6" /></svg>; }
+function ArrowRightIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="m9 18 6-6-6-6" /></svg>; }
 function ClientsIcon({ className }: { className?: string }) { return <svg viewBox="0 0 24 24" className={className} {...ic}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>; }
 function WspIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/></svg>; }
