@@ -9,6 +9,7 @@ export type AppIconName =
     | "check"
     | "clock"
     | "close"
+    | "copy"
     | "download"
     | "edit"
     | "filter"
@@ -132,6 +133,12 @@ export function AppIcon({
                     <>
                         <circle cx="12" cy="12" r="9" />
                         <path d="M15 9 9 15M9 9l6 6" />
+                    </>
+                ) : null}
+                {name === "copy" ? (
+                    <>
+                        <rect x="9" y="9" width="11" height="11" rx="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                     </>
                 ) : null}
                 {name === "download" ? <path d="M12 3v12M7 10l5 5 5-5M5 21h14" /> : null}

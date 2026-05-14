@@ -1805,6 +1805,7 @@ function EditUserModal({
                                 <div className="space-y-1.5">
                                     {([
                                         { key: "chatView", label: "Acceder al Chat" },
+                                        { key: "cityChatView", label: "Acceder al Chat por ciudad" },
                                     ] as { key: keyof AdminPermissions; label: string }[]).map(({ key, label }) => (
                                         <PermissionToggle
                                             key={key}

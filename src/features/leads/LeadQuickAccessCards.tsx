@@ -20,6 +20,13 @@ const ACCESS_ITEMS = [
         icon: "assign",
         tone: "blue",
     },
+    {
+        href: "/admin/leads/city-chat",
+        title: "Chat por ciudad",
+        body: "Chats agrupados por indicativo para trabajar por region.",
+        icon: "chat",
+        tone: "purple",
+    },
 ] as const;
 
 export function LeadQuickAccessCards() {
@@ -29,6 +36,7 @@ export function LeadQuickAccessCards() {
         if (item.href === pathname) return false;
         if (item.href === "/admin/leads") return permissions.prospectos;
         if (item.href === "/admin/leads/assignments") return permissions.assignmentsView;
+        if (item.href === "/admin/leads/city-chat") return permissions.cityChatView;
         return true;
     });
 

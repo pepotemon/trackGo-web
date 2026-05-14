@@ -68,6 +68,8 @@ export type AdminPermissions = {
     usersEdit: boolean;
     /** Can access Chat. */
     chatView: boolean;
+    /** Can access the administrative chat grouped by city/DDD. */
+    cityChatView: boolean;
 };
 
 /** Returns a safe default with all permissions disabled. */
@@ -97,6 +99,7 @@ export function defaultAdminPermissions(): AdminPermissions {
         usersCreate: false,
         usersEdit: false,
         chatView: false,
+        cityChatView: false,
     };
 }
 
@@ -151,6 +154,7 @@ export function fullAdminPermissions(): AdminPermissions {
         usersCreate: true,
         usersEdit: true,
         chatView: true,
+        cityChatView: true,
     };
 }
 

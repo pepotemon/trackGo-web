@@ -298,11 +298,13 @@ function normalizeHistoryStatuses(statuses?: LeadHistoryBucket[]) {
 
 export async function getLeadQueuePage({
     cursor,
+    cursorLeadId,
     pageSize,
     statuses,
     city,
 }: {
     cursor?: LeadQueuePageCursor | null;
+    cursorLeadId?: string | null;
     pageSize?: number;
     statuses?: LeadReviewStatus[];
     city?: LeadQueueCityFilter | null;
@@ -323,6 +325,11 @@ export async function getLeadQueuePage({
 
     if (cursor) {
         constraints.push(startAfter(cursor as QueryDocumentSnapshot<DocumentData>));
+    } else if (cursorLeadId) {
+        const cursorSnap = await getDoc(doc(db, "clients", cursorLeadId));
+        if (cursorSnap.exists()) {
+            constraints.push(startAfter(cursorSnap));
+        }
     }
 
     constraints.push(limit(clampPageSize(pageSize)));
@@ -336,6 +343,7 @@ export async function getLeadQueuePage({
     return {
         items,
         cursor: snap.docs.length ? snap.docs[snap.docs.length - 1] : null,
+        cursorLeadId: snap.docs.length ? snap.docs[snap.docs.length - 1].id : null,
         hasMore: snap.docs.length >= clampPageSize(pageSize),
     };
 }
@@ -413,6 +421,7 @@ export async function getLeadHistoryPage({
     return {
         items,
         cursor: snap.docs.length ? snap.docs[snap.docs.length - 1] : null,
+        cursorLeadId: snap.docs.length ? snap.docs[snap.docs.length - 1].id : null,
         hasMore: snap.docs.length >= clampPageSize(pageSize),
     };
 }

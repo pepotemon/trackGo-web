@@ -260,9 +260,13 @@ export default function AdminLeadsPage() {
                     "leads_mobile_queue",
                     JSON.stringify(myFilteredLeads.map((l) => l.id))
                 );
+                sessionStorage.setItem(
+                    "leads_mobile_queue_context",
+                    JSON.stringify({ filters, hasMore, cursorLeadId: myFilteredLeads.at(-1)?.id ?? null })
+                );
             } catch { }
         }
-    }, [myFilteredLeads, loading]);
+    }, [filters, hasMore, myFilteredLeads, loading]);
 
     if (!canProspectos) return (
         <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 text-center">
@@ -547,8 +551,10 @@ function LeadStatusModal({
 
     useEffect(() => {
         if (!lead) return;
-        setStatus(lead.verificationStatus);
-        setReason(lead.notSuitableReason || "");
+        queueMicrotask(() => {
+            setStatus(lead.verificationStatus);
+            setReason(lead.notSuitableReason || "");
+        });
     }, [lead]);
 
     if (!lead) return null;

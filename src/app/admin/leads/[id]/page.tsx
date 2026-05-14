@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     markLeadMessagesSeen,
     sendManualLeadMessage,
@@ -10,7 +10,7 @@ import {
     subscribeLeadClient,
     subscribeLeadMessages,
 } from "@/data/leadChatRepo";
-import { assignLeadToUser, deleteLead, updateLeadStatus } from "@/data/leadsRepo";
+import { assignLeadToUser, deleteLead, getLeadQueuePage, updateLeadStatus } from "@/data/leadsRepo";
 import { LeadEditModal } from "@/features/leads/LeadEditModal";
 import { AssignUserModal } from "@/features/leads/AssignUserModal";
 import { listAdminUsers } from "@/data/usersRepo";
@@ -18,8 +18,9 @@ import { useCan } from "@/features/auth/usePermissions";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { buildWhatsAppUrl } from "@/lib/whatsapp";
 import { phoneMatchesCoverageCodes } from "@/lib/phoneCoverage";
+import { leadMatchesPhonePrefix } from "@/lib/phonePrefixes";
 import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
-import type { LeadChatMode, LeadMessageDoc, LeadReviewStatus, MetaLeadDoc } from "@/types/leads";
+import type { LeadChatMode, LeadFilters, LeadMessageDoc, LeadQueueCityField, LeadQueueCityFilter, LeadReviewStatus, MetaLeadDoc } from "@/types/leads";
 import type { UserDoc } from "@/types/users";
 import { AppIcon, Badge, Button, Card, CardHeader, IconButton, Input, Modal, PageHeader } from "@/components/ui";
 
@@ -43,6 +44,85 @@ const statusTone: Record<LeadReviewStatus, "yellow" | "gray" | "red" | "green"> 
     not_suitable: "red",
     verified: "green",
 };
+
+const QUEUE_CONTEXT_KEY = "leads_mobile_queue_context";
+const CITY_FILTER_FIELDS = new Set<LeadQueueCityField>([
+    "geoAdminCityNormalized",
+    "geoCityNormalized",
+    "geoAdminStateNormalized",
+]);
+
+function dayKeyFromMs(ms: number) {
+    const date = new Date(ms);
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+}
+
+function leadActivityAt(lead: MetaLeadDoc) {
+    return lead.lastInboundMessageAt || lead.verificationStatusChangedAt || lead.updatedAt || lead.createdAt || 0;
+}
+
+function hasNewInbound(lead: MetaLeadDoc) {
+    const inbound = lead.lastInboundMessageAt ?? 0;
+    const seen = Math.max(lead.adminQueueLastSeenMessageAt ?? 0, lead.adminQueueSeenAt ?? 0);
+    return inbound > seen;
+}
+
+function cityFilterValue(lead: MetaLeadDoc) {
+    if (lead.location.adminCityNormalized) return `geoAdminCityNormalized:${lead.location.adminCityNormalized}`;
+    if (lead.location.cityNormalized) return `geoCityNormalized:${lead.location.cityNormalized}`;
+    if (lead.location.adminStateNormalized) return `geoAdminStateNormalized:${lead.location.adminStateNormalized}`;
+    return "unknown";
+}
+
+function parseCityFilter(value?: string): LeadQueueCityFilter | null {
+    if (!value || value === "all") return null;
+    const [field, ...rest] = value.split(":");
+    const cityValue = rest.join(":").trim();
+    if (!CITY_FILTER_FIELDS.has(field as LeadQueueCityField) || !cityValue) return null;
+    return { field: field as LeadQueueCityField, value: cityValue };
+}
+
+function queueStatuses(filters: LeadFilters | null): LeadReviewStatus[] {
+    if (!filters || filters.status === "all") return ["pending_review", "incomplete", "not_suitable"];
+    return [filters.status];
+}
+
+function leadMatchesQueueFilters(lead: MetaLeadDoc, filters: LeadFilters | null, options?: { newOnly?: boolean }) {
+    if (options?.newOnly && !hasNewInbound(lead)) return false;
+    if (!filters) return true;
+    if (filters.status !== "all" && lead.verificationStatus !== filters.status) return false;
+    if (filters.city !== "all" && cityFilterValue(lead) !== filters.city) return false;
+    if (!leadMatchesPhonePrefix(lead.phone, filters.phonePrefix)) return false;
+
+    if (filters.startKey || filters.endKey) {
+        const at = leadActivityAt(lead);
+        const key = at ? dayKeyFromMs(at) : "";
+        if (filters.startKey && key < filters.startKey) return false;
+        if (filters.endKey && key > filters.endKey) return false;
+    }
+
+    const search = filters.search.trim().toLowerCase();
+    const searchDigits = filters.search.replace(/\D+/g, "");
+    if (!search && !searchDigits) return true;
+    if (searchDigits && lead.phone.replace(/\D+/g, "").includes(searchDigits)) return true;
+
+    return [
+        lead.id,
+        lead.name,
+        lead.business,
+        lead.phone,
+        lead.waId,
+        lead.verificationStatus,
+        lead.notSuitableReason,
+        lead.location.displayLabel,
+        lead.location.address,
+        lead.location.mapsUrl,
+        lead.lastInboundText,
+    ].map((value) => String(value ?? "").toLowerCase()).join(" ").includes(search);
+}
 
 function formatDate(value?: number | null) {
     if (!value) return "";
@@ -96,18 +176,19 @@ export default function LeadChatPage() {
     const router = useRouter();
     const { profile, isSuperAdmin } = useAuth();
     const canChatView = useCan("chatView");
+    const canCityChatView = useCan("cityChatView");
     const canActivityChat = useCan("activityChat");
     const canLeadsEdit = useCan("leadsEdit");
     const canActivityEdit = useCan("activityEdit");
     const from = searchParams.get("from");
-    const canChat = canChatView || (from === "activity" && canActivityChat);
+    const canChat = canChatView || (from === "activity" && canActivityChat) || (from === "city-chat" && canCityChatView);
     const canEdit = canLeadsEdit || canActivityEdit;
     const canAssign = useCan("leadsAssign");
     const canMaps = useCan("activityMaps");
     const canWhatsapp = useCan("leadsWhatsapp");
     const canStatusManage = useCan("leadsStatusManage");
     const canDelete = useCan("leadsDelete");
-    const canClientView = useCan("activityClientView") || canChatView;
+    const canClientView = useCan("activityClientView") || canChatView || canCityChatView;
 
     const [lead, setLead] = useState<MetaLeadDoc | null>(null);
     const [messages, setMessages] = useState<LeadMessageDoc[]>([]);
@@ -123,8 +204,14 @@ export default function LeadChatPage() {
     const [assigningUser, setAssigningUser] = useState(false);
     const [savingStatus, setSavingStatus] = useState(false);
     const [deletingLead, setDeletingLead] = useState(false);
+    const [copiedConversation, setCopiedConversation] = useState(false);
     const [err, setErr] = useState<string | null>(null);
     const [mobileQueue, setMobileQueue] = useState<string[]>([]);
+    const [queueFilters, setQueueFilters] = useState<LeadFilters | null>(null);
+    const [queueNewOnly, setQueueNewOnly] = useState(false);
+    const [queueHasMore, setQueueHasMore] = useState(false);
+    const [queueCursorLeadId, setQueueCursorLeadId] = useState<string | null>(null);
+    const [queueLoadingMore, setQueueLoadingMore] = useState(false);
     const [quickActionsOpen, setQuickActionsOpen] = useState(false);
     useBackButtonDismiss(quickActionsOpen, () => setQuickActionsOpen(false));
     const [touchStartX, setTouchStartX] = useState<number | null>(null);
@@ -134,6 +221,16 @@ export default function LeadChatPage() {
             const raw = sessionStorage.getItem("leads_mobile_queue");
             if (raw) {
                 queueMicrotask(() => setMobileQueue(JSON.parse(raw) as string[]));
+            }
+            const rawContext = sessionStorage.getItem(QUEUE_CONTEXT_KEY);
+            if (rawContext) {
+                const context = JSON.parse(rawContext) as { filters?: LeadFilters; hasMore?: boolean; cursorLeadId?: string | null; newOnly?: boolean };
+                queueMicrotask(() => {
+                    setQueueFilters(context.filters ?? null);
+                    setQueueHasMore(context.hasMore === true);
+                    setQueueCursorLeadId(context.cursorLeadId ?? null);
+                    setQueueNewOnly(context.newOnly === true);
+                });
             }
         } catch {}
     }, []);
@@ -199,9 +296,11 @@ export default function LeadChatPage() {
     const returnTo = useMemo(() => {
         if (from === "activity") return "/admin/activity";
         if (from === "assignments") return "/admin/leads/assignments";
+        if (from === "city-chat") return "/admin/leads/city-chat";
         if (from === "client") return `/admin/clients/${clientId}`;
         return "/admin/leads";
     }, [clientId, from]);
+    const fromParam = searchParams.get("from") ?? "leads";
 
     const canOpenThisLead = useMemo(() => {
         if (!lead || isSuperAdmin || !profile || profile.role !== "admin") return true;
@@ -222,15 +321,118 @@ export default function LeadChatPage() {
         return phoneCodes.size > 0 && phoneMatchesCoverageCodes(lead.phone, phoneCodes);
     }, [isSuperAdmin, lead, profile, users]);
 
+    const goToQueuedLead = useCallback((targetId: string | null) => {
+        if (!targetId) return;
+        router.push(`/admin/leads/${targetId}?from=${fromParam}`);
+    }, [fromParam, router]);
+
+    const leadVisibleToCurrentAdmin = useCallback((item: MetaLeadDoc) => {
+        if (isSuperAdmin || !profile || profile.role !== "admin") return true;
+        if (users.length === 0) return true;
+
+        const myUsers = users.filter((user) =>
+            user.sharedWith?.some((entry) => entry.adminId === profile.id)
+        );
+        const myUserIds = new Set(myUsers.map((user) => user.id));
+        const phoneCodes = new Set<string>();
+        for (const user of myUsers) {
+            for (const code of user.phoneCodes ?? []) phoneCodes.add(code);
+        }
+
+        if (item.assignedTo && myUserIds.has(item.assignedTo)) return true;
+        return phoneCodes.size > 0 && phoneMatchesCoverageCodes(item.phone, phoneCodes);
+    }, [isSuperAdmin, profile, users]);
+
+    const loadNextQueuedLead = useCallback(async () => {
+        if (queueLoadingMore || !queueHasMore || !mobileQueue.length) return null;
+
+        setQueueLoadingMore(true);
+        setErr(null);
+
+        try {
+            let cursorLeadId = queueCursorLeadId || mobileQueue[mobileQueue.length - 1];
+            let hasMore: boolean = queueHasMore;
+            const collected: string[] = [];
+            let pages = 0;
+
+            while (hasMore && collected.length === 0 && pages < 5) {
+                const page = await getLeadQueuePage({
+                    cursorLeadId,
+                    statuses: queueStatuses(queueFilters),
+                    city: parseCityFilter(queueFilters?.city),
+                    pageSize: 60,
+                });
+
+                const visible = page.items
+                    .filter((item) => leadVisibleToCurrentAdmin(item))
+                    .filter((item) => leadMatchesQueueFilters(item, queueFilters, { newOnly: queueNewOnly }))
+                    .map((item) => item.id)
+                    .filter((id) => !mobileQueue.includes(id) && !collected.includes(id));
+
+                collected.push(...visible);
+                cursorLeadId = page.cursorLeadId || cursorLeadId;
+                hasMore = page.hasMore;
+                pages += 1;
+            }
+
+            setQueueHasMore(hasMore);
+            setQueueCursorLeadId(cursorLeadId);
+            if (!collected.length) return null;
+
+            const nextQueue = [...mobileQueue, ...collected];
+            setMobileQueue(nextQueue);
+            try {
+                sessionStorage.setItem("leads_mobile_queue", JSON.stringify(nextQueue));
+                sessionStorage.setItem(QUEUE_CONTEXT_KEY, JSON.stringify({ filters: queueFilters, hasMore, cursorLeadId, newOnly: queueNewOnly }));
+            } catch {}
+            return collected[0] ?? null;
+        } catch (error) {
+            setErr(error instanceof Error ? error.message : "No se pudo cargar el siguiente chat.");
+            return null;
+        } finally {
+            setQueueLoadingMore(false);
+        }
+    }, [leadVisibleToCurrentAdmin, mobileQueue, queueCursorLeadId, queueFilters, queueHasMore, queueLoadingMore, queueNewOnly]);
+
+    const goNextQueuedLead = useCallback(async () => {
+        if (nextId) {
+            goToQueuedLead(nextId);
+            return;
+        }
+
+        const loadedId = await loadNextQueuedLead();
+        if (loadedId) goToQueuedLead(loadedId);
+    }, [goToQueuedLead, loadNextQueuedLead, nextId]);
+
     function finishSwipe(clientX: number) {
         if (touchStartX === null) return;
         const delta = clientX - touchStartX;
         setTouchStartX(null);
 
         if (Math.abs(delta) < 70) return;
-        if (delta > 0 && prevId) router.push(`/admin/leads/${prevId}?from=${searchParams.get("from") ?? "leads"}`);
-        if (delta < 0 && nextId) router.push(`/admin/leads/${nextId}?from=${searchParams.get("from") ?? "leads"}`);
+        if (delta > 0) goToQueuedLead(prevId);
+        if (delta < 0) void goNextQueuedLead();
     }
+
+    useEffect(() => {
+        function onKeyDown(event: KeyboardEvent) {
+            if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+            const target = event.target as HTMLElement | null;
+            const tagName = target?.tagName?.toLowerCase();
+            if (tagName === "input" || tagName === "textarea" || target?.isContentEditable) return;
+            if (event.key === "ArrowLeft" && prevId) {
+                event.preventDefault();
+                goToQueuedLead(prevId);
+            }
+            if (event.key === "ArrowRight" && (nextId || queueHasMore)) {
+                event.preventDefault();
+                void goNextQueuedLead();
+            }
+        }
+
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, [goNextQueuedLead, goToQueuedLead, prevId, nextId, queueHasMore]);
 
     function closeQuickActionsForNavigation() {
         if (typeof window !== "undefined" && window.history.state?.__trackgoModal) {
@@ -384,6 +586,37 @@ export default function LeadChatPage() {
         } finally {
             setDeletingLead(false);
         }
+    }
+
+    async function copyConversation() {
+        const lines = [
+            "# Conversacion TrackGo",
+            "",
+            "## Lead",
+            `ID: ${clientId}`,
+            `Nombre: ${displayName(lead)}`,
+            `Telefono: ${lead?.phone || "-"}`,
+            `Negocio: ${lead?.business || "-"}`,
+            `Ciudad/Zona: ${lead?.location?.displayLabel || "-"}`,
+            `Estado revision: ${lead ? statusLabel[lead.verificationStatus] : "-"}`,
+            `Modo chat: ${modeLabel(mode)}`,
+            "",
+            "## Mensajes",
+            messages.length
+                ? messages.map((message) => {
+                    const when = message.createdAt ? new Date(message.createdAt).toISOString() : "sin_fecha";
+                    return `- [${when}] ${senderLabel(message)} (${message.direction}): ${message.text || ""}`;
+                }).join("\n")
+                : "Sin mensajes.",
+        ].join("\n");
+
+        try {
+            await navigator.clipboard.writeText(lines);
+        } catch {
+            window.prompt("Copia la conversacion", lines);
+        }
+        setCopiedConversation(true);
+        window.setTimeout(() => setCopiedConversation(false), 1400);
     }
 
     return (
@@ -651,21 +884,23 @@ export default function LeadChatPage() {
                     icon={<AppIcon name="chat" tone="purple" size="sm" className="bg-transparent text-white ring-0" />}
                     actions={
                         <>
-                            <QuickLink href="/admin/leads" icon="lead" label="Prospectos" />
-                            {canClientView ? <QuickLink href={`/admin/clients/${clientId}`} icon="users" label="Cliente" /> : null}
+                            <IconButton
+                                icon="arrowLeft"
+                                label="Chat anterior"
+                                onClick={() => goToQueuedLead(prevId)}
+                                disabled={!prevId}
+                            />
+                            <IconButton
+                                icon="arrowRight"
+                                label={nextId ? "Chat siguiente" : "Cargar siguiente chat"}
+                                onClick={() => void goNextQueuedLead()}
+                                disabled={!nextId && (!queueHasMore || queueLoadingMore)}
+                            />
                             {lead?.location?.mapsUrl && canMaps ? (
                                 <QuickLink href={lead.location.mapsUrl} icon="map" label="Maps" external />
                             ) : null}
                             {lead?.phone && canWhatsapp ? (
                                 <QuickLink href={buildWhatsAppUrl(lead.phone)} icon="chat" label="WhatsApp" external />
-                            ) : null}
-                            {canEdit ? (
-                                <IconButton
-                                    icon="edit"
-                                    label="Editar lead"
-                                    onClick={() => setEditOpen(true)}
-                                    disabled={!lead}
-                                />
                             ) : null}
                             {canAssign ? (
                                 <IconButton
@@ -721,7 +956,7 @@ export default function LeadChatPage() {
                 <section className="grid gap-4 xl:grid-cols-[360px_1fr]">
                     <aside className="space-y-4">
                         <Card className="overflow-hidden">
-                            <CardHeader title="Lead" subtitle="Perfil y asignacion" />
+                            <CardHeader title="Prospecto" subtitle="Perfil y asignacion" />
                             <div className="border-t border-[#eef1f5] p-4">
                                 {loadingLead ? (
                                     <p className="text-[13px] font-medium text-[#71717a]">Cargando lead...</p>
@@ -782,28 +1017,6 @@ export default function LeadChatPage() {
                                 )}
                             </div>
                         </Card>
-
-                        {canChat ? (
-                            <Card className="overflow-hidden">
-                                <CardHeader title="Control de bot" subtitle="Modo de atencion actual" />
-                                <div className="space-y-3 border-t border-[#eef1f5] p-4">
-                                    <div className="flex items-center justify-between rounded-2xl border border-[#eef1f5] bg-[#fbfaff] px-3 py-2">
-                                        <span className="text-[12px] font-bold text-[#66739a]">Modo</span>
-                                        <Badge tone={mode === "human" ? "blue" : "green"}>
-                                            {modeLabel(mode)}
-                                        </Badge>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <Button onClick={() => changeMode("human")} disabled={busyMode || mode === "human"}>
-                                            Tomar
-                                        </Button>
-                                        <Button variant="primary" onClick={() => changeMode("bot")} disabled={busyMode || mode === "bot"}>
-                                            Bot
-                                        </Button>
-                                    </div>
-                                </div>
-                            </Card>
-                        ) : null}
                     </aside>
 
                     <Card className="flex min-h-[680px] flex-col overflow-hidden">
@@ -811,9 +1024,20 @@ export default function LeadChatPage() {
                             title="Conversacion"
                             subtitle={`${messages.length} mensajes`}
                             action={
-                                <Badge tone={mode === "human" ? "blue" : "green"}>
-                                    {modeLabel(mode)}
-                                </Badge>
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="secondary"
+                                        onClick={() => void copyConversation()}
+                                        disabled={loadingMessages}
+                                    >
+                                        <AppIcon name={copiedConversation ? "check" : "copy"} tone="slate" size="sm" className="h-4 w-4 bg-transparent text-current ring-0" />
+                                        {copiedConversation ? "Copiado" : "Copiar"}
+                                    </Button>
+                                    <Badge tone={mode === "human" ? "blue" : "green"}>
+                                        {modeLabel(mode)}
+                                    </Badge>
+                                </div>
                             }
                         />
 

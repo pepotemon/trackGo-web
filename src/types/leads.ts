@@ -114,6 +114,7 @@ export type LeadQueuePageCursor = unknown;
 export type LeadQueuePage = {
     items: MetaLeadDoc[];
     cursor: LeadQueuePageCursor | null;
+    cursorLeadId?: string | null;
     hasMore: boolean;
 };
 

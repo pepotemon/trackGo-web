@@ -155,7 +155,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
             <div className="xl:pl-[228px]">
                 <ResumeRefresh />
-                <PullToRefresh disabled={pathname.startsWith("/admin/leads/") && pathname !== "/admin/leads/assignments"} />
+                <PullToRefresh disabled={pathname.startsWith("/admin/leads/") && pathname !== "/admin/leads/assignments" && pathname !== "/admin/leads/city-chat"} />
                 <VendorPushPrompt
                     userId={firebaseUser.uid}
                     title="Activa avisos administrativos"
@@ -398,7 +398,7 @@ function MobileNavSection({
 }
 
 function isDetailPage(pathname: string) {
-    if (pathname.startsWith("/admin/leads/") && pathname !== "/admin/leads/assignments") return true;
+    if (pathname.startsWith("/admin/leads/") && pathname !== "/admin/leads/assignments" && pathname !== "/admin/leads/city-chat") return true;
     if (pathname.startsWith("/admin/clients/")) return true;
     return false;
 }
@@ -413,7 +413,8 @@ function isAdminRouteAllowed(pathname: string, permissions: AdminPermissions) {
     if (pathname.startsWith("/admin/accounting")) return permissions.accountingView;
     if (pathname.startsWith("/admin/activity")) return permissions.actividad;
     if (pathname.startsWith("/admin/leads/assignments")) return permissions.assignmentsView;
-    if (pathname.startsWith("/admin/leads/")) return permissions.chatView || permissions.leadsEdit || permissions.activityChat || permissions.activityEdit;
+    if (pathname.startsWith("/admin/leads/city-chat")) return permissions.cityChatView;
+    if (pathname.startsWith("/admin/leads/")) return permissions.chatView || permissions.cityChatView || permissions.leadsEdit || permissions.activityChat || permissions.activityEdit;
     if (pathname.startsWith("/admin/leads")) return permissions.prospectos;
     if (pathname.startsWith("/admin/clients/")) return permissions.activityClientView || permissions.chatView || permissions.leadsEdit;
     return false;
