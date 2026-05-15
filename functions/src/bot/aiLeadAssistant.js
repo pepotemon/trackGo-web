@@ -241,7 +241,11 @@ async function analyzeLeadReplyWithAi({ client, channel, reply }) {
     }
 
     const parsed = sanitizeAiResult(parseAiPayload(extractJsonText(data)));
-    if (!parsed || !parsed.shouldUseAiReply) return null;
+    if (!parsed) {
+        throw new Error("ai_invalid_json_response");
+    }
+
+    if (!parsed.shouldUseAiReply) return null;
 
     return {
         ...parsed,

@@ -452,6 +452,12 @@ async function maybeReplyToLead({
                 botReplyStatus: "skipped",
                 botReplyReason: "same_reply_as_previous",
                 botReplyAt: Date.now(),
+                aiReplyStatus,
+                aiReplyError,
+                aiReplyIntent: safeString(aiResult?.intent || ""),
+                aiReplyNextState: safeString(aiResult?.nextState || ""),
+                aiReplyModel: safeString(aiResult?.model || ""),
+                aiReplyUsage: aiResult?.usage || null,
             },
             { merge: true }
         );
