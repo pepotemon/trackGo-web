@@ -379,6 +379,8 @@ async function maybeReplyToLead({
     let body = safeString(reply?.body || "");
     let currentBotStage = safeString(reply?.stage || "");
     let aiResult = null;
+    let aiReplyStatus = "not_used";
+    let aiReplyError = "";
     const shouldTryAi = shouldTryAiLeadAssistant({ client, reply });
     try {
         await inboxRef.set(
@@ -393,13 +395,18 @@ async function maybeReplyToLead({
         if (aiResult?.reply) {
             body = safeString(aiResult.reply || body);
             currentBotStage = `ai:${safeString(aiResult.nextState || "assist")}`;
+            aiReplyStatus = "used";
+        } else {
+            aiReplyStatus = shouldTryAi ? "not_used" : "skipped";
         }
     } catch (aiError) {
+        aiReplyStatus = "error";
+        aiReplyError = String(aiError?.message || aiError || "unknown_ai_error");
         console.error("[AI LEAD ASSISTANT] error:", aiError);
         await inboxRef.set(
             {
                 aiReplyStatus: "error",
-                aiReplyError: String(aiError?.message || aiError || "unknown_ai_error"),
+                aiReplyError,
                 aiReplyAt: Date.now(),
             },
             { merge: true }
@@ -515,7 +522,8 @@ async function maybeReplyToLead({
             botReplyAt: now,
             botReplyStage: currentBotStage,
             botReplyMessageId: whatsappMessageId,
-            aiReplyStatus: aiResult ? "used" : "not_used",
+            aiReplyStatus,
+            aiReplyError,
             aiReplyIntent: safeString(aiResult?.intent || ""),
             aiReplyNextState: safeString(aiResult?.nextState || ""),
             aiReplyModel: safeString(aiResult?.model || ""),
