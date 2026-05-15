@@ -6,6 +6,8 @@ const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const MAX_BOT_REPLIES_PER_LEAD = 8;
 const MAX_MISSING_MAPS_REPLIES = 4;
 const MAX_MISSING_BUSINESS_REPLIES = 3;
+const REACTIVATION_AFTER_MS = 14 * 24 * 60 * 60 * 1000;
+const MAX_REACTIVATION_REPLIES = 2;
 
 function countStage(client, fragment) {
     const counters = client?.botStageCounts;
@@ -50,11 +52,30 @@ function shouldTryAiLeadAssistant({ client, reply }) {
 }
 
 function shouldStopAutomatedConversation(client) {
+    if (safeString(client?.botReactivationActive || "") === "true" || client?.botReactivationActive === true) {
+        return safeNumber(client?.botReactivationReplyCount, 0) >= MAX_REACTIVATION_REPLIES;
+    }
+
     const botReplyCount = safeNumber(client?.botReplyCount, 0);
     if (botReplyCount >= MAX_BOT_REPLIES_PER_LEAD) return true;
     if (countStage(client, "maps") >= MAX_MISSING_MAPS_REPLIES + 1) return true;
     if (countStage(client, "business") >= MAX_MISSING_BUSINESS_REPLIES + 1) return true;
     return false;
+}
+
+function canReactivateAutomation(client, now = Date.now()) {
+    if (safeString(client?.chatMode || "bot") !== "human") return false;
+    if (safeString(client?.botPausedBy || "") !== "automation_limit") return false;
+    if (safeString(client?.assignedTo || "")) return false;
+    if (!["incomplete", "pending_review"].includes(safeString(client?.verificationStatus || ""))) return false;
+
+    const pausedAt = safeNumber(client?.botPausedAt, 0);
+    if (!pausedAt || now - pausedAt < REACTIVATION_AFTER_MS) return false;
+
+    const reactivationCount = safeNumber(client?.botReactivationCount, 0);
+    if (reactivationCount >= 3) return false;
+
+    return true;
 }
 
 function buildAutomationLimitReply({ client, channel }) {
@@ -63,6 +84,9 @@ function buildAutomationLimitReply({ client, channel }) {
     const hasMaps = !!safeString(client?.mapsUrl || "") || safeNumber(client?.currentLeadMapsConfirmedAt, 0) > 0;
 
     if (isSpanish) {
+        if (safeString(client?.botReactivationActive || "") === "true" || client?.botReactivationActive === true) {
+            return "Gracias por volver a escribir. Para no insistir demasiado, dejaré tu conversación pendiente para que una persona del equipo la revise.";
+        }
         if (!hasBusiness && !hasMaps) {
             return "Gracias por tu tiempo. Para evitar insistir demasiado, dejaré tu conversación pendiente para revisión. Si deseas continuar, envía el tipo de negocio y la ubicación de Google Maps.";
         }
@@ -73,6 +97,10 @@ function buildAutomationLimitReply({ client, channel }) {
             return "Gracias por tu tiempo. Dejaré tu conversación pendiente para revisión. Si deseas continuar, envía la ubicación de Google Maps del negocio.";
         }
         return "Gracias por la información. Dejaré tu conversación para que una persona del equipo la revise.";
+    }
+
+    if (safeString(client?.botReactivationActive || "") === "true" || client?.botReactivationActive === true) {
+        return "Obrigado por voltar a escrever. Para nÃ£o insistir demais, vou deixar sua conversa pendente para uma pessoa da equipe revisar.";
     }
 
     if (!hasBusiness && !hasMaps) {
@@ -311,6 +339,7 @@ module.exports = {
     OPENAI_API_KEY,
     analyzeLeadReplyWithAi,
     buildAutomationLimitReply,
+    canReactivateAutomation,
     shouldStopAutomatedConversation,
     shouldTryAiLeadAssistant,
 };

@@ -69,6 +69,7 @@ const {
     OPENAI_API_KEY,
     analyzeLeadReplyWithAi,
     buildAutomationLimitReply,
+    canReactivateAutomation,
     shouldStopAutomatedConversation,
     shouldTryAiLeadAssistant,
 } = require("./src/bot/aiLeadAssistant");
@@ -329,8 +330,10 @@ async function maybeReplyToLead({
 
     const client = snap.data() || {};
     const { safeString, safeNumber } = require("./src/utils/text");
+    const nowBeforeBotChecks = Date.now();
+    const shouldReactivateAutomation = canReactivateAutomation(client, nowBeforeBotChecks);
 
-    if (!isBotAllowedForClient(client)) {
+    if (!isBotAllowedForClient(client) && !shouldReactivateAutomation) {
         console.log("[WHATSAPP BOT] skipped:", {
             clientId,
             waId,
@@ -348,6 +351,28 @@ async function maybeReplyToLead({
             { merge: true }
         );
         return;
+    }
+
+    if (shouldReactivateAutomation) {
+        await clientRef.set(
+            {
+                chatMode: "bot",
+                botPausedAt: 0,
+                botPausedBy: "",
+                botReactivationActive: true,
+                botReactivationStartedAt: nowBeforeBotChecks,
+                botReactivationCount: safeNumber(client?.botReactivationCount, 0) + 1,
+                botReactivationReplyCount: 0,
+                humanNeededReason: "",
+                reactivatedFromAutomationLimitAt: nowBeforeBotChecks,
+            },
+            { merge: true }
+        );
+        client.chatMode = "bot";
+        client.botPausedAt = 0;
+        client.botPausedBy = "";
+        client.botReactivationActive = true;
+        client.botReactivationReplyCount = 0;
     }
 
     if (!leadState.shouldSendBotReply(client)) {
@@ -514,9 +539,15 @@ async function maybeReplyToLead({
     if (reachedAutomationLimit) {
         clientPatch.chatMode = "human";
         clientPatch.botPausedAt = now;
-        clientPatch.botPausedBy = "automation_limit";
+        clientPatch.botPausedBy = safeString(client?.botReactivationActive || "") === "true" || client?.botReactivationActive === true
+            ? "reactivation_limit"
+            : "automation_limit";
         clientPatch.humanNeededAt = now;
-        clientPatch.humanNeededReason = "automation_limit";
+        clientPatch.humanNeededReason = safeString(client?.botReactivationActive || "") === "true" || client?.botReactivationActive === true
+            ? "reactivation_limit"
+            : "automation_limit";
+        clientPatch.botReactivationActive = false;
+        clientPatch.botReactivationEndedAt = now;
     }
 
     if (aiResult) {
@@ -532,6 +563,11 @@ async function maybeReplyToLead({
             clientPatch.botPausedAt = now;
             clientPatch.botPausedBy = "ai_close";
         }
+    }
+
+    if (!reachedAutomationLimit && (safeString(client?.botReactivationActive || "") === "true" || client?.botReactivationActive === true)) {
+        clientPatch.botReactivationReplyCount = safeNumber(client?.botReactivationReplyCount, 0) + 1;
+        clientPatch.lastBotReactivationReplyAt = now;
     }
 
     if (markIntroSent && !safeNumber(client?.initialIntroSentAt, 0)) {
