@@ -68,6 +68,7 @@ const { createBotReplyBuilderEsPa } = require("./src/bot/repliesEsPa");
 const {
     OPENAI_API_KEY,
     analyzeLeadReplyWithAi,
+    shouldTryAiLeadAssistant,
 } = require("./src/bot/aiLeadAssistant");
 const leadState = require("./src/bot/leadState");
 
@@ -378,8 +379,17 @@ async function maybeReplyToLead({
     let body = safeString(reply?.body || "");
     let currentBotStage = safeString(reply?.stage || "");
     let aiResult = null;
+    const shouldTryAi = shouldTryAiLeadAssistant({ client, reply });
     try {
-        aiResult = await analyzeLeadReplyWithAi({ client, channel, reply });
+        await inboxRef.set(
+            {
+                aiReplyStatus: shouldTryAi ? "attempted" : "skipped",
+                aiReplySkipReason: shouldTryAi ? "" : "rules_not_matched",
+                aiReplyAttemptAt: shouldTryAi ? Date.now() : null,
+            },
+            { merge: true }
+        );
+        aiResult = shouldTryAi ? await analyzeLeadReplyWithAi({ client, channel, reply }) : null;
         if (aiResult?.reply) {
             body = safeString(aiResult.reply || body);
             currentBotStage = `ai:${safeString(aiResult.nextState || "assist")}`;

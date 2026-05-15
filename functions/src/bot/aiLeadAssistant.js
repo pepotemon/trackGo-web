@@ -21,6 +21,11 @@ function countStage(client, fragment) {
 function shouldTryAiLeadAssistant({ client, reply }) {
     const stage = safeString(reply?.stage || "");
     const lastText = safeString(client?.lastInboundText || "");
+    const hasBusiness = !!safeString(client?.business || client?.businessRaw || "");
+    const hasMaps = !!safeString(client?.mapsUrl || "") || safeNumber(client?.currentLeadMapsConfirmedAt, 0) > 0;
+    const isQuestionLike =
+        lastText.includes("?") ||
+        /\b(onde|como|quanto|qual|quais|porque|por que|atiende|atienden|donde|como|cuanto|cual|sirve|serve|atende|atendem)\b/i.test(lastText);
 
     if (!lastText) return false;
     if (safeString(client?.aiDisabled || "") === "true") return false;
@@ -32,6 +37,7 @@ function shouldTryAiLeadAssistant({ client, reply }) {
 
     if (stage.includes("maps") && countStage(client, "maps") >= MAX_MISSING_MAPS_REPLIES) return true;
     if (stage.includes("business") && countStage(client, "business") >= MAX_MISSING_BUSINESS_REPLIES) return true;
+    if (!(hasBusiness && hasMaps) && isQuestionLike) return true;
 
     return (
         stage.includes("fallback") ||
