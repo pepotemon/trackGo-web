@@ -407,7 +407,7 @@ async function maybeReplyToLead({
             {
                 aiReplyStatus: "error",
                 aiReplyError,
-                aiReplyRawOutput: String(aiError?.aiRawOutput || "").slice(0, 700),
+                aiReplyRawOutput: String(aiError?.aiRawOutput || "").slice(0, 1200),
                 aiReplyAt: Date.now(),
             },
             { merge: true }

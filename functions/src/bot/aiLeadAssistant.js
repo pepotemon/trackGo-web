@@ -168,6 +168,9 @@ async function analyzeLeadReplyWithAi({ client, channel, reply }) {
         body: JSON.stringify({
             model: AI_MODEL,
             input: buildPrompt({ client, channel, reply }),
+            reasoning: {
+                effort: "minimal",
+            },
             text: {
                 format: {
                     type: "json_schema",
@@ -231,7 +234,7 @@ async function analyzeLeadReplyWithAi({ client, channel, reply }) {
                     },
                 },
             },
-            max_output_tokens: 450,
+            max_output_tokens: 1200,
         }),
     });
 
@@ -246,7 +249,12 @@ async function analyzeLeadReplyWithAi({ client, channel, reply }) {
     const parsed = sanitizeAiResult(parseAiPayload(outputText));
     if (!parsed) {
         const err = new Error("ai_invalid_json_response");
-        err.aiRawOutput = safeString(outputText || JSON.stringify(data || {}).slice(0, 700)).slice(0, 700);
+        err.aiRawOutput = safeString(outputText || JSON.stringify({
+            status: data?.status || "",
+            incomplete_details: data?.incomplete_details || null,
+            output: data?.output || null,
+            error: data?.error || null,
+        })).slice(0, 1200);
         throw err;
     }
 
