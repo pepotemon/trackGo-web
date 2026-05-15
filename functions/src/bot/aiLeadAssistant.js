@@ -108,6 +108,8 @@ function extractJsonText(data) {
     for (const item of Array.isArray(data?.output) ? data.output : []) {
         for (const content of Array.isArray(item?.content) ? item.content : []) {
             if (typeof content?.text === "string") chunks.push(content.text);
+            if (typeof content?.output_text === "string") chunks.push(content.output_text);
+            if (typeof content?.json === "object") chunks.push(JSON.stringify(content.json));
         }
     }
     return chunks.join("\n").trim();
@@ -240,9 +242,12 @@ async function analyzeLeadReplyWithAi({ client, channel, reply }) {
         throw err;
     }
 
-    const parsed = sanitizeAiResult(parseAiPayload(extractJsonText(data)));
+    const outputText = extractJsonText(data);
+    const parsed = sanitizeAiResult(parseAiPayload(outputText));
     if (!parsed) {
-        throw new Error("ai_invalid_json_response");
+        const err = new Error("ai_invalid_json_response");
+        err.aiRawOutput = safeString(outputText || JSON.stringify(data || {}).slice(0, 700)).slice(0, 700);
+        throw err;
     }
 
     if (!parsed.shouldUseAiReply) return null;

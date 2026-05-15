@@ -407,6 +407,7 @@ async function maybeReplyToLead({
             {
                 aiReplyStatus: "error",
                 aiReplyError,
+                aiReplyRawOutput: String(aiError?.aiRawOutput || "").slice(0, 700),
                 aiReplyAt: Date.now(),
             },
             { merge: true }
@@ -454,6 +455,7 @@ async function maybeReplyToLead({
                 botReplyAt: Date.now(),
                 aiReplyStatus,
                 aiReplyError,
+                aiReplyRawOutput: "",
                 aiReplyIntent: safeString(aiResult?.intent || ""),
                 aiReplyNextState: safeString(aiResult?.nextState || ""),
                 aiReplyModel: safeString(aiResult?.model || ""),
@@ -530,6 +532,7 @@ async function maybeReplyToLead({
             botReplyMessageId: whatsappMessageId,
             aiReplyStatus,
             aiReplyError,
+            aiReplyRawOutput: "",
             aiReplyIntent: safeString(aiResult?.intent || ""),
             aiReplyNextState: safeString(aiResult?.nextState || ""),
             aiReplyModel: safeString(aiResult?.model || ""),
