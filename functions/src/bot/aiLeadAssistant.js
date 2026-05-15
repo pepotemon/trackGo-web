@@ -49,6 +49,44 @@ function shouldTryAiLeadAssistant({ client, reply }) {
     );
 }
 
+function shouldStopAutomatedConversation(client) {
+    const botReplyCount = safeNumber(client?.botReplyCount, 0);
+    if (botReplyCount >= MAX_BOT_REPLIES_PER_LEAD) return true;
+    if (countStage(client, "maps") >= MAX_MISSING_MAPS_REPLIES + 1) return true;
+    if (countStage(client, "business") >= MAX_MISSING_BUSINESS_REPLIES + 1) return true;
+    return false;
+}
+
+function buildAutomationLimitReply({ client, channel }) {
+    const isSpanish = safeString(channel?.language || "").startsWith("es");
+    const hasBusiness = !!safeString(client?.business || client?.businessRaw || "");
+    const hasMaps = !!safeString(client?.mapsUrl || "") || safeNumber(client?.currentLeadMapsConfirmedAt, 0) > 0;
+
+    if (isSpanish) {
+        if (!hasBusiness && !hasMaps) {
+            return "Gracias por tu tiempo. Para evitar insistir demasiado, dejaré tu conversación pendiente para revisión. Si deseas continuar, envía el tipo de negocio y la ubicación de Google Maps.";
+        }
+        if (!hasBusiness) {
+            return "Gracias por tu tiempo. Dejaré tu conversación pendiente para revisión. Si deseas continuar, envía el tipo de negocio.";
+        }
+        if (!hasMaps) {
+            return "Gracias por tu tiempo. Dejaré tu conversación pendiente para revisión. Si deseas continuar, envía la ubicación de Google Maps del negocio.";
+        }
+        return "Gracias por la información. Dejaré tu conversación para que una persona del equipo la revise.";
+    }
+
+    if (!hasBusiness && !hasMaps) {
+        return "Obrigado pelo seu tempo. Para evitar insistir demais, vou deixar sua conversa pendente para revisÃ£o. Se quiser continuar, envie o tipo de comÃ©rcio e a localizaÃ§Ã£o no Google Maps.";
+    }
+    if (!hasBusiness) {
+        return "Obrigado pelo seu tempo. Vou deixar sua conversa pendente para revisÃ£o. Se quiser continuar, envie o tipo de comÃ©rcio.";
+    }
+    if (!hasMaps) {
+        return "Obrigado pelo seu tempo. Vou deixar sua conversa pendente para revisÃ£o. Se quiser continuar, envie a localizaÃ§Ã£o do comÃ©rcio no Google Maps.";
+    }
+    return "Obrigado pelas informaÃ§Ãµes. Vou deixar sua conversa para uma pessoa da equipe revisar.";
+}
+
 function languageName(language) {
     return safeString(language || "").startsWith("es") ? "Spanish" : "Portuguese";
 }
@@ -58,7 +96,9 @@ function buildPrompt({ client, channel, reply }) {
     return [
         `You are TrackGo's controlled assistant for microcredit leads. Reply in ${targetLanguage}.`,
         "TrackGo captures WhatsApp leads from Meta campaigns and needs business type plus Google Maps location before assigning to a seller.",
-        "You must be brief, helpful, and transparent that this is an automatic assistant.",
+        "You must be brief and helpful.",
+        "Mention you are an automatic assistant only if the client asks, if this is the first bot reply, or if you are explaining why information is needed.",
+        "Do not repeat that you are an automatic assistant in every message.",
         "Never promise approval, exact values, interest rates, or document requirements.",
         "Do not ask for sensitive documents.",
         "Delivery, home-based commerce, informal stands, food trucks, and small shops can continue if they have active commerce.",
@@ -270,5 +310,7 @@ async function analyzeLeadReplyWithAi({ client, channel, reply }) {
 module.exports = {
     OPENAI_API_KEY,
     analyzeLeadReplyWithAi,
+    buildAutomationLimitReply,
+    shouldStopAutomatedConversation,
     shouldTryAiLeadAssistant,
 };

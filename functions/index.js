@@ -68,6 +68,8 @@ const { createBotReplyBuilderEsPa } = require("./src/bot/repliesEsPa");
 const {
     OPENAI_API_KEY,
     analyzeLeadReplyWithAi,
+    buildAutomationLimitReply,
+    shouldStopAutomatedConversation,
     shouldTryAiLeadAssistant,
 } = require("./src/bot/aiLeadAssistant");
 const leadState = require("./src/bot/leadState");
@@ -381,12 +383,19 @@ async function maybeReplyToLead({
     let aiResult = null;
     let aiReplyStatus = "not_used";
     let aiReplyError = "";
-    const shouldTryAi = shouldTryAiLeadAssistant({ client, reply });
+    const reachedAutomationLimit = shouldStopAutomatedConversation(client);
+    const shouldTryAi = !reachedAutomationLimit && shouldTryAiLeadAssistant({ client, reply });
+
+    if (reachedAutomationLimit) {
+        body = buildAutomationLimitReply({ client, channel });
+        currentBotStage = "limit:human_needed";
+    }
+
     try {
         await inboxRef.set(
             {
-                aiReplyStatus: shouldTryAi ? "attempted" : "skipped",
-                aiReplySkipReason: shouldTryAi ? "" : "rules_not_matched",
+                aiReplyStatus: reachedAutomationLimit ? "skipped" : (shouldTryAi ? "attempted" : "skipped"),
+                aiReplySkipReason: reachedAutomationLimit ? "automation_limit" : (shouldTryAi ? "" : "rules_not_matched"),
                 aiReplyAttemptAt: shouldTryAi ? Date.now() : null,
             },
             { merge: true }
@@ -460,6 +469,7 @@ async function maybeReplyToLead({
                 aiReplyNextState: safeString(aiResult?.nextState || ""),
                 aiReplyModel: safeString(aiResult?.model || ""),
                 aiReplyUsage: aiResult?.usage || null,
+                automationLimitReached: reachedAutomationLimit,
             },
             { merge: true }
         );
@@ -501,6 +511,14 @@ async function maybeReplyToLead({
         [`botStageCounts.${currentBotStage}`]: safeNumber(client?.botStageCounts?.[currentBotStage], 0) + 1,
     };
 
+    if (reachedAutomationLimit) {
+        clientPatch.chatMode = "human";
+        clientPatch.botPausedAt = now;
+        clientPatch.botPausedBy = "automation_limit";
+        clientPatch.humanNeededAt = now;
+        clientPatch.humanNeededReason = "automation_limit";
+    }
+
     if (aiResult) {
         clientPatch.aiLastUsedAt = now;
         clientPatch.aiLastIntent = safeString(aiResult.intent || "");
@@ -537,6 +555,7 @@ async function maybeReplyToLead({
             aiReplyNextState: safeString(aiResult?.nextState || ""),
             aiReplyModel: safeString(aiResult?.model || ""),
             aiReplyUsage: aiResult?.usage || null,
+            automationLimitReached: reachedAutomationLimit,
         },
         { merge: true }
     );
