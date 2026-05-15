@@ -65,6 +65,10 @@ const namesFactory = require("./src/bot/names");
 const { createLeadParser } = require("./src/bot/parser");
 const { createBotReplyBuilder } = require("./src/bot/replies");
 const { createBotReplyBuilderEsPa } = require("./src/bot/repliesEsPa");
+const {
+    OPENAI_API_KEY,
+    analyzeLeadReplyWithAi,
+} = require("./src/bot/aiLeadAssistant");
 const leadState = require("./src/bot/leadState");
 
 const { createUpsertLeadAsClient } = require("./src/whatsapp/upsertLead");
@@ -371,8 +375,26 @@ async function maybeReplyToLead({
             ? buildBotReplyEsPa({ client, messageType })
             : buildBotReplyPtBr({ client, messageType });
 
-    const body = safeString(reply?.body || "");
-    const currentBotStage = safeString(reply?.stage || "");
+    let body = safeString(reply?.body || "");
+    let currentBotStage = safeString(reply?.stage || "");
+    let aiResult = null;
+    try {
+        aiResult = await analyzeLeadReplyWithAi({ client, channel, reply });
+        if (aiResult?.reply) {
+            body = safeString(aiResult.reply || body);
+            currentBotStage = `ai:${safeString(aiResult.nextState || "assist")}`;
+        }
+    } catch (aiError) {
+        console.error("[AI LEAD ASSISTANT] error:", aiError);
+        await inboxRef.set(
+            {
+                aiReplyStatus: "error",
+                aiReplyError: String(aiError?.message || aiError || "unknown_ai_error"),
+                aiReplyAt: Date.now(),
+            },
+            { merge: true }
+        );
+    }
     const markIntroSent = !!reply?.markIntroSent;
 
     if (!body || !currentBotStage) {
@@ -437,6 +459,8 @@ async function maybeReplyToLead({
         meta: {
             source: "bot_auto",
             stage: currentBotStage,
+            aiAssisted: !!aiResult,
+            aiIntent: safeString(aiResult?.intent || ""),
             whatsappPhoneNumberId: channel.phoneNumberId,
             language: channel.language,
             marketCountry: channel.marketCountry,
@@ -448,7 +472,24 @@ async function maybeReplyToLead({
         lastBotReplyText: body,
         lastBotStage: currentBotStage,
         lastOutboundAt: now,
+        botReplyCount: safeNumber(client?.botReplyCount, 0) + 1,
+        [`botStageCounts.${currentBotStage}`]: safeNumber(client?.botStageCounts?.[currentBotStage], 0) + 1,
     };
+
+    if (aiResult) {
+        clientPatch.aiLastUsedAt = now;
+        clientPatch.aiLastIntent = safeString(aiResult.intent || "");
+        clientPatch.aiLastNextState = safeString(aiResult.nextState || "");
+        clientPatch.aiLastQualification = safeString(aiResult.qualification || "");
+        clientPatch.aiLastModel = safeString(aiResult.model || "");
+        clientPatch.aiLastReply = body;
+        clientPatch.aiLastUsage = aiResult.usage || null;
+        if (aiResult.shouldClose) {
+            clientPatch.chatMode = "human";
+            clientPatch.botPausedAt = now;
+            clientPatch.botPausedBy = "ai_close";
+        }
+    }
 
     if (markIntroSent && !safeNumber(client?.initialIntroSentAt, 0)) {
         clientPatch.initialIntroSentAt = now;
@@ -464,6 +505,11 @@ async function maybeReplyToLead({
             botReplyAt: now,
             botReplyStage: currentBotStage,
             botReplyMessageId: whatsappMessageId,
+            aiReplyStatus: aiResult ? "used" : "not_used",
+            aiReplyIntent: safeString(aiResult?.intent || ""),
+            aiReplyNextState: safeString(aiResult?.nextState || ""),
+            aiReplyModel: safeString(aiResult?.model || ""),
+            aiReplyUsage: aiResult?.usage || null,
         },
         { merge: true }
     );
@@ -645,6 +691,7 @@ exports.whatsappWebhook = onRequest(
     {
         region: "us-central1",
         cors: true,
+        secrets: [OPENAI_API_KEY],
     },
     async (req, res) => {
         try {

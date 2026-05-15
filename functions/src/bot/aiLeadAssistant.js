@@ -1,0 +1,251 @@
+const { OPENAI_API_KEY } = require("../config/params");
+const { safeString, safeNumber } = require("../utils/text");
+
+const AI_MODEL = "gpt-5-mini";
+const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
+const MAX_BOT_REPLIES_PER_LEAD = 8;
+const MAX_MISSING_MAPS_REPLIES = 4;
+const MAX_MISSING_BUSINESS_REPLIES = 3;
+
+function countStage(client, fragment) {
+    const counters = client?.botStageCounts;
+    if (!counters || typeof counters !== "object") return 0;
+
+    return Object.entries(counters).reduce((total, [key, value]) => {
+        if (!String(key).includes(fragment)) return total;
+        const n = Number(value);
+        return Number.isFinite(n) ? total + n : total;
+    }, 0);
+}
+
+function shouldTryAiLeadAssistant({ client, reply }) {
+    const stage = safeString(reply?.stage || "");
+    const lastText = safeString(client?.lastInboundText || "");
+
+    if (!lastText) return false;
+    if (safeString(client?.aiDisabled || "") === "true") return false;
+    if (safeString(client?.leadQuality || "") === "not_suitable") return false;
+    if (stage === "final" || stage === "final:not_suitable") return false;
+
+    const botReplyCount = safeNumber(client?.botReplyCount, 0);
+    if (botReplyCount >= MAX_BOT_REPLIES_PER_LEAD) return true;
+
+    if (stage.includes("maps") && countStage(client, "maps") >= MAX_MISSING_MAPS_REPLIES) return true;
+    if (stage.includes("business") && countStage(client, "business") >= MAX_MISSING_BUSINESS_REPLIES) return true;
+
+    return (
+        stage.includes("fallback") ||
+        stage.includes("generic_question") ||
+        stage.includes("amount") ||
+        stage.includes("coverage") ||
+        stage.includes("written_address") ||
+        safeString(client?.businessQuality || "") === "review"
+    );
+}
+
+function languageName(language) {
+    return safeString(language || "").startsWith("es") ? "Spanish" : "Portuguese";
+}
+
+function buildPrompt({ client, channel, reply }) {
+    const targetLanguage = languageName(channel?.language);
+    return [
+        `You are TrackGo's controlled assistant for microcredit leads. Reply in ${targetLanguage}.`,
+        "TrackGo captures WhatsApp leads from Meta campaigns and needs business type plus Google Maps location before assigning to a seller.",
+        "You must be brief, helpful, and transparent that this is an automatic assistant.",
+        "Never promise approval, exact values, interest rates, or document requirements.",
+        "Do not ask for sensitive documents.",
+        "Delivery, home-based commerce, informal stands, food trucks, and small shops can continue if they have active commerce.",
+        "If the client is not interested or asks to stop, close politely.",
+        "If information is missing, ask only for the most important next missing item.",
+        "Prefer Google Maps location over written address; if they sent only written address, ask for Google Maps location.",
+        "",
+        "Current lead state:",
+        JSON.stringify({
+            language: channel?.language || "pt-BR",
+            marketCountry: channel?.marketCountry || "BR",
+            name: safeString(client?.name || ""),
+            business: safeString(client?.business || client?.businessRaw || ""),
+            address: safeString(client?.address || ""),
+            mapsUrl: safeString(client?.mapsUrl || ""),
+            parseStatus: safeString(client?.parseStatus || ""),
+            verificationStatus: safeString(client?.verificationStatus || ""),
+            lastInboundText: safeString(client?.lastInboundText || ""),
+            currentBotStage: safeString(reply?.stage || ""),
+            currentBotReply: safeString(reply?.body || ""),
+            botReplyCount: safeNumber(client?.botReplyCount, 0),
+            mapsRequests: countStage(client, "maps"),
+            businessRequests: countStage(client, "business"),
+        }),
+        "",
+        "Return only valid JSON with this shape:",
+        JSON.stringify({
+            intent: "provided_business | provided_location | asks_amount | asks_how_it_works | asks_coverage | not_interested | unclear | other",
+            extracted: {
+                business: "string or empty",
+                address: "string or empty",
+                mapsUrl: "string or empty",
+            },
+            qualification: "qualified | incomplete | not_suitable | unknown",
+            nextState: "asking_business | asking_location | answering_question | ready_to_assign | closed_not_interested | human_needed",
+            shouldUseAiReply: true,
+            shouldClose: false,
+            reply: "short WhatsApp-ready message",
+        }),
+    ].join("\n");
+}
+
+function extractJsonText(data) {
+    if (typeof data?.output_text === "string") return data.output_text;
+
+    const chunks = [];
+    for (const item of Array.isArray(data?.output) ? data.output : []) {
+        for (const content of Array.isArray(item?.content) ? item.content : []) {
+            if (typeof content?.text === "string") chunks.push(content.text);
+        }
+    }
+    return chunks.join("\n").trim();
+}
+
+function parseAiPayload(text) {
+    const raw = safeString(text || "");
+    if (!raw) return null;
+
+    try {
+        return JSON.parse(raw);
+    } catch {
+        const start = raw.indexOf("{");
+        const end = raw.lastIndexOf("}");
+        if (start >= 0 && end > start) {
+            return JSON.parse(raw.slice(start, end + 1));
+        }
+    }
+
+    return null;
+}
+
+function sanitizeAiResult(payload) {
+    if (!payload || typeof payload !== "object") return null;
+
+    const reply = safeString(payload.reply || "");
+    if (!reply || reply.length > 700) return null;
+
+    return {
+        intent: safeString(payload.intent || "unknown") || "unknown",
+        extracted: {
+            business: safeString(payload.extracted?.business || ""),
+            address: safeString(payload.extracted?.address || ""),
+            mapsUrl: safeString(payload.extracted?.mapsUrl || ""),
+        },
+        qualification: safeString(payload.qualification || "unknown") || "unknown",
+        nextState: safeString(payload.nextState || "answering_question") || "answering_question",
+        shouldUseAiReply: payload.shouldUseAiReply !== false,
+        shouldClose: payload.shouldClose === true,
+        reply,
+    };
+}
+
+async function analyzeLeadReplyWithAi({ client, channel, reply }) {
+    if (!shouldTryAiLeadAssistant({ client, reply })) return null;
+
+    const key = OPENAI_API_KEY.value();
+    if (!key) return null;
+
+    const response = await fetch(OPENAI_RESPONSES_URL, {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${key}`,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            model: AI_MODEL,
+            input: buildPrompt({ client, channel, reply }),
+            text: {
+                format: {
+                    type: "json_schema",
+                    name: "trackgo_lead_assistant",
+                    strict: true,
+                    schema: {
+                        type: "object",
+                        additionalProperties: false,
+                        properties: {
+                            intent: {
+                                type: "string",
+                                enum: [
+                                    "provided_business",
+                                    "provided_location",
+                                    "asks_amount",
+                                    "asks_how_it_works",
+                                    "asks_coverage",
+                                    "not_interested",
+                                    "unclear",
+                                    "other",
+                                ],
+                            },
+                            extracted: {
+                                type: "object",
+                                additionalProperties: false,
+                                properties: {
+                                    business: { type: "string" },
+                                    address: { type: "string" },
+                                    mapsUrl: { type: "string" },
+                                },
+                                required: ["business", "address", "mapsUrl"],
+                            },
+                            qualification: {
+                                type: "string",
+                                enum: ["qualified", "incomplete", "not_suitable", "unknown"],
+                            },
+                            nextState: {
+                                type: "string",
+                                enum: [
+                                    "asking_business",
+                                    "asking_location",
+                                    "answering_question",
+                                    "ready_to_assign",
+                                    "closed_not_interested",
+                                    "human_needed",
+                                ],
+                            },
+                            shouldUseAiReply: { type: "boolean" },
+                            shouldClose: { type: "boolean" },
+                            reply: { type: "string" },
+                        },
+                        required: [
+                            "intent",
+                            "extracted",
+                            "qualification",
+                            "nextState",
+                            "shouldUseAiReply",
+                            "shouldClose",
+                            "reply",
+                        ],
+                    },
+                },
+            },
+            max_output_tokens: 450,
+        }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        const err = new Error(safeString(data?.error?.message || `openai_${response.status}`));
+        err.statusCode = response.status;
+        throw err;
+    }
+
+    const parsed = sanitizeAiResult(parseAiPayload(extractJsonText(data)));
+    if (!parsed || !parsed.shouldUseAiReply) return null;
+
+    return {
+        ...parsed,
+        model: AI_MODEL,
+        usage: data?.usage || null,
+    };
+}
+
+module.exports = {
+    OPENAI_API_KEY,
+    analyzeLeadReplyWithAi,
+    shouldTryAiLeadAssistant,
+};
