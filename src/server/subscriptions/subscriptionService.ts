@@ -351,6 +351,36 @@ export async function saveSubscriptionCity(input: {
     };
 }
 
+export async function deleteSubscriptionCity(cityId: string) {
+    const cleanCityId = cityId.trim();
+    if (!cleanCityId) {
+        throw new ResponseError("city_required", "Indica la ciudad a eliminar.");
+    }
+
+    const cityRef = adminDb.collection("cities").doc(cleanCityId);
+    await adminDb.runTransaction(async (tx) => {
+        const citySnap = await tx.get(cityRef);
+        if (!citySnap.exists) throw new ResponseError("city_not_found", "La ciudad no existe.", 404);
+
+        const city = citySnap.data() || {};
+        const status = String(city.status || "available");
+        const activeSubscriptionId = String(city.activeSubscriptionId || "");
+        const reservedCheckoutId = String(city.reservedByCheckoutId || "");
+
+        if (status !== "available" || activeSubscriptionId || reservedCheckoutId) {
+            throw new ResponseError(
+                "city_not_available_for_delete",
+                "Primero libera la ciudad. Solo se pueden eliminar ciudades libres y sin reservas activas.",
+                409,
+            );
+        }
+
+        tx.delete(cityRef);
+    });
+
+    return { ok: true, cityId: cleanCityId };
+}
+
 function normalizeCityId(value: string) {
     return value
         .normalize("NFD")

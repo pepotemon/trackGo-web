@@ -404,6 +404,34 @@ export default function SubscriptionsAdminPage() {
         }
     }
 
+    async function deleteCity(city: SubscriptionCity) {
+        if (city.status !== "available") {
+            setActionMessage("Primero libera la ciudad antes de eliminarla.");
+            return;
+        }
+        if (!window.confirm(`Eliminar la ciudad "${city.name}"? Esta accion no se puede deshacer.`)) return;
+        try {
+            setActionBusyId(`delete:${city.id}`);
+            setActionMessage("");
+            const token = await getAuthToken();
+            const response = await fetch("/api/subscriptions/cities", {
+                method: "DELETE",
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ cityId: city.id }),
+            });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.message || "No se pudo eliminar la ciudad.");
+            setActionMessage("Ciudad eliminada correctamente.");
+            if (detailCityId === city.id) setDetailCityId(null);
+            if (sheetCityId === city.id) setSheetCityId(null);
+            await loadOverview();
+        } catch (err) {
+            setActionMessage(err instanceof Error ? humanizeError(err.message) : "No se pudo eliminar la ciudad.");
+        } finally {
+            setActionBusyId("");
+        }
+    }
+
     async function hideCheckoutNotice(checkoutId: string) {
         try {
             setActionBusyId(checkoutId);
@@ -548,10 +576,12 @@ export default function SubscriptionsAdminPage() {
                     city={sheetCity}
                     subscription={sheetSub}
                     canManage={canManage}
-                    busy={actionBusyId === sheetCityId}
+                    canDelete={isSuperAdmin}
+                    busy={actionBusyId === sheetCityId || actionBusyId === `delete:${sheetCity.id}`}
                     onDetail={() => { setDetailCityId(sheetCityId); setSheetCityId(null); }}
                     onEdit={() => { openEditCity(sheetCity); setSheetCityId(null); }}
                     onRelease={() => { void releaseCity(sheetCityId!); setSheetCityId(null); }}
+                    onDelete={() => { void deleteCity(sheetCity); setSheetCityId(null); }}
                     onCampaignDelivery={(status) => { void updateCampaignDelivery(sheetCityId!, status); setSheetCityId(null); }}
                     onClose={() => setSheetCityId(null)}
                 />
@@ -562,8 +592,10 @@ export default function SubscriptionsAdminPage() {
                 subscription={detailSubscription}
                 checkout={detailCheckout}
                 canManage={canManage}
-                busy={actionBusyId === detailCityId || Boolean(detailCityId && actionBusyId.startsWith(`${detailCityId}:`))}
+                canDelete={isSuperAdmin}
+                busy={actionBusyId === detailCityId || actionBusyId === `delete:${detailCityId}` || Boolean(detailCityId && actionBusyId.startsWith(`${detailCityId}:`))}
                 onRelease={() => { if (detailCityId) void releaseCity(detailCityId); }}
+                onDelete={() => { if (detailCity) void deleteCity(detailCity); }}
                 onRetry={() => { if (detailCheckout) void retryCheckout(detailCheckout.id); }}
                 onHideCheckout={() => { if (detailCheckout) void hideCheckoutNotice(detailCheckout.id); }}
                 onCampaignDelivery={(status) => { if (detailCityId) void updateCampaignDelivery(detailCityId, status); }}
@@ -663,25 +695,30 @@ function CityActionSheet({
     city,
     subscription,
     canManage,
+    canDelete,
     busy,
     onDetail,
     onEdit,
     onRelease,
+    onDelete,
     onCampaignDelivery,
     onClose,
 }: {
     city: SubscriptionCity;
     subscription?: OverviewSubscription;
     canManage: boolean;
+    canDelete: boolean;
     busy: boolean;
     onDetail: () => void;
     onEdit: () => void;
     onRelease: () => void;
+    onDelete: () => void;
     onCampaignDelivery: (status: "active" | "paused") => void;
     onClose: () => void;
 }) {
     const isOccupied = city.status === "occupied" || city.status === "reserved";
     const campaignPaused = city.campaignDeliveryStatus === "paused";
+    const canDeleteCity = canDelete && city.status === "available";
     return (
         <>
             <button type="button" onClick={onClose} aria-label="Cerrar" className="fixed inset-0 z-40 bg-black/40" />
@@ -737,6 +774,17 @@ function CityActionSheet({
                         >
                             <AppIcon name="unlock" size="sm" plain className="h-5 w-5 text-red-500" />
                             {busy ? "Liberando..." : "Liberar ciudad"}
+                        </button>
+                    ) : null}
+                    {canDeleteCity ? (
+                        <button
+                            type="button"
+                            disabled={busy}
+                            onClick={onDelete}
+                            className="flex min-h-[52px] items-center gap-3 rounded-[14px] bg-red-50 px-4 text-[14px] font-bold text-red-700 transition active:bg-red-100 disabled:opacity-50"
+                        >
+                            <AppIcon name="trash" size="sm" plain className="h-5 w-5 text-red-500" />
+                            {busy ? "Eliminando..." : "Eliminar ciudad"}
                         </button>
                     ) : null}
                 </div>
@@ -1282,8 +1330,10 @@ function CityDetailModal({
     subscription,
     checkout,
     canManage,
+    canDelete,
     busy,
     onRelease,
+    onDelete,
     onRetry,
     onHideCheckout,
     onCampaignDelivery,
@@ -1293,8 +1343,10 @@ function CityDetailModal({
     subscription: OverviewSubscription | null;
     checkout: OverviewCheckout | null;
     canManage: boolean;
+    canDelete: boolean;
     busy: boolean;
     onRelease: () => void;
+    onDelete: () => void;
     onRetry: () => void;
     onHideCheckout: () => void;
     onCampaignDelivery: (status: "active" | "paused") => void;
@@ -1304,6 +1356,7 @@ function CityDetailModal({
     const canRetry = canManage && checkout?.status === "approved" && checkout?.activationStatus === "meta_failed";
     const canHideCheckout = canRetry && checkout?.hiddenFromUser !== true;
     const canRelease = canManage && city.status !== "available";
+    const canDeleteCity = canDelete && city.status === "available";
     const canToggleCampaign = canManage && city.status === "occupied";
     const campaignPaused = city.campaignDeliveryStatus === "paused";
 
@@ -1361,7 +1414,7 @@ function CityDetailModal({
                 ) : null}
 
                 {/* Acciones */}
-                {(canRetry || canHideCheckout || canToggleCampaign || canRelease) ? (
+                {(canRetry || canHideCheckout || canToggleCampaign || canRelease || canDeleteCity) ? (
                     <div className="flex flex-wrap justify-end gap-2 pt-1">
                         {canRetry ? (
                             <Button type="button" variant="secondary" disabled={busy} onClick={onRetry}>
@@ -1384,6 +1437,12 @@ function CityDetailModal({
                             <Button type="button" variant="danger" disabled={busy} onClick={onRelease}>
                                 <AppIcon name="unlock" size="sm" plain className="h-4 w-4 text-current" />
                                 {busy ? "Liberando..." : "Liberar ciudad"}
+                            </Button>
+                        ) : null}
+                        {canDeleteCity ? (
+                            <Button type="button" variant="danger" disabled={busy} onClick={onDelete}>
+                                <AppIcon name="trash" size="sm" plain className="h-4 w-4 text-current" />
+                                {busy ? "Eliminando..." : "Eliminar ciudad"}
                             </Button>
                         ) : null}
                     </div>
