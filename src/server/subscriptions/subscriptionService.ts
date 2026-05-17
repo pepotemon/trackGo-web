@@ -4,7 +4,7 @@ import { ResponseError } from "@/server/auth";
 import { adminDb } from "@/server/firebaseAdmin";
 import { cancelMercadoPagoPayment, createPixPayment, getMercadoPagoPayment } from "@/server/subscriptions/mercadoPago";
 import { calculateAdsBudget, calculateAdsBudgetAllocation, calculateCycleEnd, getPlanAmount } from "@/server/subscriptions/plans";
-import { configureAndActivateCityCampaign, getActiveCityCampaignSnapshot, getMetaCampaignCycleSpend, getMetaCampaignSpendForRange, pauseCityCampaign, resumeCityCampaign } from "@/server/subscriptions/metaAds";
+import { configureAndActivateCityCampaign, getMetaCampaignCycleSpend, getMetaCampaignSpendForRange, pauseCityCampaign, resumeCityCampaign } from "@/server/subscriptions/metaAds";
 import { sendPushToUser } from "@/server/push";
 import type { PixCheckoutResponse, SubscriptionPlanId } from "@/types/subscriptions";
 
@@ -654,26 +654,76 @@ export async function activateManualSubscription(input: {
         ? Math.min(Math.max(Math.round(Number(input.cycleDays)), 1), 30)
         : settings.cycleDays;
     const adsBudget = calculateAdsBudget(amount, settings.adsShare);
-    let startDate = new Date();
-    let endDate = calculateCycleEnd(startDate, cycleDays);
-    let metaSnapshot: Awaited<ReturnType<typeof getActiveCityCampaignSnapshot>> | null = null;
+    let campaignActivation: Awaited<ReturnType<typeof configureAndActivateCityCampaign>> | null = null;
 
     if (input.syncMeta !== false) {
-        const citySnap = await adminDb.collection("cities").doc(cityId).get();
+        const [userSnap, citySnap, activeSubscriptionSnap] = await Promise.all([
+            adminDb.collection("users").doc(userId).get(),
+            adminDb.collection("cities").doc(cityId).get(),
+            adminDb
+                .collection("subscriptions")
+                .where("userId", "==", userId)
+                .where("status", "in", USER_BLOCKING_SUBSCRIPTION_STATUSES)
+                .limit(1)
+                .get(),
+        ]);
+        if (!userSnap.exists) throw new ResponseError("user_not_found", "El vendedor no existe.", 404);
         if (!citySnap.exists) throw new ResponseError("city_not_found", "La ciudad seleccionada no existe.", 404);
-        const city = citySnap.data() || {};
-        const campaignId = String(city.activeCampaignId || city.campaignId || city.baseCampaignId || "");
-        if (!campaignId) {
-            throw new ResponseError("campaign_required", "La ciudad no tiene campana Meta para sincronizar.", 409);
+        if (!activeSubscriptionSnap.empty) {
+            throw new ResponseError(
+                "active_subscription_exists",
+                "Este vendedor ya tiene una suscripcion activa o en activacion.",
+                409,
+            );
         }
-        metaSnapshot = await getActiveCityCampaignSnapshot(campaignId);
-        startDate = metaSnapshot.startDate.getTime() > 0 ? metaSnapshot.startDate : new Date();
-        endDate = metaSnapshot.endDate;
-        cycleDays = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
+        const user = userSnap.data() || {};
+        const city = citySnap.data() || {};
+        if (user.role !== "user") {
+            throw new ResponseError("invalid_user_role", "Solo puedes activar suscripciones a vendedores.", 409);
+        }
+        if (user.active === false) {
+            throw new ResponseError("inactive_user", "El vendedor esta inactivo.", 409);
+        }
+        const coverage = Array.isArray(user.geoCoverage) ? (user.geoCoverage as CoverageItem[]) : [];
+        if (!cityMatchesCoverage({ id: citySnap.id, name: city.name, state: city.state, country: city.country }, coverage)) {
+            throw new ResponseError(
+                "city_outside_coverage",
+                "Esta ciudad no esta dentro de la cobertura geografica del vendedor.",
+                403,
+            );
+        }
+        const cityStatus = String(city.status || "available");
+        const reservationExpiresAt = Number(city.reservationExpiresAt || 0);
+        const reservationExpired = cityStatus === "reserved" && reservationExpiresAt < nowMs();
+        if (cityStatus === "occupied") {
+            throw new ResponseError("city_occupied", "Esta ciudad ya esta ocupada por otro vendedor.", 409);
+        }
+        if (cityStatus === "reserved" && !reservationExpired) {
+            throw new ResponseError("city_reserved", "Esta ciudad esta reservada por un pago en curso.", 409);
+        }
+        const campaignId = String(city.campaignId || city.baseCampaignId || city.activeCampaignId || "");
+        if (!campaignId) {
+            throw new ResponseError("campaign_required", "La ciudad no tiene campana Meta para activar.", 409);
+        }
+        campaignActivation = await configureAndActivateCityCampaign({
+            campaignId,
+            cityName: String(city.name || cityId),
+            userId,
+            adsBudget,
+            cycleDays,
+        });
     }
 
     const budgetAllocation = calculateAdsBudgetAllocation(adsBudget, cycleDays);
     const spendPauseThreshold = Math.round(budgetAllocation.totalBudget * 0.98 * 100) / 100;
+    const startDate = campaignActivation?.startDate ?? new Date();
+    const endDate = campaignActivation?.endDate ?? calculateCycleEnd(startDate, cycleDays);
+    const dailyBudget = campaignActivation?.dailyBudget ?? budgetAllocation.dailyBudget;
+    const operatingBudget = campaignActivation?.operatingBudget ?? budgetAllocation.operatingBudget;
+    const reservedBudget = campaignActivation?.reservedBudget ?? budgetAllocation.reservedBudget;
+    const totalBudget = campaignActivation?.totalBudget ?? budgetAllocation.totalBudget;
+    const targetSpend = campaignActivation?.targetSpend ?? totalBudget;
+    const activationSpendPauseThreshold = campaignActivation?.spendPauseThreshold ?? spendPauseThreshold;
     const subscriptionId = `manual_${userId}_${cityId}_${randomUUID()}`;
     const subscriptionRef = adminDb.collection("subscriptions").doc(subscriptionId);
     const cityRef = adminDb.collection("cities").doc(cityId);
@@ -746,14 +796,16 @@ export async function activateManualSubscription(input: {
             plan: input.plan,
             amount,
             adsBudget,
-            dailyBudget: budgetAllocation.dailyBudget,
-            operatingBudget: budgetAllocation.operatingBudget,
-            reservedBudget: budgetAllocation.reservedBudget,
-            totalBudget: budgetAllocation.totalBudget,
-            reservePercent: budgetAllocation.reservePercent,
-            targetSpend: budgetAllocation.totalBudget,
-            spendPauseThreshold,
-            spendBaseline: metaSnapshot?.spendBaseline ?? 0,
+            dailyBudget,
+            operatingBudget,
+            reservedBudget,
+            totalBudget,
+            lifetimeBudget: campaignActivation?.lifetimeBudget ?? null,
+            budgetMode: campaignActivation?.budgetMode ?? "manual",
+            reservePercent: campaignActivation?.reservePercent ?? budgetAllocation.reservePercent,
+            targetSpend,
+            spendPauseThreshold: activationSpendPauseThreshold,
+            spendBaseline: campaignActivation?.spendBaseline ?? 0,
             cycleSpend: 0,
             lastSpendCheckedAt: now,
             adsShare: settings.adsShare,
@@ -761,19 +813,12 @@ export async function activateManualSubscription(input: {
             status: "active",
             source: "manual_admin",
             manual: true,
-            metaManagedManually: Boolean(metaSnapshot),
-            campaignId: metaSnapshot?.campaignId || null,
-            campaignName: metaSnapshot?.campaignName || null,
-            campaignStatus: metaSnapshot?.campaignStatus || null,
-            adsetIds: metaSnapshot?.adsetIds || [],
-            adIds: metaSnapshot?.adIds || [],
-            metaAdsetId: metaSnapshot?.adset.id || null,
-            metaAdsetName: metaSnapshot?.adset.name || null,
-            metaAdsetStatus: metaSnapshot?.adset.status || null,
-            metaBudgetMode: metaSnapshot?.adset.budgetMode || null,
-            metaDailyBudget: metaSnapshot?.adset.dailyBudget || null,
-            metaLifetimeBudget: metaSnapshot?.adset.lifetimeBudget || null,
-            metaSpendBaseline: metaSnapshot?.spendBaseline ?? null,
+            metaManagedManually: Boolean(campaignActivation),
+            campaignId: campaignActivation?.campaignId || null,
+            adsetIds: campaignActivation?.adsetIds || [],
+            adIds: campaignActivation?.adIds || [],
+            metaDailyBudget: campaignActivation?.dailyBudget ?? null,
+            metaSpendBaseline: campaignActivation?.spendBaseline ?? null,
             createdBy: input.createdBy,
             createdByName: input.createdByName || input.createdBy,
             startDate: Timestamp.fromDate(startDate),
@@ -788,10 +833,10 @@ export async function activateManualSubscription(input: {
                 status: "occupied",
                 ownerUserId: userId,
                 activeSubscriptionId: subscriptionId,
-                activeCampaignId: metaSnapshot?.campaignId || FieldValue.delete(),
-                campaignDeliveryStatus: metaSnapshot ? "active" : FieldValue.delete(),
-                adsetIds: metaSnapshot?.adsetIds || FieldValue.delete(),
-                adIds: metaSnapshot?.adIds || FieldValue.delete(),
+                activeCampaignId: campaignActivation?.campaignId || FieldValue.delete(),
+                campaignDeliveryStatus: campaignActivation ? "active" : FieldValue.delete(),
+                adsetIds: campaignActivation?.adsetIds || FieldValue.delete(),
+                adIds: campaignActivation?.adIds || FieldValue.delete(),
                 reservedByCheckoutId: FieldValue.delete(),
                 reservationExpiresAt: FieldValue.delete(),
                 updatedAt: now,
@@ -815,7 +860,7 @@ export async function activateManualSubscription(input: {
             createdAt: now,
             updatedAt: now,
             source: "manual_admin",
-            campaignId: metaSnapshot?.campaignId || null,
+            campaignId: campaignActivation?.campaignId || null,
         };
     });
 

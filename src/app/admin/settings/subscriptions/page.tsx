@@ -1232,13 +1232,13 @@ function ManualActivationModal({
                         className="mt-1 h-4 w-4 accent-[#7c3aed]"
                     />
                     <span className="min-w-0">
-                        <span className="block text-[12px] font-black text-[#101936]">Sincronizar con campaña Meta activa</span>
+                        <span className="block text-[12px] font-black text-[#101936]">Activar campana Meta automaticamente</span>
                         <span className="mt-0.5 block text-[11px] font-semibold leading-snug text-[#66739a]">
                             {form.syncMeta
                                 ? selectedCity?.campaignId || selectedCity?.activeCampaignId || selectedCity?.baseCampaignId
-                                    ? "Se tomara el fin exacto configurado en Meta y se guardaran campana, adset y anuncios."
+                                    ? "TrackGo configurara presupuesto diario, encendera campana y conjunto, y guardara el ciclo operativo."
                                     : "La ciudad seleccionada debe tener un ID operativo de Meta."
-                                : "Usa la duracion manual del formulario y no enlaza la campana Meta."}
+                                : "Solo registra la suscripcion en TrackGo; no toca la campana en Meta."}
                         </span>
                     </span>
                 </label>

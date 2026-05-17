@@ -46,6 +46,7 @@ import {
 } from "@/components/ui";
 
 type AccountingTab = "overview" | "investment";
+type AccountingPeriodMode = "weekly" | "monthly";
 type AccountingMetric = "real" | "gross" | "visited" | "rejected" | "assigned" | "cost";
 type ChartMode = "trend" | "bars" | "share";
 type ChartPoint = {
@@ -82,6 +83,170 @@ type GroupDraft = {
 
 function shiftWeek(base: Date, offset: number) {
     return addDays(base, offset * 7);
+}
+
+function shiftMonth(base: Date, offset: number) {
+    return new Date(base.getFullYear(), base.getMonth() + offset, 1);
+}
+
+function dateKey(date: Date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+}
+
+function monthRange(offset: number) {
+    const startDate = shiftMonth(new Date(), offset);
+    const endDate = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 0);
+    return {
+        startDate,
+        endDate,
+        startKey: dateKey(startDate),
+        endKey: dateKey(endDate),
+    };
+}
+
+function monthWeekRanges(startDate: Date, endDate: Date) {
+    const ranges: ReturnType<typeof weekRangeKeysMonToSun>[] = [];
+    const seen = new Set<string>();
+    let cursor = new Date(startDate);
+    cursor.setHours(12, 0, 0, 0);
+    const endMs = endDate.getTime();
+
+    while (cursor.getTime() <= endMs) {
+        const week = weekRangeKeysMonToSun(cursor);
+        if (!seen.has(week.startKey)) {
+            ranges.push(week);
+            seen.add(week.startKey);
+        }
+        cursor = addDays(week.endDate, 1);
+        cursor.setHours(12, 0, 0, 0);
+    }
+
+    return ranges;
+}
+
+function mergeMonthlyInvestment(weeks: WeeklyInvestmentDoc[]): WeeklyInvestmentDoc | null {
+    if (!weeks.length) return null;
+    const groups = new Map<string, WeeklyInvestmentGroup>();
+    const allocations: Record<string, number> = {};
+    let amount = 0;
+
+    for (const week of weeks) {
+        amount += safeNumber(week.amount, 0);
+        for (const [userId, value] of Object.entries(week.allocations ?? {})) {
+            allocations[userId] = Math.round(((allocations[userId] ?? 0) + safeNumber(value, 0)) * 100) / 100;
+        }
+        for (const group of week.groups ?? []) {
+            const key = group.groupId || group.id || group.name;
+            const current = groups.get(key) ?? { ...group, id: key, amount: 0, userIds: [] };
+            current.amount = Math.round((safeNumber(current.amount, 0) + safeNumber(group.amount, 0)) * 100) / 100;
+            current.userIds = Array.from(new Set([...(current.userIds ?? []), ...(group.userIds ?? [])]));
+            groups.set(key, current);
+        }
+    }
+
+    return {
+        id: "monthly",
+        weekStartKey: weeks[0]?.weekStartKey ?? "",
+        weekEndKey: weeks.at(-1)?.weekEndKey ?? "",
+        amount: Math.round(amount * 100) / 100,
+        allocations,
+        groups: Array.from(groups.values()),
+        status: "draft",
+    };
+}
+
+function inKeyRange(key: string | undefined, startKey: string, endKey: string) {
+    return Boolean(key && key >= startKey && key <= endKey);
+}
+
+function endOfRangeMs(date: Date) {
+    const end = new Date(date);
+    end.setHours(23, 59, 59, 999);
+    return end.getTime();
+}
+
+function combineAccountingSummaries(summaries: AccountingSummary[], startKey: string, endKey: string): AccountingSummary {
+    const rows = new Map<string, AccountingSummary["rows"][number]>();
+    const subscriptionRows = summaries.flatMap((summary) => summary.subscriptionRows);
+
+    for (const summary of summaries) {
+        for (const row of summary.rows) {
+            const current = rows.get(row.userId) ?? {
+                ...row,
+                assigned: 0,
+                visited: 0,
+                rejected: 0,
+                gross: 0,
+                cost: 0,
+                real: 0,
+                subscriptionPaid: false,
+                subscriptionCount: 0,
+                subscriptionCities: [],
+            };
+            const cities = Array.from(new Set([...(current.subscriptionCities ?? []), ...(row.subscriptionCities ?? [])]));
+            rows.set(row.userId, {
+                ...current,
+                billingMode: row.subscriptionSource === "real" ? "weekly_subscription" : current.billingMode,
+                assigned: current.assigned + row.assigned,
+                visited: current.visited + row.visited,
+                rejected: current.rejected + row.rejected,
+                gross: safeNumber(current.gross) + row.gross,
+                cost: safeNumber(current.cost) + row.cost,
+                real: safeNumber(current.real) + row.real,
+                subscriptionPaid: current.subscriptionPaid === true || row.subscriptionPaid === true,
+                subscriptionSource: current.subscriptionSource === "real" || row.subscriptionSource === "real"
+                    ? "real"
+                    : current.subscriptionSource === "manual" || row.subscriptionSource === "manual"
+                        ? "manual"
+                        : "none",
+                subscriptionCount: safeNumber(current.subscriptionCount) + safeNumber(row.subscriptionCount),
+                subscriptionCities: cities,
+            });
+        }
+    }
+
+    const visited = summaries.reduce((sum, item) => sum + item.visited, 0);
+    const rejected = summaries.reduce((sum, item) => sum + item.rejected, 0);
+    const assigned = summaries.reduce((sum, item) => sum + item.assigned, 0);
+    const gross = Math.round(summaries.reduce((sum, item) => sum + item.gross, 0) * 100) / 100;
+    const grossVisits = Math.round(summaries.reduce((sum, item) => sum + item.grossVisits, 0) * 100) / 100;
+    const grossSubscriptions = Math.round(summaries.reduce((sum, item) => sum + item.grossSubscriptions, 0) * 100) / 100;
+    const subscriptionsPaid = summaries.reduce((sum, item) => sum + item.subscriptionsPaid, 0);
+    const subscriptionInvestment = Math.round(summaries.reduce((sum, item) => sum + item.subscriptionInvestment, 0) * 100) / 100;
+    const groupInvestment = Math.round(summaries.reduce((sum, item) => sum + item.groupInvestment, 0) * 100) / 100;
+    const manualAdjustment = Math.round(summaries.reduce((sum, item) => sum + item.manualAdjustment, 0) * 100) / 100;
+    const investment = Math.round((subscriptionInvestment + groupInvestment + manualAdjustment) * 100) / 100;
+    const real = Math.round((gross - investment) * 100) / 100;
+
+    return {
+        startKey,
+        endKey,
+        visited,
+        rejected,
+        assigned,
+        gross,
+        grossVisits,
+        grossSubscriptions,
+        subscriptionsPaid,
+        investment,
+        subscriptionInvestment,
+        groupInvestment,
+        manualAdjustment,
+        real,
+        roi: investment > 0 ? (real / investment) * 100 : null,
+        rows: Array.from(rows.values())
+            .map((row) => ({
+                ...row,
+                gross: Math.round(row.gross * 100) / 100,
+                cost: Math.round(row.cost * 100) / 100,
+                real: Math.round(row.real * 100) / 100,
+            }))
+            .sort((a, b) => b.real - a.real),
+        subscriptionRows: subscriptionRows.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0)),
+    };
 }
 
 function formatPercent(value: number | null) {
@@ -326,13 +491,16 @@ export default function AccountingPage() {
     const canInvestmentEdit = useCan("accountingInvestmentEdit");
     const canClose = useCan("accountingClose");
     const [activeTab, setActiveTab] = useState<AccountingTab>("overview");
+    const [periodMode, setPeriodMode] = useState<AccountingPeriodMode>("weekly");
     const [weekOffset, setWeekOffset] = useState(0);
+    const [monthOffset, setMonthOffset] = useState(0);
     const [refreshNonce, setRefreshNonce] = useState(0);
     const [users, setUsers] = useState<UserDoc[]>([]);
     const [events, setEvents] = useState<DailyEventDoc[]>([]);
     const [assignments, setAssignments] = useState<AccountingAssignmentDoc[]>([]);
     const [subscriptions, setSubscriptions] = useState<AccountingSubscriptionDoc[]>([]);
     const [investment, setInvestment] = useState<WeeklyInvestmentDoc | null>(null);
+    const [monthlyInvestments, setMonthlyInvestments] = useState<WeeklyInvestmentDoc[]>([]);
     const [investmentGroups, setInvestmentGroups] = useState<InvestmentGroupDoc[]>([]);
     const [closeOpen, setCloseOpen] = useState(false);
     const [reopenOpen, setReopenOpen] = useState(false);
@@ -344,6 +512,16 @@ export default function AccountingPage() {
     const week = useMemo(() => {
         return weekRangeKeysMonToSun(shiftWeek(new Date(), weekOffset));
     }, [weekOffset]);
+    const month = useMemo(() => monthRange(monthOffset), [monthOffset]);
+    const period = periodMode === "monthly" ? month : week;
+    const periodOffset = periodMode === "monthly" ? monthOffset : weekOffset;
+    const setPeriodOffset = periodMode === "monthly" ? setMonthOffset : setWeekOffset;
+
+    useEffect(() => {
+        if (periodMode === "monthly" && activeTab === "investment") {
+            setActiveTab("overview");
+        }
+    }, [periodMode, activeTab]);
 
     useEffect(() => {
         let cancelled = false;
@@ -353,30 +531,38 @@ export default function AccountingPage() {
             setErr(null);
 
             try {
-                const endOfWeek = new Date(week.endDate);
-                endOfWeek.setHours(23, 59, 59, 999);
+                const weekRanges = periodMode === "monthly"
+                    ? monthWeekRanges(period.startDate, period.endDate)
+                    : [];
+                const queryStartKey = periodMode === "monthly" && weekRanges[0] ? weekRanges[0].startKey : period.startKey;
+                const queryEndKey = periodMode === "monthly" && weekRanges[weekRanges.length - 1] ? weekRanges[weekRanges.length - 1].endKey : period.endKey;
+                const queryStartDate = periodMode === "monthly" && weekRanges[0] ? weekRanges[0].startDate : period.startDate;
+                const queryEndDate = periodMode === "monthly" && weekRanges[weekRanges.length - 1] ? weekRanges[weekRanges.length - 1].endDate : period.endDate;
 
                 const [u, ev, ass, subs, inv, groupCatalog] = await Promise.all([
                     listAccountingUsers(),
-                    listDailyEventsByRange(week.startKey, week.endKey),
+                    listDailyEventsByRange(queryStartKey, queryEndKey),
                     listClientAssignmentsByRange({
-                        startKey: week.startKey,
-                        endKey: week.endKey,
-                        startMs: week.startDate.getTime(),
-                        endMs: endOfWeek.getTime(),
+                        startKey: queryStartKey,
+                        endKey: queryEndKey,
+                        startMs: queryStartDate.getTime(),
+                        endMs: endOfRangeMs(queryEndDate),
                     }),
                     listPaidSubscriptionsByRange({
-                        startMs: week.startDate.getTime(),
-                        endMs: endOfWeek.getTime(),
+                        startMs: queryStartDate.getTime(),
+                        endMs: endOfRangeMs(queryEndDate),
                     }),
-                    getWeeklyInvestment(week.startKey),
+                    periodMode === "weekly"
+                        ? getWeeklyInvestment(week.startKey)
+                        : Promise.all(weekRanges.map((item) => getWeeklyInvestment(item.startKey))),
                     listInvestmentGroups(),
                 ]);
 
                 if (cancelled) return;
 
-                let weeklyInvestment = inv;
-                if (!weeklyInvestment && weekOffset === 0 && groupCatalog.length) {
+                const loadedMonthlyInvestments = Array.isArray(inv) ? inv.filter(Boolean) as WeeklyInvestmentDoc[] : [];
+                let weeklyInvestment = Array.isArray(inv) ? null : inv;
+                if (!weeklyInvestment && periodMode === "weekly" && weekOffset === 0 && groupCatalog.length) {
                     const seedGroups = draftToGroups(catalogGroupsToDrafts(groupCatalog));
                     if (seedGroups.length) {
                         weeklyInvestment = await upsertWeeklyInvestment({
@@ -395,6 +581,7 @@ export default function AccountingPage() {
                 setAssignments(ass);
                 setSubscriptions(subs);
                 setInvestment(weeklyInvestment);
+                setMonthlyInvestments(loadedMonthlyInvestments);
                 setInvestmentGroups(groupCatalog);
             } catch (e: unknown) {
                 if (cancelled) return;
@@ -409,16 +596,16 @@ export default function AccountingPage() {
         return () => {
             cancelled = true;
         };
-    }, [week.startKey, week.endKey, week.startDate, week.endDate, weekOffset, refreshNonce]);
+    }, [period.startKey, period.endKey, period.startDate, period.endDate, periodMode, week.startKey, week.endKey, weekOffset, refreshNonce]);
 
     const myUsers = useMemo(() => {
         if (isSuperAdmin || !profile) return users;
-        const weekEndMs = new Date(week.endDate).setHours(23, 59, 59, 999);
+        const periodEndMs = new Date(period.endDate).setHours(23, 59, 59, 999);
         return users.filter((u) => {
             const startMs = adminSellerAccountingStartMs(u, profile.id, profile.createdAt);
-            return startMs !== null && startMs <= weekEndMs;
+            return startMs !== null && startMs <= periodEndMs;
         });
-    }, [users, isSuperAdmin, profile, week.endDate]);
+    }, [users, isSuperAdmin, profile, period.endDate]);
 
     const accountingStartByUser = useMemo(() => {
         const map = new Map<string, number>();
@@ -462,13 +649,14 @@ export default function AccountingPage() {
     }, [investmentGroups, myUsers, isSuperAdmin, profile]);
 
     const myInvestment = useMemo(() => {
-        if (isSuperAdmin || !profile || !investment) return investment;
+        const sourceInvestment = periodMode === "monthly" ? mergeMonthlyInvestment(monthlyInvestments) : investment;
+        if (isSuperAdmin || !profile || !sourceInvestment) return sourceInvestment;
         const myIds = new Set(myUsers.map((u) => u.id));
         return {
-            ...investment,
+            ...sourceInvestment,
             amount: 0,
             allocations: {},
-            groups: (investment.groups ?? [])
+            groups: (sourceInvestment.groups ?? [])
                 .map((g) => {
                     const originalUserIds = Array.isArray(g.userIds) ? g.userIds.filter(Boolean) : [];
                     const scopedUserIds = originalUserIds.filter((id) => myIds.has(id));
@@ -477,22 +665,86 @@ export default function AccountingPage() {
                 })
                 .filter((g) => g.userIds.length > 0),
         };
-    }, [investment, myUsers, isSuperAdmin, profile]);
+    }, [investment, monthlyInvestments, myUsers, isSuperAdmin, profile, periodMode]);
+
+    const weeklySummariesForMonth = useMemo(() => {
+        if (periodMode !== "monthly") return [];
+        return monthWeekRanges(period.startDate, period.endDate).map((weekRange) => {
+            const weekInvestment = monthlyInvestments.find((item) => item.weekStartKey === weekRange.startKey) ?? null;
+            let scopedWeekInvestment = weekInvestment;
+            if (!isSuperAdmin && profile && weekInvestment) {
+                const myIds = new Set(myUsers.map((u) => u.id));
+                scopedWeekInvestment = {
+                    ...weekInvestment,
+                    amount: 0,
+                    allocations: {},
+                    groups: (weekInvestment.groups ?? [])
+                        .map((g) => {
+                            const originalUserIds = Array.isArray(g.userIds) ? g.userIds.filter(Boolean) : [];
+                            const scopedUserIds = originalUserIds.filter((id) => myIds.has(id));
+                            const ratio = originalUserIds.length ? scopedUserIds.length / originalUserIds.length : 0;
+                            return { ...g, userIds: scopedUserIds, amount: Math.round((g.amount || 0) * ratio * 100) / 100 };
+                        })
+                        .filter((g) => g.userIds.length > 0),
+                };
+            }
+
+            return buildAccountingSummary({
+                startKey: weekRange.startKey,
+                endKey: weekRange.endKey,
+                users: myUsers,
+                events: scopedEvents.filter((event) => inKeyRange(event.dayKey, weekRange.startKey, weekRange.endKey)),
+                assignments: scopedAssignments.filter((assignment) => inKeyRange(assignment.assignedDayKey, weekRange.startKey, weekRange.endKey)),
+                subscriptions: scopedSubscriptions.filter((subscription) =>
+                    subscription.createdAt >= weekRange.startDate.getTime() && subscription.createdAt <= endOfRangeMs(weekRange.endDate)
+                ),
+                investment: scopedWeekInvestment,
+            });
+        });
+    }, [periodMode, period.startDate, period.endDate, monthlyInvestments, isSuperAdmin, profile, myUsers, scopedEvents, scopedAssignments, scopedSubscriptions]);
 
     const summary: AccountingSummary | null = useMemo(() => {
+        if (periodMode === "monthly") {
+            return combineAccountingSummaries(weeklySummariesForMonth, period.startKey, period.endKey);
+        }
         return buildAccountingSummary({
-            startKey: week.startKey,
-            endKey: week.endKey,
+            startKey: period.startKey,
+            endKey: period.endKey,
             users: myUsers,
             events: scopedEvents,
             assignments: scopedAssignments,
             subscriptions: scopedSubscriptions,
             investment: myInvestment,
         });
-    }, [week.startKey, week.endKey, myUsers, scopedEvents, scopedAssignments, scopedSubscriptions, myInvestment]);
+    }, [periodMode, weeklySummariesForMonth, period.startKey, period.endKey, myUsers, scopedEvents, scopedAssignments, scopedSubscriptions, myInvestment]);
 
     const miGanancia = useMemo(() => {
         if (!profile || !summary) return null;
+        const calculate = (input: AccountingSummary) => {
+            if (isSuperAdmin) {
+                const givenAway = input.rows.reduce((acc, row) => {
+                    const user = myUsers.find((u) => u.id === row.userId);
+                    const totalPct = (user?.sharedWith ?? []).reduce((s, sw) => s + sw.percentage, 0);
+                    return acc + (row.real * totalPct / 100);
+                }, 0);
+                return givenAway === 0 ? null : input.real - givenAway;
+            }
+            return input.rows.reduce((acc, row) => {
+                const user = myUsers.find((u) => u.id === row.userId);
+                const share = user?.sharedWith?.find((s) => s.adminId === profile.id);
+                if (!share) return acc;
+                return acc + (row.real * share.percentage / 100);
+            }, 0);
+        };
+
+        if (periodMode === "monthly") {
+            const values = weeklySummariesForMonth
+                .map(calculate)
+                .filter((value): value is number => value !== null);
+            if (!values.length) return null;
+            return Math.round(values.reduce((sum, value) => sum + value, 0) * 100) / 100;
+        }
+
         if (isSuperAdmin) {
             const givenAway = summary.rows.reduce((acc, row) => {
                 const user = myUsers.find((u) => u.id === row.userId);
@@ -507,10 +759,10 @@ export default function AccountingPage() {
             if (!share) return acc;
             return acc + (row.real * share.percentage / 100);
         }, 0);
-    }, [summary, myUsers, isSuperAdmin, profile]);
+    }, [summary, myUsers, isSuperAdmin, profile, periodMode, weeklySummariesForMonth]);
 
-    const weekStatus = investment?.status ?? "draft";
-    const isClosed = weekStatus === "closed";
+    const weekStatus = periodMode === "weekly" ? investment?.status ?? "draft" : "draft";
+    const isClosed = periodMode === "weekly" && weekStatus === "closed";
 
     async function toggleSubscriptionPayment(user: UserDoc) {
         if (isClosed) {
@@ -628,9 +880,11 @@ export default function AccountingPage() {
         <div className="mx-auto w-full max-w-[1220px]">
             <div className="xl:hidden">
                 <MobileAccountingPage
-                    week={week}
-                    weekOffset={weekOffset}
-                    setWeekOffset={setWeekOffset}
+                    period={period}
+                    periodMode={periodMode}
+                    periodOffset={periodOffset}
+                    setPeriodMode={setPeriodMode}
+                    setPeriodOffset={setPeriodOffset}
                     usersCount={myUsers.length}
                     eventsCount={scopedEvents.length}
                     loading={loading}
@@ -638,8 +892,8 @@ export default function AccountingPage() {
                     events={scopedEvents}
                     assignments={scopedAssignments}
                     subscriptions={scopedSubscriptions}
-                    startDate={week.startDate}
-                    endDate={week.endDate}
+                    startDate={period.startDate}
+                    endDate={period.endDate}
                     users={myUsers}
                     investment={myInvestment}
                     investmentGroups={myInvestmentGroups}
@@ -664,7 +918,7 @@ export default function AccountingPage() {
             <div className="hidden xl:block">
                 <PageHeader
                     title="Contabilidad"
-                    subtitle="Control semanal de ingresos, inversion, suscripciones y resultado real."
+                    subtitle="Control de ingresos, inversion, suscripciones y resultado real."
                     icon={<AppIcon name="activity" tone="green" size="sm" className="bg-transparent text-white ring-0" />}
                     actions={
                         <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:items-end">
@@ -685,7 +939,7 @@ export default function AccountingPage() {
                                         onClick={() => exportAccountingSheet(summary)}
                                     />
                                 ) : null}
-                                {canInvestmentView ? (
+                                {canInvestmentView && periodMode === "weekly" ? (
                                     <IconButton
                                         icon="wallet"
                                         label="Configurar inversion"
@@ -693,7 +947,7 @@ export default function AccountingPage() {
                                         onClick={() => setActiveTab("investment")}
                                     />
                                 ) : null}
-                                {canClose ? (
+                                {canClose && periodMode === "weekly" ? (
                                     isClosed ? (
                                         <IconButton
                                             icon="unlock"
@@ -719,31 +973,47 @@ export default function AccountingPage() {
                                     disabled={loading}
                                 />
                             </div>
-                            <StatusPill status={weekStatus} />
+                            {periodMode === "weekly" ? <StatusPill status={weekStatus} /> : <Badge tone="blue">Vista mensual</Badge>}
                         </div>
                     }
                 />
 
                 <section className="mb-4 flex flex-col gap-3 rounded-2xl border border-[#e4e7ec] bg-white px-3 py-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
                     <div className="grid grid-cols-[40px_1fr_40px] items-center gap-2 sm:flex sm:flex-wrap">
+                        <div className="col-span-3 grid grid-cols-2 gap-1 rounded-xl border border-[#e4e7ec] bg-[#f9fafb] p-1 sm:col-span-1">
+                            <button
+                                type="button"
+                                onClick={() => setPeriodMode("weekly")}
+                                className={`h-8 rounded-lg px-3 text-[11px] font-black ${periodMode === "weekly" ? "bg-white text-[#6d28d9] shadow-sm" : "text-[#667085]"}`}
+                            >
+                                Semanal
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setPeriodMode("monthly")}
+                                className={`h-8 rounded-lg px-3 text-[11px] font-black ${periodMode === "monthly" ? "bg-white text-[#6d28d9] shadow-sm" : "text-[#667085]"}`}
+                            >
+                                Mensual
+                            </button>
+                        </div>
                         <IconButton
                             icon="arrowLeft"
-                            label="Semana anterior"
-                            onClick={() => setWeekOffset((v) => v - 1)}
+                            label={periodMode === "monthly" ? "Mes anterior" : "Semana anterior"}
+                            onClick={() => setPeriodOffset((v) => v - 1)}
                         />
                         <div className="flex h-10 min-w-0 items-center justify-center gap-2 rounded-xl border border-[#e4e7ec] bg-[#f9fafb] px-2 text-[11px] font-bold text-[#344054] sm:h-9 sm:justify-start sm:rounded-md sm:px-3 sm:text-[12px]">
                             <Icon name="calendar" />
-                            <span className="truncate">{week.startKey}</span>
+                            <span className="truncate">{period.startKey}</span>
                             <span className="text-[#98a2b3]">/</span>
-                            <span className="truncate">{week.endKey}</span>
+                            <span className="truncate">{period.endKey}</span>
                         </div>
                         <IconButton
                             icon="arrowRight"
-                            label="Semana siguiente"
-                            onClick={() => setWeekOffset((v) => v + 1)}
+                            label={periodMode === "monthly" ? "Mes siguiente" : "Semana siguiente"}
+                            onClick={() => setPeriodOffset((v) => v + 1)}
                         />
-                        {weekOffset !== 0 ? (
-                            <Button onClick={() => setWeekOffset(0)} className="col-span-3 sm:col-span-1">
+                        {periodOffset !== 0 ? (
+                            <Button onClick={() => setPeriodOffset(0)} className="col-span-3 sm:col-span-1">
                                 Actual
                             </Button>
                         ) : null}
@@ -771,6 +1041,7 @@ export default function AccountingPage() {
                             <ClosedWeekPanel
                                 summary={summary}
                                 finalSummary={investment.finalSummary}
+                                miGanancia={miGanancia}
                             />
                         ) : null}
 
@@ -779,8 +1050,8 @@ export default function AccountingPage() {
                                 summary={summary}
                                 events={scopedEvents}
                                 assignments={scopedAssignments}
-                                startDate={week.startDate}
-                                endDate={week.endDate}
+                                startDate={period.startDate}
+                                endDate={period.endDate}
                                 miGanancia={miGanancia}
                             />
                         ) : (
@@ -818,6 +1089,48 @@ export default function AccountingPage() {
                         <MiniInvestmentStat label="Inversion" value={money(summary?.investment ?? 0)} />
                         <MiniInvestmentStat label="Real" value={money(summary?.real ?? 0)} />
                     </div>
+
+                    {summary ? (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="rounded-lg border border-[#e4e7ec] bg-white p-3">
+                                <div className="mb-2 text-[12px] font-black text-[#101936]">Inversion incluida</div>
+                                <div className="space-y-1.5 text-[12px] font-semibold">
+                                    {summary.groupInvestment > 0 ? (
+                                        <div className="flex justify-between gap-3"><span className="text-[#667085]">Grupos de inversion</span><span className="font-black text-[#172033]">{money(summary.groupInvestment)}</span></div>
+                                    ) : null}
+                                    {summary.subscriptionInvestment > 0 ? (
+                                        <div className="flex justify-between gap-3"><span className="text-[#667085]">Inversion suscripciones</span><span className="font-black text-[#172033]">{money(summary.subscriptionInvestment)}</span></div>
+                                    ) : null}
+                                    {summary.manualAdjustment > 0 ? (
+                                        <div className="flex justify-between gap-3"><span className="text-[#667085]">Ajuste manual</span><span className="font-black text-[#172033]">{money(summary.manualAdjustment)}</span></div>
+                                    ) : null}
+                                    {summary.groupInvestment <= 0 && summary.subscriptionInvestment <= 0 && summary.manualAdjustment <= 0 ? (
+                                        <span className="text-[#98a2b3]">Sin inversiones adicionales.</span>
+                                    ) : null}
+                                </div>
+                            </div>
+                            <div className="rounded-lg border border-[#e4e7ec] bg-white p-3">
+                                <div className="mb-2 text-[12px] font-black text-[#101936]">Por cliente visitado</div>
+                                <div className="space-y-1.5 text-[12px] font-semibold">
+                                    {summary.rows.filter((row) => row.billingMode === "per_visit" && row.visited > 0).slice(0, 5).map((row) => (
+                                        <div key={row.userId} className="flex justify-between gap-3">
+                                            <span className="min-w-0 truncate text-[#667085]">{row.name}</span>
+                                            <span className="shrink-0 font-black text-[#172033]">{row.visited} visitas · {money(row.gross)}</span>
+                                        </div>
+                                    ))}
+                                    {summary.rows.filter((row) => row.billingMode === "per_visit" && row.visited > 0).length === 0 ? (
+                                        <span className="text-[#98a2b3]">Sin usuarios por visita en este cierre.</span>
+                                    ) : null}
+                                </div>
+                            </div>
+                            {miGanancia != null ? (
+                                <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3 sm:col-span-2">
+                                    <div className="text-[11px] font-black uppercase tracking-[0.08em] text-emerald-700">Mi ganancia</div>
+                                    <div className="mt-1 text-[18px] font-black text-emerald-700">{money(miGanancia)}</div>
+                                </div>
+                            ) : null}
+                        </div>
+                    ) : null}
 
                     <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] font-semibold text-amber-800">
                         Al cerrar la semana se guarda un snapshot final y se bloquean pagos, grupos y ajustes hasta reabrirla.
@@ -875,9 +1188,11 @@ export default function AccountingPage() {
     );
 }
 function MobileAccountingPage({
-    week,
-    weekOffset,
-    setWeekOffset,
+    period,
+    periodMode,
+    periodOffset,
+    setPeriodMode,
+    setPeriodOffset,
     usersCount,
     eventsCount,
     loading,
@@ -906,9 +1221,11 @@ function MobileAccountingPage({
     onError,
     miGanancia,
 }: {
-    week: ReturnType<typeof weekRangeKeysMonToSun>;
-    weekOffset: number;
-    setWeekOffset: React.Dispatch<React.SetStateAction<number>>;
+    period: ReturnType<typeof monthRange>;
+    periodMode: AccountingPeriodMode;
+    periodOffset: number;
+    setPeriodMode: React.Dispatch<React.SetStateAction<AccountingPeriodMode>>;
+    setPeriodOffset: React.Dispatch<React.SetStateAction<number>>;
     usersCount: number;
     eventsCount: number;
     loading: boolean;
@@ -1003,9 +1320,9 @@ function MobileAccountingPage({
                             Contabilidad
                         </h1>
                         <p className="mt-0.5 truncate text-[11px] font-semibold text-[#66739A]">
-                            {week.startKey} · {week.endKey}
+                            {period.startKey} · {period.endKey}
                             {" · "}
-                            <MobileStatusPill status={weekStatus} inline />
+                            {periodMode === "weekly" ? <MobileStatusPill status={weekStatus} inline /> : "Vista mensual"}
                         </p>
                     </div>
 
@@ -1013,7 +1330,7 @@ function MobileAccountingPage({
                         <MobileAccountingIconButton icon="download" label="Exportar" onClick={() => setConfirmExportOpen(true)} />
                     ) : null}
 
-                    {canInvestmentView ? (
+                    {canInvestmentView && periodMode === "weekly" ? (
                         <MobileAccountingIconButton
                             icon="wallet"
                             label="Inversión"
@@ -1022,7 +1339,7 @@ function MobileAccountingPage({
                         />
                     ) : null}
 
-                    {canClose ? (
+                    {canClose && periodMode === "weekly" ? (
                         <MobileAccountingIconButton
                             icon={isClosed ? "unlock" : "lock"}
                             label={isClosed ? "Reabrir" : "Cerrar"}
@@ -1044,7 +1361,7 @@ function MobileAccountingPage({
                 <div className="flex items-center gap-2 rounded-[14px] border border-[#E8E7FB] bg-white px-2 py-2 shadow-sm">
                     <button
                         type="button"
-                        onClick={() => setWeekOffset((v) => v - 1)}
+                        onClick={() => setPeriodOffset((v) => v - 1)}
                         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] text-[#7C3AED] transition active:bg-[#f3f0ff]"
                     >
                         <MobileAccountingIcon name="arrowLeft" />
@@ -1052,30 +1369,49 @@ function MobileAccountingPage({
 
                     <div className="min-w-0 flex-1 text-center">
                         <div className="truncate text-[11px] font-black text-[#101936]">
-                            {week.startKey} · {week.endKey}
+                            {period.startKey} · {period.endKey}
                         </div>
                         <div className="mt-0.5 text-[10px] font-semibold text-[#66739A]">
-                            {weekOffset === 0 ? "Semana actual" : "Semana histórica"}
+                            {periodMode === "monthly"
+                                ? periodOffset === 0 ? "Mes actual" : "Mes historico"
+                                : periodOffset === 0 ? "Semana actual" : "Semana historica"}
                         </div>
                     </div>
 
                     <button
                         type="button"
-                        onClick={() => setWeekOffset((v) => v + 1)}
+                        onClick={() => setPeriodOffset((v) => v + 1)}
                         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-[#E8E7FB] bg-[#f8f7ff] text-[#7C3AED] transition active:bg-[#f3f0ff]"
                     >
                         <MobileAccountingIcon name="arrowRight" />
                     </button>
 
-                    {weekOffset !== 0 ? (
+                    {periodOffset !== 0 ? (
                         <button
                             type="button"
-                            onClick={() => setWeekOffset(0)}
+                            onClick={() => setPeriodOffset(0)}
                             className="h-9 rounded-[12px] border border-violet-200 bg-violet-50 px-3 text-[11px] font-black text-[#7C3AED] transition active:bg-violet-100"
                         >
                             Actual
                         </button>
                     ) : null}
+                </div>
+
+                <div className="mt-2 grid grid-cols-2 gap-1 rounded-[14px] border border-[#E8E7FB] bg-white p-1 shadow-sm">
+                    <button
+                        type="button"
+                        onClick={() => setPeriodMode("weekly")}
+                        className={`h-8 rounded-[10px] text-[11px] font-black ${periodMode === "weekly" ? "bg-[#f3f0ff] text-[#6d28d9]" : "text-[#66739A]"}`}
+                    >
+                        Semanal
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setPeriodMode("monthly")}
+                        className={`h-8 rounded-[10px] text-[11px] font-black ${periodMode === "monthly" ? "bg-[#f3f0ff] text-[#6d28d9]" : "text-[#66739A]"}`}
+                    >
+                        Mensual
+                    </button>
                 </div>
 
                 {/* QUICK PILLS */}
@@ -1136,13 +1472,13 @@ function MobileAccountingPage({
                         </div>
                         <div className="p-3">
                             <InvestmentContent
-                                weekStartKey={week.startKey}
-                                weekEndKey={week.endKey}
+                                weekStartKey={period.startKey}
+                                weekEndKey={period.endKey}
                                 users={users}
                                 subscriptions={subscriptions}
                                 investment={investment}
                                 investmentGroups={investmentGroups}
-                                useCatalogDefaults={weekOffset === 0}
+                                useCatalogDefaults={periodOffset === 0}
                                 isClosed={isClosed || !canInvestmentEdit}
                                 events={events}
                                 onToggleSubscriptionPayment={onToggleSubscriptionPayment}
@@ -2268,11 +2604,19 @@ function SubscriptionSwitch({
 function ClosedWeekPanel({
     summary,
     finalSummary,
+    miGanancia,
 }: {
     summary: AccountingSummary;
     finalSummary: NonNullable<WeeklyInvestmentDoc["finalSummary"]>;
+    miGanancia?: number | null;
 }) {
     const hasDrift = snapshotDiffers(summary, finalSummary);
+    const perVisitRows = (finalSummary.rows ?? []).filter((row) => row.billingMode === "per_visit" && (row.visited > 0 || row.gross > 0));
+    const groupDetails = [
+        finalSummary.groupInvestment > 0 ? { label: "Grupos de inversion", value: finalSummary.groupInvestment } : null,
+        finalSummary.manualAdjustment > 0 ? { label: "Ajuste manual", value: finalSummary.manualAdjustment } : null,
+        finalSummary.subscriptionInvestment > 0 ? { label: "Inversion suscripciones", value: finalSummary.subscriptionInvestment } : null,
+    ].filter(Boolean) as { label: string; value: number }[];
 
     return (
         <Card className="overflow-hidden border-emerald-200">
@@ -2286,10 +2630,13 @@ function ClosedWeekPanel({
                 }
             />
 
-            <div className="grid gap-4 border-t border-[#eef1f5] p-4 md:grid-cols-4">
+            <div className={`grid gap-4 border-t border-[#eef1f5] p-4 ${miGanancia != null ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
                 <MiniInvestmentStat label="Bruta final" value={money(finalSummary.gross)} />
                 <MiniInvestmentStat label="Inversion final" value={money(finalSummary.investment)} />
                 <MiniInvestmentStat label="Real final" value={money(finalSummary.real)} tone={finalSummary.real >= 0 ? "green" : "red"} />
+                {miGanancia != null ? (
+                    <MiniInvestmentStat label="Mi ganancia" value={money(miGanancia)} tone={miGanancia >= 0 ? "green" : "red"} />
+                ) : null}
                 <MiniInvestmentStat label="ROI final" value={formatPercent(finalSummary.roi)} />
             </div>
 
@@ -2315,6 +2662,37 @@ function ClosedWeekPanel({
                     <span className="mt-1 block text-[#172033]">{finalSummary.rowsCount} incluidos</span>
                 </div>
             </div>
+
+            {groupDetails.length || perVisitRows.length ? (
+                <div className="grid gap-3 border-t border-[#eef1f5] p-4 md:grid-cols-2">
+                    {groupDetails.length ? (
+                        <div className="rounded-lg border border-[#e4e7ec] bg-white p-3">
+                            <div className="mb-2 text-[12px] font-black text-[#101936]">Inversiones guardadas</div>
+                            <div className="space-y-1.5">
+                                {groupDetails.map((item) => (
+                                    <div key={item.label} className="flex items-center justify-between gap-3 text-[12px] font-semibold">
+                                        <span className="text-[#667085]">{item.label}</span>
+                                        <span className="font-black text-[#172033]">{money(item.value)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : null}
+                    {perVisitRows.length ? (
+                        <div className="rounded-lg border border-[#e4e7ec] bg-white p-3">
+                            <div className="mb-2 text-[12px] font-black text-[#101936]">Tarifas por cliente visitado</div>
+                            <div className="space-y-1.5">
+                                {perVisitRows.slice(0, 6).map((row) => (
+                                    <div key={row.userId} className="flex items-center justify-between gap-3 text-[12px] font-semibold">
+                                        <span className="min-w-0 truncate text-[#667085]">{row.name}</span>
+                                        <span className="shrink-0 font-black text-[#172033]">{row.visited} visitas · {money(row.gross)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : null}
+                </div>
+            ) : null}
 
             {finalSummary.subscriptionRows?.length ? (
                 <div className="border-t border-[#eef1f5] p-4">
