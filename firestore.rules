@@ -700,7 +700,7 @@ service cloud.firestore {
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.id == debtId
         && validDebtDoc(request.resource.data);
-      allow delete: if false;
+      allow delete: if isAdmin() && resource.data.createdBy == request.auth.uid;
 
       match /payments/{paymentId} {
         allow read: if isAdmin()

@@ -1,6 +1,5 @@
 import {
     collection,
-    deleteDoc,
     doc,
     getDoc,
     getDocs,
@@ -9,6 +8,7 @@ import {
     runTransaction,
     setDoc,
     where,
+    writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { DebtCurrency, DebtDoc, DebtDraft, DebtPaymentDoc, DebtPaymentDraft, DebtPaymentFrequency, DebtPaymentMethod, DebtStatus } from "@/types/debts";
@@ -123,11 +123,11 @@ export function debtToDraft(debt?: DebtDoc | null): DebtDraft {
         clientName: debt?.clientName ?? "",
         phone: debt?.phone ?? "",
         businessName: debt?.businessName ?? "",
-        originalAmount: debt?.originalAmount ?? 0,
-        interestAmount: debt?.interestAmount ?? 0,
+        originalAmount: debt?.originalAmount || "",
+        interestAmount: debt?.interestAmount || "",
         currency: debt?.currency ?? "BRL",
         paymentFrequency: debt?.paymentFrequency ?? "weekly",
-        installmentAmount: debt?.installmentAmount ?? 0,
+        installmentAmount: debt?.installmentAmount || "",
         startDate: msToDateInput(debt?.startDate) || todayInputValue(),
         dueDate: msToDateInput(debt?.dueDate),
         notes: debt?.notes ?? "",
@@ -144,6 +144,19 @@ export async function listDebts(ownerId: string): Promise<DebtDoc[]> {
     return snap.docs
         .map((item) => normalizeDebt(item.id, record(item.data())))
         .filter((item) => item.deleted !== true)
+        .sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+export async function listDeletedDebts(ownerId: string): Promise<DebtDoc[]> {
+    const q = query(
+        collection(db, "debts"),
+        where("createdBy", "==", ownerId),
+        where("deleted", "==", true),
+        limit(500),
+    );
+    const snap = await getDocs(q);
+    return snap.docs
+        .map((item) => normalizeDebt(item.id, record(item.data())))
         .sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
@@ -295,12 +308,41 @@ export async function deleteDebt(ownerId: string, debtId: string) {
     await setDoc(ref, { deleted: true, updatedAt: Date.now(), status: "cancelled" }, { merge: true });
 }
 
-export async function hardDeleteEmptyDebt(ownerId: string, debtId: string) {
+export async function restoreDebt(ownerId: string, debtId: string) {
     const ref = doc(db, "debts", debtId);
     const snap = await getDoc(ref);
     if (!snap.exists()) return;
     const debt = normalizeDebt(snap.id, record(snap.data()));
     if (debt.createdBy !== ownerId) throw new Error("No tienes acceso a esta deuda.");
-    if (debt.totalPaid > 0) throw new Error("Esta deuda ya tiene abonos. Se cancelara en lugar de borrarse.");
-    await deleteDoc(ref);
+    await setDoc(
+        ref,
+        {
+            deleted: false,
+            status: debt.remainingAmount <= 0 ? "paid" : "active",
+            updatedAt: Date.now(),
+        },
+        { merge: true },
+    );
+}
+
+export async function purgeDebtPermanently(ownerId: string, debtId: string) {
+    const ref = doc(db, "debts", debtId);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return;
+    const debt = normalizeDebt(snap.id, record(snap.data()));
+    if (debt.createdBy !== ownerId) throw new Error("No tienes acceso a esta deuda.");
+    if (debt.deleted !== true) throw new Error("Solo puedes limpiar prestamos eliminados.");
+
+    const paymentsSnap = await getDocs(collection(db, "debts", debtId, "payments"));
+    const batch = writeBatch(db);
+    paymentsSnap.docs.forEach((item) => batch.delete(item.ref));
+    batch.delete(ref);
+    await batch.commit();
+}
+
+export async function purgeDeletedDebts(ownerId: string) {
+    const debts = await listDeletedDebts(ownerId);
+    for (const debt of debts) {
+        await purgeDebtPermanently(ownerId, debt.id);
+    }
 }

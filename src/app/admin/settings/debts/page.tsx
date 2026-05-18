@@ -6,9 +6,13 @@ import {
     debtToDraft,
     deleteDebt,
     deleteDebtPayment,
+    listDeletedDebts,
     listDebtPayments,
     listDebts,
+    purgeDebtPermanently,
+    purgeDeletedDebts,
     registerDebtPayment,
+    restoreDebt,
     saveDebt,
     todayInputValue,
     updateDebtStatus,
@@ -28,18 +32,18 @@ const emptyDraft: DebtDraft = {
     clientName: "",
     phone: "",
     businessName: "",
-    originalAmount: 0,
-    interestAmount: 0,
+    originalAmount: "",
+    interestAmount: "",
     currency: "BRL",
     paymentFrequency: "weekly",
-    installmentAmount: 0,
+    installmentAmount: "",
     startDate: todayInputValue(),
     dueDate: "",
     notes: "",
 };
 
 const emptyPaymentDraft: DebtPaymentDraft = {
-    amount: 0,
+    amount: "",
     method: "cash",
     paymentDate: todayInputValue(),
     notes: "",
@@ -49,6 +53,7 @@ export default function AdminDebtsPage() {
     const { firebaseUser } = useAuth();
     const ownerId = firebaseUser?.uid ?? "";
     const [debts, setDebts] = useState<DebtDoc[]>([]);
+    const [deletedDebts, setDeletedDebts] = useState<DebtDoc[]>([]);
     const [payments, setPayments] = useState<DebtPaymentDoc[]>([]);
     const [selectedDebtId, setSelectedDebtId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
@@ -58,6 +63,7 @@ export default function AdminDebtsPage() {
     const [filter, setFilter] = useState<DebtFilter>("all");
     const [sort, setSort] = useState<DebtSort>("recent");
     const [filterModalOpen, setFilterModalOpen] = useState(false);
+    const [trashOpen, setTrashOpen] = useState(false);
     const [debtModalOpen, setDebtModalOpen] = useState(false);
     const [paymentModalOpen, setPaymentModalOpen] = useState(false);
     const [editingDebt, setEditingDebt] = useState<DebtDoc | null>(null);
@@ -105,7 +111,9 @@ export default function AdminDebtsPage() {
         setError("");
         try {
             const items = await listDebts(ownerId);
+            const deleted = await listDeletedDebts(ownerId);
             setDebts(items);
+            setDeletedDebts(deleted);
             if (!selectedDebtId && items.length) setSelectedDebtId(items[0].id);
         } catch (err) {
             setError(err instanceof Error ? err.message : "No se pudo cargar cartera.");
@@ -255,6 +263,65 @@ export default function AdminDebtsPage() {
         });
     }
 
+    async function handleRestoreDebt(debt: DebtDoc) {
+        if (!ownerId) return;
+        setSaving(true);
+        setError("");
+        try {
+            await restoreDebt(ownerId, debt.id);
+            await load();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "No se pudo restaurar el prestamo.");
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    function requestPurgeDebt(debt: DebtDoc) {
+        if (!ownerId) return;
+        setConfirmAction({
+            title: "Borrar definitivamente",
+            body: `Se eliminara para siempre el prestamo de ${debt.clientName}, incluyendo sus abonos. Esta accion no se puede deshacer.`,
+            confirmLabel: "Borrar",
+            tone: "red",
+            onConfirm: async () => {
+                setSaving(true);
+                setError("");
+                try {
+                    await purgeDebtPermanently(ownerId, debt.id);
+                    await load();
+                } catch (err) {
+                    setError(err instanceof Error ? err.message : "No se pudo limpiar este prestamo.");
+                } finally {
+                    setSaving(false);
+                }
+            },
+        });
+    }
+
+    function requestEmptyTrash() {
+        if (!ownerId) return;
+        setConfirmAction({
+            title: "Vaciar papelera",
+            body: "Se eliminaran definitivamente todos los prestamos de la papelera y sus abonos. Esta accion no se puede deshacer.",
+            confirmLabel: "Vaciar papelera",
+            tone: "red",
+            onConfirm: async () => {
+                setSaving(true);
+                setError("");
+                try {
+                    await purgeDeletedDebts(ownerId);
+                    await load();
+                    setTrashOpen(false);
+                } catch (err) {
+                    setError(err instanceof Error ? err.message : "No se pudo vaciar la papelera.");
+                } finally {
+                    setSaving(false);
+                }
+            },
+        });
+    }
+
     return (
         <main className="-mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.10),transparent_36%),linear-gradient(180deg,#fbfaff_0%,#f6f3ff_54%,#f8fafc_100%)] pb-6 text-[#101936] sm:-mx-5 lg:-mx-7 xl:mx-auto xl:mt-0 xl:w-full xl:max-w-6xl xl:bg-none xl:pb-4">
             <div className="sticky top-0 z-20 border-b border-[#eee9ff] bg-[#fbfaff]/96 px-3 pb-3 pt-3 backdrop-blur-md sm:px-5 lg:px-7 xl:static xl:border-0 xl:bg-transparent xl:p-0 xl:backdrop-blur-0">
@@ -271,6 +338,20 @@ export default function AdminDebtsPage() {
                         className="flex h-10 w-10 items-center justify-center rounded-[12px] border border-[#E8E7FB] bg-white text-[#7C3AED] shadow-sm transition active:bg-[#f3f0ff]"
                     >
                         <AppIcon name="plus" tone="purple" size="sm" className="h-[18px] w-[18px] bg-transparent text-current ring-0" />
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => setTrashOpen(true)}
+                        aria-label="Papelera"
+                        className="relative flex h-10 w-10 items-center justify-center rounded-[12px] border border-[#E8E7FB] bg-white text-[#7C3AED] shadow-sm transition active:bg-[#f3f0ff]"
+                    >
+                        <AppIcon name="trash" tone="purple" size="sm" className="h-[18px] w-[18px] bg-transparent text-current ring-0" />
+                        {deletedDebts.length > 0 ? (
+                            <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-black text-white">
+                                {deletedDebts.length}
+                            </span>
+                        ) : null}
                     </button>
 
                     <button
@@ -422,6 +503,16 @@ export default function AdminDebtsPage() {
                     setFilterModalOpen(false);
                 }}
                 onClose={() => setFilterModalOpen(false)}
+            />
+
+            <DebtTrashModal
+                open={trashOpen}
+                debts={deletedDebts}
+                saving={saving}
+                onRestore={handleRestoreDebt}
+                onPurge={requestPurgeDebt}
+                onEmpty={requestEmptyTrash}
+                onClose={() => setTrashOpen(false)}
             />
 
             <DebtFormModal
@@ -791,6 +882,81 @@ function DebtFiltersModal({
     );
 }
 
+function DebtTrashModal({
+    open,
+    debts,
+    saving,
+    onRestore,
+    onPurge,
+    onEmpty,
+    onClose,
+}: {
+    open: boolean;
+    debts: DebtDoc[];
+    saving: boolean;
+    onRestore: (debt: DebtDoc) => void;
+    onPurge: (debt: DebtDoc) => void;
+    onEmpty: () => void;
+    onClose: () => void;
+}) {
+    if (!open) return null;
+    const currency = debts[0]?.currency ?? "BRL";
+    const totalDeleted = debts.reduce((sum, debt) => sum + debt.remainingAmount, 0);
+
+    return (
+        <Modal open title="Papelera" subtitle="Prestamos eliminados de tu cartera." size="md" onClose={onClose}>
+            <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#e8e7fb] bg-[#fbfaff] p-3">
+                    <div className="min-w-0">
+                        <p className="text-[10px] font-black uppercase tracking-[0.08em] text-[#8a7ac8]">Eliminados</p>
+                        <p className="mt-1 text-[15px] font-black text-[#101936]">
+                            {debts.length} prestamos · {formatMoney(totalDeleted, currency)}
+                        </p>
+                    </div>
+                    {debts.length > 0 ? (
+                        <Button variant="danger" disabled={saving} onClick={onEmpty}>
+                            Vaciar
+                        </Button>
+                    ) : null}
+                </div>
+
+                {debts.length === 0 ? <EmptyState text="La papelera esta vacia." compact /> : null}
+
+                <div className="grid max-h-[58vh] gap-2 overflow-y-auto pr-1">
+                    {debts.map((debt) => (
+                        <div key={debt.id} className="rounded-2xl border border-[#e8e7fb] bg-white p-3 shadow-[0_10px_24px_rgba(36,30,86,0.06)]">
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                    <p className="truncate text-[15px] font-black text-[#101936]">{debt.clientName}</p>
+                                    <p className="mt-0.5 truncate text-[11px] font-semibold text-[#66739a]">
+                                        {debt.businessName || debt.phone || "Sin negocio registrado"}
+                                    </p>
+                                </div>
+                                <StatusBadge status={debt.status} />
+                            </div>
+
+                            <div className="mt-3 grid grid-cols-3 gap-2">
+                                <MiniValue label="Prestado" value={formatMoney(debt.originalAmount, debt.currency)} />
+                                <MiniValue label="Pagado" value={formatMoney(debt.totalPaid, debt.currency)} tone="green" />
+                                <MiniValue label="Saldo" value={formatMoney(debt.remainingAmount, debt.currency)} tone="orange" />
+                            </div>
+
+                            <div className="mt-3 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                                <Button variant="ghost" disabled={saving} onClick={() => onPurge(debt)}>
+                                    Borrar definitivo
+                                </Button>
+                                <Button variant="primary" disabled={saving} onClick={() => onRestore(debt)}>
+                                    Restaurar
+                                </Button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </Modal>
+    );
+}
+
 function DebtFormModal({ open, draft, editing, saving, onChange, onSave, onClose }: {
     open: boolean;
     draft: DebtDraft;
@@ -971,8 +1137,9 @@ function normalize(value: string) {
 }
 
 function parseInputMoney(value: string) {
-    if (value === "") return "";
-    const parsed = Number(value);
+    const normalized = value.replace(",", ".").replace(/^0+(?=\d)/, "");
+    if (normalized === "") return "";
+    const parsed = Number(normalized);
     return Number.isFinite(parsed) ? parsed : "";
 }
 
