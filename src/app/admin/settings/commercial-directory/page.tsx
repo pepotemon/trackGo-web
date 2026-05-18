@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { AppIcon, Badge, Button, Card, Field, IconButton, Input, KpiCard, Modal, PageHeader } from "@/components/ui";
+import { AppIcon, Badge, Button, Card, Field, IconButton, Input, Modal, PageHeader } from "@/components/ui";
 import {
     assignCommercialDirectoryCity,
     createDirectoryLocation,
@@ -476,8 +476,6 @@ export default function CommercialDirectoryPage() {
                     icon={<AppIcon name="map" plain className="h-5 w-5 text-current" />}
                     actions={
                         <div className="flex gap-2">
-                            <IconButton icon="filter" label="Filtros" variant="secondary" onClick={() => setFiltersOpen(true)} />
-                            {canEdit ? <IconButton icon="more" label="Acciones" variant="secondary" onClick={() => setActionsOpen(true)} /> : null}
                             {canEdit ? <IconButton icon="plus" label="Crear estructura" variant="primary" onClick={() => setCreateOpen(true)} /> : null}
                             <IconButton icon="refresh" label="Actualizar" variant="primary" onClick={loadAll} disabled={loading} />
                         </div>
@@ -488,11 +486,11 @@ export default function CommercialDirectoryPage() {
             {error ? <Notice tone="red">{error}</Notice> : null}
             {message ? <Notice tone="green">{message}</Notice> : null}
 
-            <section className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1 [&>*]:min-w-[158px] sm:-mx-5 sm:px-5 xl:mx-0 xl:grid xl:grid-cols-4 xl:gap-3 xl:overflow-visible xl:px-0 xl:pb-0 xl:[&>*]:min-w-0">
-                <KpiCard label="Paises" value={stats.countries} caption="Carpetas raiz" icon="map" tone="blue" />
-                <KpiCard label="Barrios" value={stats.neighborhoods} caption="Zonas disponibles" icon="location" tone="green" />
-                <KpiCard label="Categorias" value={stats.categories} caption="Del barrio activo" icon="filter" tone="purple" />
-                <KpiCard label="Prospectos" value={stats.prospects} caption="Vista actual" icon="lead" tone="orange" />
+            <section className="grid grid-cols-4 gap-2">
+                <DirectoryMiniStat label="Paises" value={stats.countries} tone="blue" />
+                <DirectoryMiniStat label="Barrios" value={stats.neighborhoods} tone="green" />
+                <DirectoryMiniStat label="Categorias" value={stats.categories} tone="purple" />
+                <DirectoryMiniStat label="Prospectos" value={stats.prospects} tone="orange" />
             </section>
 
             {loading ? (
@@ -908,6 +906,24 @@ function DirectoryLoadingState() {
             </div>
             <p className="mt-3 text-[14px] font-black text-[#101936]">Cargando directorio</p>
             <p className="mt-1 max-w-sm text-[12px] font-semibold text-[#66739A]">Estamos preparando carpetas, asignaciones y prospectos.</p>
+        </div>
+    );
+}
+
+function DirectoryMiniStat({ label, value, tone }: { label: string; value: number; tone: "blue" | "green" | "purple" | "orange" }) {
+    const toneClass =
+        tone === "green"
+            ? "border-emerald-100 bg-emerald-50 text-emerald-700"
+            : tone === "orange"
+                ? "border-amber-100 bg-amber-50 text-amber-700"
+                : tone === "blue"
+                    ? "border-blue-100 bg-blue-50 text-blue-700"
+                    : "border-violet-100 bg-[#f3f0ff] text-[#6d28d9]";
+
+    return (
+        <div className={`min-w-0 rounded-[14px] border px-2.5 py-2 shadow-sm ${toneClass}`}>
+            <p className="truncate text-[9px] font-black uppercase tracking-[0.06em] opacity-75">{label}</p>
+            <p className="mt-0.5 truncate text-[15px] font-black leading-tight">{value}</p>
         </div>
     );
 }
