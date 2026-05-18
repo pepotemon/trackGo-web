@@ -1,5 +1,12 @@
 "use client";
 
+declare global {
+    interface Window {
+        __tgSplashText?: (text: string) => void;
+        __tgSplashDone?: () => void;
+    }
+}
+
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -101,22 +108,22 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         }
     }, [firebaseUser, isAdmin, loading, router]);
 
+    // Splash control: update subtitle while auth loads, dismiss when resolved
+    useEffect(() => {
+        if (loading) {
+            window.__tgSplashText?.("Validando acceso...");
+        } else {
+            window.__tgSplashDone?.();
+        }
+    }, [loading]);
+
     useEffect(() => {
         const id = window.setInterval(() => setNow(new Date()), 1000);
         return () => window.clearInterval(id);
     }, []);
 
-    if (loading) {
-        return <AdminAccessState title="Validando acceso" body="Estamos revisando tu sesión administrativa." animated />;
-    }
-
-    if (!firebaseUser) {
-        return <AdminAccessState title="Redirigiendo" body="Necesitas iniciar sesión para entrar al panel." animated />;
-    }
-
-    if (!isAdmin) {
-        return <AdminAccessState title="Sin acceso" body="Tu usuario no tiene permisos de administrador activo." />;
-    }
+    // While auth resolves or redirect is in progress, splash covers everything
+    if (loading || !firebaseUser || !isAdmin) return null;
 
     if (!routeAllowed) {
         return <AdminAccessState title="Sin permiso" body="Tu usuario no tiene permiso para abrir esta seccion." />;
@@ -182,11 +189,11 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     );
 }
 
-function AdminAccessState({ title, body, animated = false }: { title: string; body: string; animated?: boolean }) {
+function AdminAccessState({ title, body }: { title: string; body: string }) {
     return (
         <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,#f5f3ff_0,#f8f7ff_34%,#ffffff_100%)] p-6 text-[#172033]">
             <div className="w-full max-w-sm rounded-2xl border border-[#e8e7fb] bg-white p-6 text-center shadow-[0_24px_70px_rgba(91,33,255,0.12)]">
-                <TrackGoLogo variant="mark" size="lg" className="mx-auto mb-4 justify-center" animated={animated} />
+                <TrackGoLogo variant="mark" size="lg" className="mx-auto mb-4 justify-center" />
                 <h1 className="text-[16px] font-semibold">{title}</h1>
                 <p className="mt-1 text-[13px] font-medium text-[#667085]">{body}</p>
             </div>

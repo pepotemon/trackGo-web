@@ -1,5 +1,11 @@
 "use client";
 
+declare global {
+    interface Window {
+        __tgSplashDone?: () => void;
+    }
+}
+
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 import { TrackGoLogo } from "@/components/brand/TrackGoLogo";
@@ -20,6 +26,7 @@ export default function LoginPage() {
         if (firebaseUser && isAdmin) router.replace("/admin");
         else if (firebaseUser && isUser) router.replace("/user/leads");
         else if (firebaseUser) router.replace("/no-access");
+        else window.__tgSplashDone?.(); // confirmed no session — show login
     }, [loading, firebaseUser, isAdmin, isUser, router]);
 
     async function onSubmit(e: FormEvent) {

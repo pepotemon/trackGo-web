@@ -4,9 +4,10 @@ import { AuthProvider } from "@/features/auth/AuthProvider";
 import { InstallAppPrompt } from "@/components/pwa/InstallAppPrompt";
 import { NoContextMenu } from "@/components/pwa/NoContextMenu";
 
-// Render-blocking splash that runs before the browser paints anything.
-// The element is appended to <html> (not <body>), so React never sees it
-// and hydration is unaffected. Removed after ≥ 900ms + DOMContentLoaded.
+// Render-blocking splash injected before first paint.
+// Exposes window.__tgSplashText(text) and window.__tgSplashDone() so React
+// controls the lifecycle. The element lives on <html> (not <body>) so React
+// never touches it during hydration. 10 s safety fallback prevents eternal lock.
 const SPLASH_CSS = [
   "@keyframes tgs-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}",
   "@keyframes tgs-blip{0%{transform:scale(1);opacity:.85}18%{transform:scale(2.2);opacity:.35}30%,100%{transform:scale(3);opacity:0}}",
@@ -34,40 +35,32 @@ const SPLASH_SVG = [
   '<stop offset="100%" stop-color="#EC4899"/>',
   "</radialGradient>",
   "</defs>",
-  // rings — wave-pulse
   '<circle class="tgs-r1" cx="20" cy="20" r="18" stroke="#A78BFA" stroke-width="0.75" stroke-opacity="0.4"/>',
   '<circle class="tgs-r2" cx="20" cy="20" r="13" stroke="#A78BFA" stroke-width="0.75" stroke-opacity="0.65"/>',
   '<circle class="tgs-r3" cx="20" cy="20" r="8" stroke="#C4B5FD" stroke-width="1" stroke-opacity="0.85"/>',
-  // crosshair
   '<line x1="20" y1="2" x2="20" y2="38" stroke="#C4B5FD" stroke-width="0.4" stroke-opacity="0.2" stroke-dasharray="1.5 2.5"/>',
   '<line x1="2" y1="20" x2="38" y2="20" stroke="#C4B5FD" stroke-width="0.4" stroke-opacity="0.2" stroke-dasharray="1.5 2.5"/>',
-  // sweep arm — rotates
   '<g class="tgs-sweep">',
   '<path d="M20 20 L20 2 A18 18 0 0 1 35.6 11 Z" fill="url(#tgs-rf)"/>',
   '<line x1="20" y1="20" x2="20" y2="2" stroke="#A78BFA" stroke-width="0.75" stroke-opacity="0.55"/>',
   '<line x1="20" y1="20" x2="35.6" y2="11" stroke="#F0ABFC" stroke-width="1.5" stroke-linecap="round"/>',
   "</g>",
-  // secondary blip (≈42° from 12 o'clock)
   '<circle cx="29" cy="10" r="3.5" fill="#7C3AED" fill-opacity="0.2"/>',
   '<circle cx="29" cy="10" r="3.5" class="tgs-ba" fill="#C4B5FD"/>',
   '<circle cx="29" cy="10" r="2" fill="#C4B5FD"/>',
-  // tertiary blip (≈300° from 12 o'clock)
   '<circle cx="8" cy="13" r="2.2" class="tgs-bb" fill="#A78BFA"/>',
   '<circle cx="8" cy="13" r="1.3" fill="#A78BFA" fill-opacity="0.7"/>',
-  // center — heartbeat
   '<circle cx="20" cy="20" r="5.5" fill="#EC4899" fill-opacity="0.2"/>',
   '<circle cx="20" cy="20" r="3" fill="url(#tgs-cd)" class="tgs-core"/>',
   "</svg>",
 ].join("");
 
-const SPLASH_WORDMARK = [
-  '<div style="font-family:system-ui,-apple-system,BlinkMacSystemFont,sans-serif;',
-  "font-weight:900;font-size:28px;letter-spacing:-0.5px;color:#fff\">",
-  "Track",
-  '<span style="background:linear-gradient(to right,#C4B5FD,#F0ABFC);',
-  "-webkit-background-clip:text;-webkit-text-fill-color:transparent;",
-  'background-clip:text">Go</span>',
+const SPLASH_CONTENT = [
+  SPLASH_SVG,
+  '<div style="font-family:system-ui,-apple-system,BlinkMacSystemFont,sans-serif;font-weight:900;font-size:28px;letter-spacing:-0.5px;color:#fff">',
+  'Track<span style="background:linear-gradient(to right,#C4B5FD,#F0ABFC);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">Go</span>',
   "</div>",
+  '<p id="tgs-sub" style="margin:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;font-weight:600;color:rgba(196,181,253,0.65);letter-spacing:0.01em">Iniciando...</p>',
 ].join("");
 
 const SPLASH_SCRIPT = `(function(){
@@ -77,19 +70,26 @@ const SPLASH_SCRIPT = `(function(){
 
   var el=document.createElement('div');
   el.style.cssText='position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;background:linear-gradient(155deg,#1e0a3c 0%,#3b0d6b 55%,#5b21b6 100%);opacity:1;transition:opacity 0.4s ease';
-  el.innerHTML='${SPLASH_SVG}${SPLASH_WORDMARK}';
+  el.innerHTML='${SPLASH_CONTENT}';
   document.documentElement.appendChild(el);
 
-  var min=false,dom=false;
-  function go(){
-    if(!min||!dom)return;
+  var dismissed=false;
+  function dismiss(){
+    if(dismissed)return;
+    dismissed=true;
     el.style.opacity='0';
     el.style.pointerEvents='none';
     setTimeout(function(){if(el.parentNode)el.parentNode.removeChild(el);},440);
   }
-  setTimeout(function(){min=true;go();},900);
-  if(document.readyState==='interactive'||document.readyState==='complete'){dom=true;}
-  else{document.addEventListener('DOMContentLoaded',function(){dom=true;go();},{once:true});}
+
+  window.__tgSplashText=function(t){
+    var s=document.getElementById('tgs-sub');
+    if(s)s.textContent=t;
+  };
+  window.__tgSplashDone=dismiss;
+
+  // Safety: remove after 10 s even if React never signals
+  setTimeout(dismiss,10000);
 })();`;
 
 export const metadata: Metadata = {
@@ -135,7 +135,7 @@ export default function RootLayout({
   return (
     <html lang="es">
       <head>
-        {/* Animated splash — runs before first paint, removed after ≥900ms */}
+        {/* Animated splash — React controls lifecycle via window.__tgSplashText / __tgSplashDone */}
         <script dangerouslySetInnerHTML={{ __html: SPLASH_SCRIPT }} />
       </head>
       <body>

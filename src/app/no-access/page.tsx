@@ -1,12 +1,23 @@
 "use client";
 
+declare global {
+    interface Window {
+        __tgSplashDone?: () => void;
+    }
+}
+
 import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { TrackGoLogo } from "@/components/brand/TrackGoLogo";
 
 export default function NoAccessPage() {
     const router = useRouter();
     const { logout, profile } = useAuth();
+
+    useEffect(() => {
+        window.__tgSplashDone?.();
+    }, []);
 
     async function exit() {
         await logout();
