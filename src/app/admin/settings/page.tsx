@@ -40,6 +40,13 @@ export default function AdminSettingsPage() {
             visible: permissions.commercialDirectoryView || permissions.commercialDirectoryEdit,
         },
         {
+            href: "/admin/settings/debts",
+            title: "Cartera de Cobros",
+            body: "Control privado de deudas, abonos y saldos por administrador.",
+            tone: "purple",
+            visible: true,
+        },
+        {
             href: "/admin/settings/notifications",
             title: "Notificaciones",
             body: "Activa o desactiva avisos push en este dispositivo.",

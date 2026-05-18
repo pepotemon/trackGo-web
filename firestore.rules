@@ -103,6 +103,64 @@ service cloud.firestore {
       return t in ["visited", "rejected", "pending"];
     }
 
+    function validDebtStatusValue(v) {
+      return v in ["active", "paid", "late", "cancelled"];
+    }
+
+    function validDebtCurrencyValue(v) {
+      return v in ["BRL", "USD", "EUR"];
+    }
+
+    function validDebtFrequencyValue(v) {
+      return v in ["daily", "weekly", "biweekly", "monthly"];
+    }
+
+    function validDebtPaymentMethodValue(v) {
+      return v in ["cash", "pix", "transfer", "card", "other"];
+    }
+
+    function validDebtDoc(d) {
+      return d.id is string
+        && d.clientName is string
+        && d.clientName.size() > 0
+        && d.originalAmount is number
+        && d.originalAmount > 0
+        && d.remainingAmount is number
+        && d.remainingAmount >= 0
+        && d.totalPaid is number
+        && d.totalPaid >= 0
+        && validDebtCurrencyValue(d.currency)
+        && validDebtStatusValue(d.status)
+        && validDebtFrequencyValue(d.paymentFrequency)
+        && d.startDate is int
+        && d.createdAt is int
+        && d.updatedAt is int
+        && d.createdBy == request.auth.uid
+        && validOptionalString(d, "clientId")
+        && validOptionalString(d, "phone")
+        && validOptionalString(d, "businessName")
+        && validOptionalString(d, "notes")
+        && validOptionalNumber(d, "interestAmount")
+        && validOptionalNumber(d, "finalAmount")
+        && validOptionalNumber(d, "installmentAmount")
+        && validOptionalInt(d, "dueDate")
+        && validOptionalBool(d, "deleted");
+    }
+
+    function validDebtPaymentDoc(d, debtId, paymentId) {
+      return d.id is string
+        && d.id == paymentId
+        && d.debtId is string
+        && d.debtId == debtId
+        && d.amount is number
+        && d.amount > 0
+        && d.paymentDate is int
+        && validDebtPaymentMethodValue(d.method)
+        && d.createdAt is int
+        && d.createdBy == request.auth.uid
+        && validOptionalString(d, "notes");
+    }
+
     // -------------------------
     // Helpers: investment groups
     // -------------------------
@@ -630,6 +688,31 @@ service cloud.firestore {
         && validInvestmentGroupDoc(request.resource.data);
 
       allow delete: if isAdmin();
+    }
+
+    // -------------------------
+    // PRIVATE ADMIN DEBTS
+    // Herramienta privada de cartera por administrador.
+    // -------------------------
+    match /debts/{debtId} {
+      allow read: if isAdmin() && resource.data.createdBy == request.auth.uid;
+      allow create, update: if isAdmin()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.id == debtId
+        && validDebtDoc(request.resource.data);
+      allow delete: if false;
+
+      match /payments/{paymentId} {
+        allow read: if isAdmin()
+          && get(/databases/$(database)/documents/debts/$(debtId)).data.createdBy == request.auth.uid;
+        allow create: if isAdmin()
+          && get(/databases/$(database)/documents/debts/$(debtId)).data.createdBy == request.auth.uid
+          && validDebtPaymentDoc(request.resource.data, debtId, paymentId);
+        allow update: if false;
+        allow delete: if isAdmin()
+          && get(/databases/$(database)/documents/debts/$(debtId)).data.createdBy == request.auth.uid
+          && resource.data.createdBy == request.auth.uid;
+      }
     }
 
     // -------------------------
