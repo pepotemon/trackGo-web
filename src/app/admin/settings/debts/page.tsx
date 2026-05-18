@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AppIcon, Badge, Button, Card, CardContent, CardHeader, Field, Input, Modal, PageHeader } from "@/components/ui";
+import { AppIcon, Badge, Button, Card, CardContent, CardHeader, Field, Input, Modal } from "@/components/ui";
 import {
     debtToDraft,
     deleteDebt,
@@ -57,6 +57,7 @@ export default function AdminDebtsPage() {
     const [query, setQuery] = useState("");
     const [filter, setFilter] = useState<DebtFilter>("all");
     const [sort, setSort] = useState<DebtSort>("recent");
+    const [filterModalOpen, setFilterModalOpen] = useState(false);
     const [debtModalOpen, setDebtModalOpen] = useState(false);
     const [paymentModalOpen, setPaymentModalOpen] = useState(false);
     const [editingDebt, setEditingDebt] = useState<DebtDoc | null>(null);
@@ -95,6 +96,8 @@ export default function AdminDebtsPage() {
             return b.updatedAt - a.updatedAt;
         });
     }, [debts, query, filter, sort]);
+
+    const activeFiltersCount = (filter !== "all" ? 1 : 0) + (sort !== "recent" ? 1 : 0);
 
     async function load() {
         if (!ownerId) return;
@@ -255,22 +258,31 @@ export default function AdminDebtsPage() {
     return (
         <main className="-mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.10),transparent_36%),linear-gradient(180deg,#fbfaff_0%,#f6f3ff_54%,#f8fafc_100%)] pb-6 text-[#101936] sm:-mx-5 lg:-mx-7 xl:mx-auto xl:mt-0 xl:w-full xl:max-w-6xl xl:bg-none xl:pb-4">
             <div className="sticky top-0 z-20 border-b border-[#eee9ff] bg-[#fbfaff]/96 px-3 pb-3 pt-3 backdrop-blur-md sm:px-5 lg:px-7 xl:static xl:border-0 xl:bg-transparent xl:p-0 xl:backdrop-blur-0">
-                <PageHeader
-                    icon={<AppIcon name="wallet" plain className="h-5 w-5 text-current" />}
-                    title="Cartera de Cobros"
-                    subtitle="Control privado de deudas, abonos y saldos."
-                    actions={
-                        <div className="flex gap-2">
-                            <button type="button" onClick={load} disabled={loading} aria-label="Actualizar" className="flex h-10 w-10 items-center justify-center rounded-[14px] border border-[#e8e7fb] bg-white text-[#7c3aed] shadow-sm disabled:opacity-50">
-                                <AppIcon name="refresh" plain className="h-4 w-4 text-current" />
-                            </button>
-                            <Button variant="primary" onClick={openCreate}>
-                                <AppIcon name="plus" plain className="h-4 w-4 text-current" />
-                                <span className="hidden sm:inline">Nueva deuda</span>
-                            </Button>
-                        </div>
-                    }
-                />
+                <div className="mb-3 flex items-center gap-2 xl:rounded-2xl xl:border xl:border-[#e8e7fb] xl:bg-white/88 xl:p-4 xl:shadow-[0_14px_34px_rgba(36,30,86,0.07)]">
+                    <div className="min-w-0 flex-1">
+                        <h1 className="truncate text-[20px] font-black tracking-[-0.03em] text-[#101936]">Cartera</h1>
+                        <p className="mt-0.5 truncate text-[11px] font-semibold text-[#66739A]">Cobros privados · {visibleDebts.length} registros</p>
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={openCreate}
+                        aria-label="Crear deuda"
+                        className="flex h-10 w-10 items-center justify-center rounded-[12px] border border-[#E8E7FB] bg-white text-[#7C3AED] shadow-sm transition active:bg-[#f3f0ff]"
+                    >
+                        <AppIcon name="plus" tone="purple" size="sm" className="h-[18px] w-[18px] bg-transparent text-current ring-0" />
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={load}
+                        disabled={loading}
+                        aria-label="Actualizar"
+                        className="flex h-10 w-10 items-center justify-center rounded-[12px] border border-[#E8E7FB] bg-white text-[#7C3AED] shadow-sm transition active:bg-[#f3f0ff] disabled:opacity-50"
+                    >
+                        <AppIcon name="refresh" tone="purple" size="sm" className="h-[18px] w-[18px] bg-transparent text-current ring-0" />
+                    </button>
+                </div>
 
                 <section className="mt-3 grid grid-cols-3 gap-2 xl:grid-cols-6">
                     <CompactStat label="Prestado" value={formatMoney(stats.original, stats.currency)} tone="blue" />
@@ -289,30 +301,43 @@ export default function AdminDebtsPage() {
                     <CardHeader
                         title="Deudas"
                         subtitle="Busca, filtra y abre una deuda para gestionar abonos."
-                        action={
-                            <div className="flex items-center gap-2">
-                                <Badge tone="purple">{visibleDebts.length}</Badge>
-                                <button type="button" className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#f3f0ff] text-[#7c3aed] xl:hidden">
-                                    <AppIcon name="filter" plain className="h-4 w-4 text-current" />
-                                </button>
-                            </div>
-                        }
+                        action={<Badge tone="purple">{visibleDebts.length}</Badge>}
                     />
                     <CardContent className="space-y-3">
-                        <div className="grid gap-2 sm:grid-cols-[1fr_150px_150px]">
-                            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar cliente, negocio o telefono" />
-                            <select value={filter} onChange={(e) => setFilter(e.target.value as DebtFilter)} className={selectClass}>
-                                <option value="all">Todas</option>
-                                <option value="active">Activas</option>
-                                <option value="late">Vencidas</option>
-                                <option value="paid">Pagadas</option>
-                                <option value="cancelled">Canceladas</option>
-                            </select>
-                            <select value={sort} onChange={(e) => setSort(e.target.value as DebtSort)} className={selectClass}>
-                                <option value="recent">Recientes</option>
-                                <option value="balance">Mayor deuda</option>
-                                <option value="late">Mas atrasadas</option>
-                            </select>
+                        <div className="flex gap-2">
+                            <div className="flex h-[46px] flex-1 items-center gap-2 rounded-[14px] border border-[#E8E7FB] bg-white px-3 shadow-[0_2px_12px_rgba(91,33,255,0.07)]">
+                                <AppIcon name="search" tone="purple" size="sm" className="h-5 w-5 shrink-0 bg-transparent text-[#98A2B3] ring-0" />
+                                <input
+                                    value={query}
+                                    onChange={(e) => setQuery(e.target.value)}
+                                    placeholder="Buscar..."
+                                    className="min-w-0 flex-1 bg-transparent font-semibold text-[#101936] outline-none placeholder:text-[#98A2B3]"
+                                    style={{ fontSize: "16px" }}
+                                />
+                                {query ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => setQuery("")}
+                                        className="flex h-7 w-7 items-center justify-center rounded-full bg-[#f3f0ff] text-[16px] text-[#7C3AED]"
+                                    >
+                                        ×
+                                    </button>
+                                ) : null}
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={() => setFilterModalOpen(true)}
+                                className="relative flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-[14px] border border-[#E8E7FB] bg-white shadow-[0_2px_12px_rgba(91,33,255,0.07)] transition active:bg-[#f3f0ff]"
+                                aria-label="Filtros"
+                            >
+                                <AppIcon name="filter" tone="purple" size="sm" className="h-5 w-5 bg-transparent text-[#7C3AED] ring-0" />
+                                {activeFiltersCount > 0 ? (
+                                    <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#7C3AED] text-[9px] font-black text-white">
+                                        {activeFiltersCount}
+                                    </span>
+                                ) : null}
+                            </button>
                         </div>
 
                         {loading ? <EmptyState text="Cargando cartera..." /> : null}
@@ -383,6 +408,20 @@ export default function AdminDebtsPage() {
                 action={confirmAction}
                 saving={saving}
                 onClose={() => setConfirmAction(null)}
+            />
+
+            <DebtFiltersModal
+                open={filterModalOpen}
+                filter={filter}
+                sort={sort}
+                onFilter={setFilter}
+                onSort={setSort}
+                onReset={() => {
+                    setFilter("all");
+                    setSort("recent");
+                    setFilterModalOpen(false);
+                }}
+                onClose={() => setFilterModalOpen(false)}
             />
 
             <DebtFormModal
@@ -700,6 +739,52 @@ function ConfirmActionModal({
                     >
                         {saving ? "Procesando..." : action.confirmLabel}
                     </Button>
+                </div>
+            </div>
+        </Modal>
+    );
+}
+
+function DebtFiltersModal({
+    open,
+    filter,
+    sort,
+    onFilter,
+    onSort,
+    onReset,
+    onClose,
+}: {
+    open: boolean;
+    filter: DebtFilter;
+    sort: DebtSort;
+    onFilter: (filter: DebtFilter) => void;
+    onSort: (sort: DebtSort) => void;
+    onReset: () => void;
+    onClose: () => void;
+}) {
+    if (!open) return null;
+    return (
+        <Modal open title="Filtros" subtitle="Organiza tu cartera de cobros." size="sm" onClose={onClose}>
+            <div className="space-y-4">
+                <Field label="Estado">
+                    <select value={filter} onChange={(e) => onFilter(e.target.value as DebtFilter)} className={selectClass}>
+                        <option value="all">Todas</option>
+                        <option value="active">Activas</option>
+                        <option value="late">Vencidas</option>
+                        <option value="paid">Pagadas</option>
+                        <option value="cancelled">Canceladas</option>
+                    </select>
+                </Field>
+                <Field label="Ordenar">
+                    <select value={sort} onChange={(e) => onSort(e.target.value as DebtSort)} className={selectClass}>
+                        <option value="recent">Recientes</option>
+                        <option value="balance">Mayor deuda</option>
+                        <option value="late">Mas atrasadas</option>
+                    </select>
+                </Field>
+                <div className="flex flex-col-reverse gap-2 border-t border-[#eef1f5] pt-3 sm:flex-row sm:justify-end">
+                    <Button variant="ghost" onClick={onReset}>Limpiar</Button>
+                    <Button variant="primary" onClick={onClose}>Aplicar</Button>
                 </div>
             </div>
         </Modal>
