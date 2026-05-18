@@ -521,55 +521,63 @@ export default function SubscriptionsAdminPage() {
 
             {error ? <Notice tone="red">{error}</Notice> : null}
             {actionMessage ? <Notice tone={actionMessage.includes("correctamente") ? "green" : "red"}>{actionMessage}</Notice> : null}
-            {loading ? <Notice tone="violet">Cargando...</Notice> : null}
-
-            <section className="grid gap-3 xl:grid-cols-[1.15fr_0.85fr]">
+            {loading ? (
                 <Card>
-                    <CardHeader
-                        title="Ciudades"
-                        subtitle="Disponibilidad, responsable y configuracion operativa."
-                        action={<StatusBadge>{cityStats.available} libres</StatusBadge>}
-                    />
-                    <CardContent className="grid gap-2">
-                        {(overview?.cities ?? []).map((city) => (
-                            <CityCard
-                                key={city.id}
-                                city={city}
-                                subscription={activeSubscriptions.find((item) => item.cityId === city.id)}
-                                onSheet={() => setSheetCityId(city.id)}
+                    <CardContent>
+                        <EmptyState title="Cargando suscripciones" body="Estamos preparando ciudades, ciclos activos y pagos recientes." />
+                    </CardContent>
+                </Card>
+            ) : (
+                <>
+                    <section className="grid gap-3 xl:grid-cols-[1.15fr_0.85fr]">
+                        <Card>
+                            <CardHeader
+                                title="Ciudades"
+                                subtitle="Disponibilidad, responsable y configuracion operativa."
+                                action={<StatusBadge>{cityStats.available} libres</StatusBadge>}
                             />
-                        ))}
-                        {overview?.cities.length === 0 ? <EmptyInline text="Aun no hay ciudades configuradas." /> : null}
-                    </CardContent>
-                </Card>
+                            <CardContent className="grid gap-2">
+                                {(overview?.cities ?? []).map((city) => (
+                                    <CityCard
+                                        key={city.id}
+                                        city={city}
+                                        subscription={activeSubscriptions.find((item) => item.cityId === city.id)}
+                                        onSheet={() => setSheetCityId(city.id)}
+                                    />
+                                ))}
+                                {overview?.cities.length === 0 ? <EmptyInline text="Aun no hay ciudades configuradas." /> : null}
+                            </CardContent>
+                        </Card>
 
-                <Card>
-                    <CardHeader title="Ciclos activos" subtitle={`${currency.format(revenue)} en ciclos activos`} action={<StatusBadge>{activeSubscriptions.length}</StatusBadge>} />
-                    <CardContent className="space-y-2">
-                        {activeSubscriptions.map((item) => <SubscriptionRow key={item.id} item={item} />)}
-                        {activeSubscriptions.length === 0 ? <EmptyInline text="No hay ciclos activos." /> : null}
-                    </CardContent>
-                </Card>
-            </section>
+                        <Card>
+                            <CardHeader title="Ciclos activos" subtitle={`${currency.format(revenue)} en ciclos activos`} action={<StatusBadge>{activeSubscriptions.length}</StatusBadge>} />
+                            <CardContent className="space-y-2">
+                                {activeSubscriptions.map((item) => <SubscriptionRow key={item.id} item={item} />)}
+                                {activeSubscriptions.length === 0 ? <EmptyInline text="No hay ciclos activos." /> : null}
+                            </CardContent>
+                        </Card>
+                    </section>
 
-            <CampaignSpendPanel subscriptions={activeSubscriptions} onRefresh={loadOverview} loading={loading} />
+                    <CampaignSpendPanel subscriptions={activeSubscriptions} onRefresh={loadOverview} loading={loading} />
 
-            <Card>
-                <CardHeader title="Pagos recientes" subtitle="Pix, reservas, activaciones y errores de operacion." />
-                <CardContent className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                    {(overview?.checkouts ?? []).slice(0, 12).map((item) => (
-                        <CheckoutRow
-                            key={item.id}
-                            item={item}
-                            canRetry={canManage}
-                            busy={actionBusyId === item.id}
-                            onRetry={() => void retryCheckout(item.id)}
-                            onHide={() => void hideCheckoutNotice(item.id)}
-                        />
-                    ))}
-                    {overview?.checkouts.length === 0 ? <EmptyInline text="No hay pagos recientes." /> : null}
-                </CardContent>
-            </Card>
+                    <Card>
+                        <CardHeader title="Pagos recientes" subtitle="Pix, reservas, activaciones y errores de operacion." />
+                        <CardContent className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                            {(overview?.checkouts ?? []).slice(0, 12).map((item) => (
+                                <CheckoutRow
+                                    key={item.id}
+                                    item={item}
+                                    canRetry={canManage}
+                                    busy={actionBusyId === item.id}
+                                    onRetry={() => void retryCheckout(item.id)}
+                                    onHide={() => void hideCheckoutNotice(item.id)}
+                                />
+                            ))}
+                            {overview?.checkouts.length === 0 ? <EmptyInline text="No hay pagos recientes." /> : null}
+                        </CardContent>
+                    </Card>
+                </>
+            )}
 
             {sheetCity ? (
                 <CityActionSheet

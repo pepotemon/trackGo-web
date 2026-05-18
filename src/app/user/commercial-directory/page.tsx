@@ -217,7 +217,7 @@ export default function UserCommercialDirectoryPage() {
                     <div className="min-w-0">
                         <h1 className="text-[20px] font-black tracking-[-0.03em] text-[#101936]">Directorio Comercial</h1>
                         <p className="mt-0.5 truncate text-[11px] font-semibold text-[#66739A]">
-                            {cityOptions.length ? cityOptions.map((item) => item.cityName).join(", ") : "Sin ciudades asignadas"}
+                            {loading ? "Cargando base..." : cityOptions.length ? cityOptions.map((item) => item.cityName).join(", ") : "Sin ciudades asignadas"}
                         </p>
                     </div>
                     <div className="flex shrink-0 gap-2">
@@ -247,6 +247,8 @@ export default function UserCommercialDirectoryPage() {
                     <DailyLimitAlert count={todayContacts} compact />
                 ) : null}
 
+                {!loading ? (
+                    <>
                 {/* FILTER SELECTORS */}
                 <div className="grid grid-cols-2 gap-2">
                     <button
@@ -318,6 +320,8 @@ export default function UserCommercialDirectoryPage() {
                             );
                         })}
                     </div>
+                ) : null}
+                    </>
                 ) : null}
             </div>
 

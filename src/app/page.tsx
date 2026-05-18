@@ -33,7 +33,7 @@ export default function HomePage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,#f5f3ff_0,#f8f7ff_34%,#ffffff_100%)] p-6">
       <div className="w-full max-w-sm rounded-2xl border border-[#e8e7fb] bg-white p-6 text-center shadow-[0_24px_70px_rgba(91,33,255,0.12)]">
-        <TrackGoLogo variant="mark" size="lg" className="mx-auto mb-4 justify-center" />
+        <TrackGoLogo variant="mark" size="lg" className="mx-auto mb-4 justify-center" animated />
         <p className="text-[13px] font-semibold text-[#667085]">Restaurando tu sesión...</p>
       </div>
     </main>

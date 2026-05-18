@@ -184,7 +184,9 @@ export default function AdminDashboardPage() {
                 {/* Stat pills */}
                 <div className="mb-4 grid grid-cols-3 gap-2">
                     <MobileStatPill label="Cola" value={snapshot.stats.queueTotal} tone="blue" />
-                    <MobileStatPill label="Por revisar" value={snapshot.stats.pendingReview} tone="purple" />
+                    <Link href="/admin/leads?status=pending_review" className="block">
+                        <MobileStatPill label="Por revisar" value={snapshot.stats.pendingReview} tone="purple" />
+                    </Link>
                     {permissions.assignmentsView
                         ? <MobileStatPill label="Hoy" value={snapshot.stats.autoAssignmentsToday} tone="green" />
                         : <MobileStatPill label="Usuarios" value={snapshot.stats.activeUsers} tone="slate" />
@@ -234,7 +236,7 @@ export default function AdminDashboardPage() {
                     <div className="mb-4">
                         <div className="mb-2.5 flex items-center justify-between px-0.5">
                             <p className="text-[11px] font-black uppercase tracking-[0.12em] text-[#7c70ba]">Cola reciente</p>
-                            <Link href="/admin/leads" className="text-[11px] font-bold text-[#7c3aed]">
+                            <Link href="/admin/leads?status=incomplete" className="text-[11px] font-bold text-[#7c3aed]">
                                 Ver todos →
                             </Link>
                         </div>
@@ -294,7 +296,9 @@ export default function AdminDashboardPage() {
 
             <section className="mb-3 grid grid-cols-2 gap-2 md:gap-4 xl:mb-4 xl:grid-cols-4">
                 <KpiCard label="Cola activa" value={snapshot.stats.queueTotal} caption="Sin asignar" icon="users" tone="blue" />
-                <KpiCard label="Por revisar" value={snapshot.stats.pendingReview} caption="Listos para validar" icon="lead" tone="purple" />
+                <Link href="/admin/leads?status=pending_review" className="block">
+                    <KpiCard label="Por revisar" value={snapshot.stats.pendingReview} caption="Listos para validar" icon="lead" tone="purple" />
+                </Link>
                 {permissions.assignmentsView ? (
                     <KpiCard label="Asignaciones hoy" value={snapshot.stats.autoAssignmentsToday} caption="Auto-asignación" icon="assign" tone="green" />
                 ) : null}
@@ -306,7 +310,7 @@ export default function AdminDashboardPage() {
                     <PanelHeader
                         title="Actividad reciente"
                         caption={`${snapshot.recentLeads.length} prospectos recientes`}
-                        href="/admin/leads"
+                        href="/admin/leads?status=incomplete"
                     />
                     <div className="divide-y divide-[#f0f1f2]">
                         {loading ? (
@@ -325,7 +329,7 @@ export default function AdminDashboardPage() {
                     <PanelHeader
                         title="Por revisar"
                         caption={`${pendingReviewLeads.length} prospectos listos para validar`}
-                        href="/admin/leads"
+                        href="/admin/leads?status=pending_review"
                     />
                     <div className="divide-y divide-[#f0f1f2]">
                         {loading ? (

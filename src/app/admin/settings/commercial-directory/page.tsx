@@ -176,6 +176,8 @@ export default function CommercialDirectoryPage() {
     const [preview, setPreview] = useState<CommercialDirectoryImportPreview | null>(null);
     const [parsing, setParsing] = useState(false);
     const [createOpen, setCreateOpen] = useState(false);
+    const [filtersOpen, setFiltersOpen] = useState(false);
+    const [actionsOpen, setActionsOpen] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
     const [deleteConfirm, setDeleteConfirm] = useState("");
     const [assignOpen, setAssignOpen] = useState(false);
@@ -474,6 +476,8 @@ export default function CommercialDirectoryPage() {
                     icon={<AppIcon name="map" plain className="h-5 w-5 text-current" />}
                     actions={
                         <div className="flex gap-2">
+                            <IconButton icon="filter" label="Filtros" variant="secondary" onClick={() => setFiltersOpen(true)} />
+                            {canEdit ? <IconButton icon="more" label="Acciones" variant="secondary" onClick={() => setActionsOpen(true)} /> : null}
                             {canEdit ? <IconButton icon="plus" label="Crear estructura" variant="primary" onClick={() => setCreateOpen(true)} /> : null}
                             <IconButton icon="refresh" label="Actualizar" variant="primary" onClick={loadAll} disabled={loading} />
                         </div>
@@ -491,60 +495,39 @@ export default function CommercialDirectoryPage() {
                 <KpiCard label="Prospectos" value={stats.prospects} caption="Vista actual" icon="lead" tone="orange" />
             </section>
 
+            {loading ? (
+                <Card className="p-6">
+                    <DirectoryLoadingState />
+                </Card>
+            ) : null}
+
+            {!loading ? (
             <section className="space-y-4">
                 <Card className="p-3 xl:p-4">
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                         <div>
                             <h2 className="text-[14px] font-black text-[#101936]">Carpeta de trabajo</h2>
                             <p className="mt-1 text-[12px] font-semibold text-[#66739A]">
-                                Todo Excel se guardara exactamente en el pais, ciudad y barrio seleccionados aqui.
+                                Todo Excel se guardara exactamente en el destino seleccionado.
                             </p>
                         </div>
-                        {selectedPath ? (
-                            <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-[12px] font-black text-blue-700">
-                                Destino activo: {selectedPath}
-                            </div>
-                        ) : null}
-                    </div>
-
-                    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:mt-4 xl:grid-cols-4 xl:gap-3">
-                        <SelectField label="Pais" value={countryId} onChange={(value) => setCountryId(value)}>
-                            <option value="">Seleccionar pais...</option>
-                            {countries.map((item) => <option key={item.id} value={item.id}>{item.name} ({locationCount(item)})</option>)}
-                        </SelectField>
-
-                        <SelectField label="Ciudad" value={cityId} onChange={(value) => setCityId(value)} disabled={!countryId}>
-                            <option value="">Seleccionar ciudad...</option>
-                            {cities.map((item) => <option key={item.id} value={item.id}>{item.name} ({locationCount(item)})</option>)}
-                        </SelectField>
-
-                        <SelectField label="Barrio / Zona" value={neighborhoodId} onChange={(value) => setNeighborhoodId(value)} disabled={!cityId}>
-                            <option value="">Seleccionar barrio...</option>
-                            {neighborhoods.map((item) => <option key={item.id} value={item.id}>{item.name} ({locationCount(item)})</option>)}
-                        </SelectField>
-
-                        <SelectField label="Categoria" value={categoryId} onChange={(value) => setCategoryId(value)} disabled={!neighborhoodId}>
-                            <option value="">Todas las categorias</option>
-                            {categories.map((item) => <option key={item.id} value={item.id}>{item.name} ({categoryCount(item)})</option>)}
-                        </SelectField>
-                    </div>
-
-                    {canEdit ? (
-                        <div className="mt-3 grid grid-cols-2 gap-2 border-t border-[#eef1f5] pt-3 sm:flex-row sm:flex-wrap xl:mt-4 xl:flex xl:pt-4">
-                            <Button variant="primary" onClick={openAssignModal} disabled={!selectedCity || saving}>
-                                Asignar ciudad
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                            <Button variant="secondary" onClick={() => setFiltersOpen(true)}>
+                                <AppIcon name="filter" size="sm" plain className="h-4 w-4 text-current" />
+                                Filtros
                             </Button>
-                            <Button variant="danger" onClick={() => setDeleteTarget("city")} disabled={!selectedCity || saving}>
-                                Eliminar ciudad
-                            </Button>
-                            <Button variant="danger" onClick={() => setDeleteTarget("neighborhood")} disabled={!selectedNeighborhood || saving}>
-                                Eliminar barrio
-                            </Button>
-                            <Button variant="danger" onClick={() => setDeleteTarget("category")} disabled={!selectedCategory || saving}>
-                                Eliminar categoria
-                            </Button>
+                            {canEdit ? (
+                                <Button variant="secondary" onClick={() => setActionsOpen(true)}>
+                                    <AppIcon name="more" size="sm" plain className="h-4 w-4 text-current" />
+                                    Acciones
+                                </Button>
+                            ) : null}
                         </div>
-                    ) : null}
+                    </div>
+
+                    <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-[12px] font-black text-blue-700">
+                        {selectedPath ? `Destino activo: ${selectedPath}${selectedCategory ? ` / ${selectedCategory.name}` : ""}` : "Selecciona una carpeta desde Filtros."}
+                    </div>
 
                     {selectedCity ? (
                         <div className="mt-3 flex flex-wrap gap-2">
@@ -728,6 +711,49 @@ export default function CommercialDirectoryPage() {
                     </Card>
                 </div>
             </section>
+            ) : null}
+
+            <DirectoryFiltersModal
+                open={filtersOpen}
+                countries={countries}
+                cities={cities}
+                neighborhoods={neighborhoods}
+                categories={categories}
+                countryId={countryId}
+                cityId={cityId}
+                neighborhoodId={neighborhoodId}
+                categoryId={categoryId}
+                onCountry={setCountryId}
+                onCity={setCityId}
+                onNeighborhood={setNeighborhoodId}
+                onCategory={setCategoryId}
+                onClose={() => setFiltersOpen(false)}
+            />
+
+            <DirectoryActionsModal
+                open={actionsOpen}
+                saving={saving}
+                selectedCity={selectedCity}
+                selectedNeighborhood={selectedNeighborhood}
+                selectedCategory={selectedCategory}
+                onAssign={() => {
+                    setActionsOpen(false);
+                    openAssignModal();
+                }}
+                onDeleteCity={() => {
+                    setActionsOpen(false);
+                    setDeleteTarget("city");
+                }}
+                onDeleteNeighborhood={() => {
+                    setActionsOpen(false);
+                    setDeleteTarget("neighborhood");
+                }}
+                onDeleteCategory={() => {
+                    setActionsOpen(false);
+                    setDeleteTarget("category");
+                }}
+                onClose={() => setActionsOpen(false)}
+            />
 
             <Modal
                 open={createOpen}
@@ -870,6 +896,134 @@ function deleteDescription(
     if (target === "category") return `categoria ${category?.name ?? ""} en ${neighborhood?.name ?? ""}`;
     if (target === "neighborhood") return `barrio ${neighborhood?.name ?? ""} completo`;
     return `ciudad ${city?.name ?? ""} completa`;
+}
+
+function DirectoryLoadingState() {
+    return (
+        <div className="flex flex-col items-center justify-center py-10 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f3f0ff]">
+                <svg className="tg-spin h-7 w-7 text-[#7C3AED]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <path d="M21 12a9 9 0 1 1-3.1-6.8" />
+                </svg>
+            </div>
+            <p className="mt-3 text-[14px] font-black text-[#101936]">Cargando directorio</p>
+            <p className="mt-1 max-w-sm text-[12px] font-semibold text-[#66739A]">Estamos preparando carpetas, asignaciones y prospectos.</p>
+        </div>
+    );
+}
+
+function DirectoryFiltersModal({
+    open,
+    countries,
+    cities,
+    neighborhoods,
+    categories,
+    countryId,
+    cityId,
+    neighborhoodId,
+    categoryId,
+    onCountry,
+    onCity,
+    onNeighborhood,
+    onCategory,
+    onClose,
+}: {
+    open: boolean;
+    countries: CommercialDirectoryLocationDoc[];
+    cities: CommercialDirectoryLocationDoc[];
+    neighborhoods: CommercialDirectoryLocationDoc[];
+    categories: CommercialDirectoryCategoryDoc[];
+    countryId: string;
+    cityId: string;
+    neighborhoodId: string;
+    categoryId: string;
+    onCountry: (value: string) => void;
+    onCity: (value: string) => void;
+    onNeighborhood: (value: string) => void;
+    onCategory: (value: string) => void;
+    onClose: () => void;
+}) {
+    return (
+        <Modal open={open} title="Filtros" subtitle="Selecciona la carpeta de trabajo." size="md" onClose={onClose}>
+            <div className="grid gap-3">
+                <SelectField label="Pais" value={countryId} onChange={onCountry}>
+                    <option value="">Seleccionar pais...</option>
+                    {countries.map((item) => <option key={item.id} value={item.id}>{item.name} ({locationCount(item)})</option>)}
+                </SelectField>
+
+                <SelectField label="Ciudad" value={cityId} onChange={onCity} disabled={!countryId}>
+                    <option value="">Seleccionar ciudad...</option>
+                    {cities.map((item) => <option key={item.id} value={item.id}>{item.name} ({locationCount(item)})</option>)}
+                </SelectField>
+
+                <SelectField label="Barrio / Zona" value={neighborhoodId} onChange={onNeighborhood} disabled={!cityId}>
+                    <option value="">Seleccionar barrio...</option>
+                    {neighborhoods.map((item) => <option key={item.id} value={item.id}>{item.name} ({locationCount(item)})</option>)}
+                </SelectField>
+
+                <SelectField label="Categoria" value={categoryId} onChange={onCategory} disabled={!neighborhoodId}>
+                    <option value="">Todas las categorias</option>
+                    {categories.map((item) => <option key={item.id} value={item.id}>{item.name} ({categoryCount(item)})</option>)}
+                </SelectField>
+
+                <div className="flex justify-end border-t border-[#eef1f5] pt-3">
+                    <Button variant="primary" onClick={onClose}>Aplicar</Button>
+                </div>
+            </div>
+        </Modal>
+    );
+}
+
+function DirectoryActionsModal({
+    open,
+    saving,
+    selectedCity,
+    selectedNeighborhood,
+    selectedCategory,
+    onAssign,
+    onDeleteCity,
+    onDeleteNeighborhood,
+    onDeleteCategory,
+    onClose,
+}: {
+    open: boolean;
+    saving: boolean;
+    selectedCity: CommercialDirectoryLocationDoc | null;
+    selectedNeighborhood: CommercialDirectoryLocationDoc | null;
+    selectedCategory: CommercialDirectoryCategoryDoc | null;
+    onAssign: () => void;
+    onDeleteCity: () => void;
+    onDeleteNeighborhood: () => void;
+    onDeleteCategory: () => void;
+    onClose: () => void;
+}) {
+    return (
+        <Modal open={open} title="Acciones" subtitle="Gestiona la carpeta seleccionada." size="sm" onClose={onClose}>
+            <div className="grid gap-2">
+                <ActionButton icon="assign" label="Asignar ciudad" disabled={!selectedCity || saving} onClick={onAssign} />
+                <ActionButton icon="trash" label="Eliminar ciudad" danger disabled={!selectedCity || saving} onClick={onDeleteCity} />
+                <ActionButton icon="trash" label="Eliminar barrio" danger disabled={!selectedNeighborhood || saving} onClick={onDeleteNeighborhood} />
+                <ActionButton icon="trash" label="Eliminar categoria" danger disabled={!selectedCategory || saving} onClick={onDeleteCategory} />
+            </div>
+        </Modal>
+    );
+}
+
+function ActionButton({ icon, label, danger, disabled, onClick }: { icon: "assign" | "trash"; label: string; danger?: boolean; disabled?: boolean; onClick: () => void }) {
+    return (
+        <button
+            type="button"
+            disabled={disabled}
+            onClick={onClick}
+            className={[
+                "flex min-h-12 items-center gap-3 rounded-2xl border px-3 text-left text-[13px] font-black transition disabled:cursor-not-allowed disabled:opacity-45",
+                danger ? "border-red-100 bg-red-50 text-red-700 active:bg-red-100" : "border-[#e8e7fb] bg-[#fbfaff] text-[#101936] active:bg-[#f3f0ff]",
+            ].join(" ")}
+        >
+            <AppIcon name={icon} tone={danger ? "red" : "purple"} size="sm" className="bg-transparent text-current ring-0" />
+            <span>{label}</span>
+        </button>
+    );
 }
 
 function Notice({ tone, children }: { tone: "red" | "green"; children: string }) {

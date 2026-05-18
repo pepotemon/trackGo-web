@@ -246,11 +246,14 @@ export default function AdminLeadsPage() {
     }
 
     useEffect(() => {
-        const query = new URLSearchParams(window.location.search)
-            .get("search")
-            ?.trim();
-        if (!query) return;
-        setFilters((prev) => ({ ...prev, search: query }));
+        const params = new URLSearchParams(window.location.search);
+        const query = params.get("search")?.trim();
+        const status = params.get("status");
+        setFilters((prev) => ({
+            ...prev,
+            ...(query ? { search: query } : {}),
+            ...(status === "pending_review" || status === "incomplete" || status === "not_suitable" || status === "verified" ? { status } : {}),
+        }));
     }, [setFilters]);
 
     useEffect(() => {
