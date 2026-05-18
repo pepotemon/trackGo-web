@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AppIcon, Badge, Button, Card, CardContent, CardHeader, Field, Input, KpiCard, Modal, PageHeader } from "@/components/ui";
+import { AppIcon, Badge, Button, Card, CardContent, CardHeader, Field, Input, Modal, PageHeader } from "@/components/ui";
 import {
     debtToDraft,
     deleteDebt,
@@ -62,6 +62,17 @@ export default function AdminDebtsPage() {
     const [editingDebt, setEditingDebt] = useState<DebtDoc | null>(null);
     const [debtDraft, setDebtDraft] = useState<DebtDraft>(emptyDraft);
     const [paymentDraft, setPaymentDraft] = useState<DebtPaymentDraft>(emptyPaymentDraft);
+    const [actionDebt, setActionDebt] = useState<DebtDoc | null>(null);
+    const [paymentDebt, setPaymentDebt] = useState<DebtDoc | null>(null);
+    const [historyDebt, setHistoryDebt] = useState<DebtDoc | null>(null);
+    const [historyOpen, setHistoryOpen] = useState(false);
+    const [confirmAction, setConfirmAction] = useState<null | {
+        title: string;
+        body: string;
+        confirmLabel: string;
+        tone: "red" | "orange";
+        onConfirm: () => Promise<void>;
+    }>(null);
     const [saving, setSaving] = useState(false);
 
     const selectedDebt = useMemo(
@@ -152,14 +163,15 @@ export default function AdminDebtsPage() {
     }
 
     async function handleRegisterPayment() {
-        if (!ownerId || !selectedDebt) return;
+        if (!ownerId || !paymentDebt) return;
         setSaving(true);
         setError("");
         try {
-            await registerDebtPayment(ownerId, selectedDebt.id, paymentDraft);
+            await registerDebtPayment(ownerId, paymentDebt.id, paymentDraft);
             setPaymentModalOpen(false);
+            setPaymentDebt(null);
             setPaymentDraft(emptyPaymentDraft);
-            await Promise.all([load(), loadPayments(selectedDebt.id)]);
+            await Promise.all([load(), loadPayments(paymentDebt.id)]);
         } catch (err) {
             setError(err instanceof Error ? err.message : "No se pudo registrar el abono.");
         } finally {
@@ -168,88 +180,123 @@ export default function AdminDebtsPage() {
     }
 
     async function handleDeletePayment(payment: DebtPaymentDoc) {
-        if (!ownerId || !selectedDebt) return;
-        if (!window.confirm("Eliminar este abono y devolver el saldo a la deuda?")) return;
-        setSaving(true);
-        setError("");
-        try {
-            await deleteDebtPayment(ownerId, selectedDebt.id, payment.id);
-            await Promise.all([load(), loadPayments(selectedDebt.id)]);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : "No se pudo eliminar el abono.");
-        } finally {
-            setSaving(false);
-        }
+        const debt = historyDebt ?? selectedDebt;
+        if (!ownerId || !debt) return;
+        setConfirmAction({
+            title: "Eliminar abono",
+            body: "Se borrara este abono y el saldo volvera a la deuda. Esta accion ajusta la contabilidad de la deuda.",
+            confirmLabel: "Eliminar abono",
+            tone: "red",
+            onConfirm: async () => {
+                setSaving(true);
+                setError("");
+                try {
+                    await deleteDebtPayment(ownerId, debt.id, payment.id);
+                    await Promise.all([load(), loadPayments(debt.id)]);
+                } catch (err) {
+                    setError(err instanceof Error ? err.message : "No se pudo eliminar el abono.");
+                } finally {
+                    setSaving(false);
+                }
+            },
+        });
     }
 
     async function handleCancelDebt(debt: DebtDoc) {
         if (!ownerId) return;
-        if (!window.confirm(`Cancelar la deuda de ${debt.clientName}?`)) return;
-        setSaving(true);
-        setError("");
-        try {
-            await updateDebtStatus(ownerId, debt.id, debt.status === "cancelled" ? "active" : "cancelled");
-            await load();
-        } catch (err) {
-            setError(err instanceof Error ? err.message : "No se pudo cambiar el estado.");
-        } finally {
-            setSaving(false);
-        }
+        const reactivating = debt.status === "cancelled";
+        setConfirmAction({
+            title: reactivating ? "Reactivar deuda" : "Cancelar deuda",
+            body: reactivating
+                ? `La deuda de ${debt.clientName} volvera a quedar activa.`
+                : `La deuda de ${debt.clientName} quedara cancelada y no aceptara abonos.`,
+            confirmLabel: reactivating ? "Reactivar" : "Cancelar deuda",
+            tone: reactivating ? "orange" : "red",
+            onConfirm: async () => {
+                setSaving(true);
+                setError("");
+                try {
+                    await updateDebtStatus(ownerId, debt.id, reactivating ? "active" : "cancelled");
+                    setActionDebt(null);
+                    await load();
+                } catch (err) {
+                    setError(err instanceof Error ? err.message : "No se pudo cambiar el estado.");
+                } finally {
+                    setSaving(false);
+                }
+            },
+        });
     }
 
     async function handleDeleteDebt(debt: DebtDoc) {
         if (!ownerId) return;
-        if (!window.confirm(`Eliminar de tu cartera la deuda de ${debt.clientName}?`)) return;
-        setSaving(true);
-        setError("");
-        try {
-            await deleteDebt(ownerId, debt.id);
-            setSelectedDebtId((current) => current === debt.id ? null : current);
-            await load();
-        } catch (err) {
-            setError(err instanceof Error ? err.message : "No se pudo eliminar la deuda.");
-        } finally {
-            setSaving(false);
-        }
+        setConfirmAction({
+            title: "Eliminar deuda",
+            body: `La deuda de ${debt.clientName} saldra de tu cartera. Los datos quedan protegidos como registro cancelado.`,
+            confirmLabel: "Eliminar",
+            tone: "red",
+            onConfirm: async () => {
+                setSaving(true);
+                setError("");
+                try {
+                    await deleteDebt(ownerId, debt.id);
+                    setSelectedDebtId((current) => current === debt.id ? null : current);
+                    setActionDebt(null);
+                    await load();
+                } catch (err) {
+                    setError(err instanceof Error ? err.message : "No se pudo eliminar la deuda.");
+                } finally {
+                    setSaving(false);
+                }
+            },
+        });
     }
 
     return (
-        <main className="mx-auto flex w-full max-w-7xl flex-col gap-4 pb-4">
-            <PageHeader
-                icon={<AppIcon name="wallet" plain className="h-5 w-5 text-current" />}
-                title="Cartera de Cobros"
-                subtitle="Control privado de deudas, abonos y saldos por administrador."
-                actions={
-                    <div className="flex gap-2">
-                        <Button variant="secondary" onClick={load} disabled={loading}>
-                            <AppIcon name="refresh" plain className="h-4 w-4 text-current" />
-                            Actualizar
-                        </Button>
-                        <Button variant="primary" onClick={openCreate}>
-                            <AppIcon name="plus" plain className="h-4 w-4 text-current" />
-                            Nueva deuda
-                        </Button>
-                    </div>
-                }
-            />
+        <main className="-mx-3 -mt-4 min-h-[calc(100vh-5.5rem)] bg-[radial-gradient(circle_at_top_left,rgba(124,58,237,0.10),transparent_36%),linear-gradient(180deg,#fbfaff_0%,#f6f3ff_54%,#f8fafc_100%)] pb-6 text-[#101936] sm:-mx-5 lg:-mx-7 xl:mx-auto xl:mt-0 xl:w-full xl:max-w-6xl xl:bg-none xl:pb-4">
+            <div className="sticky top-0 z-20 border-b border-[#eee9ff] bg-[#fbfaff]/96 px-3 pb-3 pt-3 backdrop-blur-md sm:px-5 lg:px-7 xl:static xl:border-0 xl:bg-transparent xl:p-0 xl:backdrop-blur-0">
+                <PageHeader
+                    icon={<AppIcon name="wallet" plain className="h-5 w-5 text-current" />}
+                    title="Cartera de Cobros"
+                    subtitle="Control privado de deudas, abonos y saldos."
+                    actions={
+                        <div className="flex gap-2">
+                            <button type="button" onClick={load} disabled={loading} aria-label="Actualizar" className="flex h-10 w-10 items-center justify-center rounded-[14px] border border-[#e8e7fb] bg-white text-[#7c3aed] shadow-sm disabled:opacity-50">
+                                <AppIcon name="refresh" plain className="h-4 w-4 text-current" />
+                            </button>
+                            <Button variant="primary" onClick={openCreate}>
+                                <AppIcon name="plus" plain className="h-4 w-4 text-current" />
+                                <span className="hidden sm:inline">Nueva deuda</span>
+                            </Button>
+                        </div>
+                    }
+                />
 
-            {error ? <Notice tone="red">{error}</Notice> : null}
+                <section className="mt-3 grid grid-cols-3 gap-2 xl:grid-cols-6">
+                    <CompactStat label="Prestado" value={formatMoney(stats.original, stats.currency)} tone="blue" />
+                    <CompactStat label="Recuperado" value={formatMoney(stats.paid, stats.currency)} tone="green" />
+                    <CompactStat label="Pendiente" value={formatMoney(stats.remaining, stats.currency)} tone="orange" />
+                    <CompactStat label="Intereses" value={formatMoney(stats.interest, stats.currency)} tone="purple" />
+                    <CompactStat label="Activas" value={String(stats.active)} tone={stats.late ? "red" : "green"} />
+                    <CompactStat label="Pagadas" value={String(stats.paidCount)} tone="green" />
+                </section>
+            </div>
 
-            <section className="grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
-                <KpiCard label="Prestado" value={formatMoney(stats.original, stats.currency)} caption="Capital registrado" icon="wallet" tone="blue" />
-                <KpiCard label="Recuperado" value={formatMoney(stats.paid, stats.currency)} caption="Abonos recibidos" icon="check" tone="green" />
-                <KpiCard label="Pendiente" value={formatMoney(stats.remaining, stats.currency)} caption="Saldo por cobrar" icon="clock" tone="orange" />
-                <KpiCard label="Intereses" value={formatMoney(stats.interest, stats.currency)} caption="Ganancia estimada" icon="activity" tone="purple" />
-                <KpiCard label="Activas" value={stats.active} caption={`${stats.late} vencidas`} icon="alert" tone={stats.late ? "red" : "green"} />
-                <KpiCard label="Pagadas" value={stats.paidCount} caption="Cerradas correctamente" icon="check" tone="green" />
-            </section>
+            <div className="px-3 pt-3 sm:px-5 lg:px-7 xl:px-0">
+                {error ? <Notice tone="red">{error}</Notice> : null}
 
-            <section className="grid gap-4 xl:grid-cols-[0.96fr_1.04fr]">
                 <Card>
                     <CardHeader
                         title="Deudas"
                         subtitle="Busca, filtra y abre una deuda para gestionar abonos."
-                        action={<Badge tone="purple">{visibleDebts.length}</Badge>}
+                        action={
+                            <div className="flex items-center gap-2">
+                                <Badge tone="purple">{visibleDebts.length}</Badge>
+                                <button type="button" className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#f3f0ff] text-[#7c3aed] xl:hidden">
+                                    <AppIcon name="filter" plain className="h-4 w-4 text-current" />
+                                </button>
+                            </div>
+                        }
                     />
                     <CardContent className="space-y-3">
                         <div className="grid gap-2 sm:grid-cols-[1fr_150px_150px]">
@@ -276,56 +323,67 @@ export default function AdminDebtsPage() {
                                 <DebtCard
                                     key={debt.id}
                                     debt={debt}
-                                    selected={debt.id === selectedDebtId}
-                                    onClick={() => setSelectedDebtId(debt.id)}
-                                    onEdit={() => openEdit(debt)}
+                                    onClick={() => {
+                                        setSelectedDebtId(debt.id);
+                                        setActionDebt(debt);
+                                    }}
                                 />
                             ))}
                         </div>
                     </CardContent>
                 </Card>
+            </div>
 
-                <Card>
-                    <CardHeader
-                        title={selectedDebt ? selectedDebt.clientName : "Detalle"}
-                        subtitle={selectedDebt ? selectedDebt.businessName || selectedDebt.phone || "Deuda seleccionada" : "Selecciona una deuda para ver historial."}
-                        action={selectedDebt ? <StatusBadge status={selectedDebt.status} /> : null}
-                    />
-                    <CardContent>
-                        {selectedDebt ? (
-                            <div className="space-y-4">
-                                <DebtDetail debt={selectedDebt} />
-                                <div className="flex flex-wrap gap-2">
-                                    <Button variant="primary" disabled={selectedDebt.status === "cancelled" || selectedDebt.remainingAmount <= 0} onClick={() => setPaymentModalOpen(true)}>
-                                        <AppIcon name="plus" plain className="h-4 w-4 text-current" />
-                                        Registrar abono
-                                    </Button>
-                                    <Button variant="secondary" onClick={() => openEdit(selectedDebt)}>
-                                        <AppIcon name="edit" plain className="h-4 w-4 text-current" />
-                                        Editar
-                                    </Button>
-                                    <Button variant="secondary" onClick={() => handleCancelDebt(selectedDebt)} disabled={saving || selectedDebt.status === "paid"}>
-                                        {selectedDebt.status === "cancelled" ? "Reactivar" : "Cancelar"}
-                                    </Button>
-                                    <Button variant="danger" onClick={() => handleDeleteDebt(selectedDebt)} disabled={saving}>
-                                        <AppIcon name="trash" plain className="h-4 w-4 text-current" />
-                                        Eliminar
-                                    </Button>
-                                </div>
-                                <PaymentSummary payments={payments} currency={selectedDebt.currency} />
-                                <PaymentHistory
-                                    payments={payments}
-                                    currency={selectedDebt.currency}
-                                    loading={paymentsLoading}
-                                    onDelete={handleDeletePayment}
-                                />
-                            </div>
-                        ) : (
-                            <EmptyState text="Selecciona o crea una deuda para empezar." />
-                        )}
-                    </CardContent>
-                </Card>
-            </section>
+            <DebtActionsModal
+                debt={actionDebt}
+                onClose={() => setActionDebt(null)}
+                onPayment={() => {
+                    if (!actionDebt) return;
+                    setSelectedDebtId(actionDebt.id);
+                    setPaymentDebt(actionDebt);
+                    setPaymentDraft(emptyPaymentDraft);
+                    setActionDebt(null);
+                    setPaymentModalOpen(true);
+                }}
+                onEdit={() => {
+                    if (!actionDebt) return;
+                    openEdit(actionDebt);
+                    setActionDebt(null);
+                }}
+                onHistory={() => {
+                    if (!actionDebt) return;
+                    setSelectedDebtId(actionDebt.id);
+                    setHistoryDebt(actionDebt);
+                    setActionDebt(null);
+                    setHistoryOpen(true);
+                }}
+                onCancel={() => {
+                    if (!actionDebt) return;
+                    void handleCancelDebt(actionDebt);
+                    setActionDebt(null);
+                }}
+                onDelete={() => {
+                    if (!actionDebt) return;
+                    void handleDeleteDebt(actionDebt);
+                    setActionDebt(null);
+                }}
+                saving={saving}
+            />
+
+            <HistoryModal
+                open={historyOpen}
+                debt={historyDebt ?? selectedDebt}
+                payments={payments}
+                loading={paymentsLoading}
+                onDelete={handleDeletePayment}
+                onClose={() => { setHistoryOpen(false); setHistoryDebt(null); }}
+            />
+
+            <ConfirmActionModal
+                action={confirmAction}
+                saving={saving}
+                onClose={() => setConfirmAction(null)}
+            />
 
             <DebtFormModal
                 open={debtModalOpen}
@@ -339,12 +397,12 @@ export default function AdminDebtsPage() {
 
             <PaymentFormModal
                 open={paymentModalOpen}
-                debt={selectedDebt}
+                debt={paymentDebt}
                 draft={paymentDraft}
                 saving={saving}
                 onChange={setPaymentDraft}
                 onSave={handleRegisterPayment}
-                onClose={() => setPaymentModalOpen(false)}
+                onClose={() => { setPaymentModalOpen(false); setPaymentDebt(null); }}
             />
         </main>
     );
@@ -352,13 +410,13 @@ export default function AdminDebtsPage() {
 
 const selectClass = "h-10 w-full rounded-[14px] border border-[#e4e7ec] bg-white px-3 text-[12px] font-bold text-[#101936] outline-none focus:border-[#7c3aed] focus:ring-2 focus:ring-violet-100 sm:h-9 sm:rounded-md";
 
-function DebtCard({ debt, selected, onClick, onEdit }: { debt: DebtDoc; selected: boolean; onClick: () => void; onEdit: () => void }) {
+function DebtCard({ debt, onClick }: { debt: DebtDoc; onClick: () => void }) {
     const progress = debt.finalAmount && debt.finalAmount > 0 ? Math.min(100, Math.round((debt.totalPaid / debt.finalAmount) * 100)) : 0;
     return (
         <button
             type="button"
             onClick={onClick}
-            className={`w-full rounded-2xl border bg-white p-3 text-left transition active:scale-[0.99] ${selected ? "border-[#7c3aed] shadow-[0_12px_28px_rgba(124,58,237,0.14)]" : "border-[#eef1f5] hover:border-[#ded8ff]"}`}
+            className="w-full rounded-2xl border border-[#eef1f5] bg-white p-3 text-left shadow-sm transition hover:border-[#ded8ff] active:scale-[0.99] active:border-[#7c3aed]"
         >
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -370,16 +428,9 @@ function DebtCard({ debt, selected, onClick, onEdit }: { debt: DebtDoc; selected
                         {[debt.businessName, debt.phone].filter(Boolean).join(" · ") || "Sin negocio registrado"}
                     </p>
                 </div>
-                <button
-                    type="button"
-                    onClick={(event) => {
-                        event.stopPropagation();
-                        onEdit();
-                    }}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[#e8e7fb] bg-[#f8f7ff]"
-                >
-                    <AppIcon name="edit" plain className="h-4 w-4 text-[#66739a]" />
-                </button>
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[#e8e7fb] bg-[#f8f7ff]">
+                    <AppIcon name="more" plain className="h-4 w-4 text-[#66739a]" />
+                </span>
             </div>
             <div className="mt-3 grid grid-cols-3 gap-2">
                 <MiniValue label="Prestado" value={formatMoney(debt.finalAmount || debt.originalAmount, debt.currency)} />
@@ -465,6 +516,193 @@ function PaymentHistory({ payments, currency, loading, onDelete }: { payments: D
                 ))}
             </div>
         </div>
+    );
+}
+
+function DebtActionsModal({
+    debt,
+    saving,
+    onClose,
+    onPayment,
+    onEdit,
+    onHistory,
+    onCancel,
+    onDelete,
+}: {
+    debt: DebtDoc | null;
+    saving: boolean;
+    onClose: () => void;
+    onPayment: () => void;
+    onEdit: () => void;
+    onHistory: () => void;
+    onCancel: () => void;
+    onDelete: () => void;
+}) {
+    if (!debt) return null;
+    const canPay = debt.status !== "cancelled" && debt.remainingAmount > 0;
+
+    return (
+        <>
+            <button type="button" onClick={onClose} aria-label="Cerrar" className="fixed inset-0 z-40 bg-black/40" />
+            <div className="fixed inset-x-0 bottom-0 z-50 rounded-t-[24px] bg-white px-4 pb-8 pt-4 shadow-[0_-8px_40px_rgba(0,0,0,0.18)] sm:left-1/2 sm:top-1/2 sm:bottom-auto sm:w-[min(430px,calc(100vw-2rem))] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl sm:p-4 sm:shadow-[0_28px_80px_rgba(16,25,54,0.24)]">
+                <div className="mx-auto mb-4 h-1 w-12 rounded-full bg-[#e8e7fb]" />
+                <div className="mb-4 min-w-0">
+                    <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                            <p className="truncate text-[15px] font-black text-[#101936]">{debt.clientName}</p>
+                            <p className="mt-0.5 truncate text-[11px] font-semibold text-[#66739a]">
+                                {[debt.businessName, debt.phone].filter(Boolean).join(" · ") || "Cartera de cobros"}
+                            </p>
+                        </div>
+                        <StatusBadge status={debt.status} />
+                    </div>
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                        <MiniValue label="Prestado" value={formatMoney(debt.finalAmount || debt.originalAmount, debt.currency)} />
+                        <MiniValue label="Pagado" value={formatMoney(debt.totalPaid, debt.currency)} tone="green" />
+                        <MiniValue label="Saldo" value={formatMoney(debt.remainingAmount, debt.currency)} tone={debt.remainingAmount > 0 ? "orange" : "green"} />
+                    </div>
+                </div>
+                <div className="grid gap-2">
+                    <ActionButton icon="plus" label="Registrar abono" disabled={!canPay || saving} onClick={onPayment} tone="purple" />
+                    <ActionButton icon="edit" label="Editar" disabled={saving} onClick={onEdit} tone="slate" />
+                    <ActionButton icon="history" label="Historial de abonos" disabled={saving} onClick={onHistory} tone="blue" />
+                    {debt.status !== "paid" ? (
+                        <ActionButton
+                            icon={debt.status === "cancelled" ? "play" : "ban"}
+                            label={debt.status === "cancelled" ? "Reactivar deuda" : "Cancelar deuda"}
+                            disabled={saving}
+                            onClick={onCancel}
+                            tone="orange"
+                        />
+                    ) : null}
+                    <ActionButton icon="trash" label="Eliminar" disabled={saving} onClick={onDelete} tone="red" />
+                </div>
+                <button
+                    type="button"
+                    onClick={onClose}
+                    className="mt-3 min-h-[48px] w-full rounded-[14px] border border-[#e8e7fb] bg-[#f8f7ff] text-[14px] font-bold text-[#66739a] transition active:bg-[#f3f0ff]"
+                >
+                    Cerrar
+                </button>
+            </div>
+        </>
+    );
+}
+
+function ActionButton({
+    icon,
+    label,
+    tone,
+    disabled,
+    onClick,
+}: {
+    icon: "plus" | "edit" | "history" | "trash" | "ban" | "play";
+    label: string;
+    tone: "purple" | "blue" | "orange" | "red" | "slate";
+    disabled?: boolean;
+    onClick: () => void;
+}) {
+    const toneClass =
+        tone === "red"
+            ? "bg-red-50 text-red-700 active:bg-red-100"
+            : tone === "orange"
+                ? "bg-amber-50 text-amber-700 active:bg-amber-100"
+                : tone === "blue"
+                    ? "bg-blue-50 text-blue-700 active:bg-blue-100"
+                    : tone === "purple"
+                        ? "bg-[#f3f0ff] text-[#6d28d9] active:bg-violet-100"
+                        : "bg-[#f8f7ff] text-[#101936] active:bg-[#f3f0ff]";
+    const iconClass =
+        tone === "red"
+            ? "text-red-500"
+            : tone === "orange"
+                ? "text-amber-600"
+                : tone === "blue"
+                    ? "text-blue-600"
+                    : tone === "purple"
+                        ? "text-[#7c3aed]"
+                        : "text-[#66739a]";
+    return (
+        <button
+            type="button"
+            disabled={disabled}
+            onClick={onClick}
+            className={`flex min-h-[52px] items-center gap-3 rounded-[14px] px-4 text-[14px] font-bold transition disabled:opacity-50 ${toneClass}`}
+        >
+            <AppIcon name={icon} size="sm" plain className={`h-5 w-5 ${iconClass}`} />
+            {label}
+        </button>
+    );
+}
+
+function HistoryModal({
+    open,
+    debt,
+    payments,
+    loading,
+    onDelete,
+    onClose,
+}: {
+    open: boolean;
+    debt: DebtDoc | null;
+    payments: DebtPaymentDoc[];
+    loading: boolean;
+    onDelete: (payment: DebtPaymentDoc) => void;
+    onClose: () => void;
+}) {
+    if (!open || !debt) return null;
+    return (
+        <Modal open title="Historial de abonos" subtitle={debt.clientName} size="md" onClose={onClose}>
+            <div className="space-y-3">
+                <PaymentSummary payments={payments} currency={debt.currency} />
+                <PaymentHistory
+                    payments={payments}
+                    currency={debt.currency}
+                    loading={loading}
+                    onDelete={onDelete}
+                />
+            </div>
+        </Modal>
+    );
+}
+
+function ConfirmActionModal({
+    action,
+    saving,
+    onClose,
+}: {
+    action: null | {
+        title: string;
+        body: string;
+        confirmLabel: string;
+        tone: "red" | "orange";
+        onConfirm: () => Promise<void>;
+    };
+    saving: boolean;
+    onClose: () => void;
+}) {
+    if (!action) return null;
+    return (
+        <Modal open title={action.title} subtitle="Confirma antes de continuar." size="sm" onClose={onClose}>
+            <div className="space-y-4">
+                <div className={`rounded-2xl border px-4 py-3 text-[13px] font-semibold leading-relaxed ${action.tone === "red" ? "border-red-200 bg-red-50 text-red-700" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
+                    {action.body}
+                </div>
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                    <Button variant="ghost" disabled={saving} onClick={onClose}>Cancelar</Button>
+                    <Button
+                        variant={action.tone === "red" ? "danger" : "secondary"}
+                        disabled={saving}
+                        onClick={async () => {
+                            await action.onConfirm();
+                            onClose();
+                        }}
+                    >
+                        {saving ? "Procesando..." : action.confirmLabel}
+                    </Button>
+                </div>
+            </div>
+        </Modal>
     );
 }
 
@@ -561,6 +799,25 @@ function MiniValue({ label, value, tone = "default" }: { label: string; value: s
         <div className="rounded-xl border border-[#eef1f5] bg-[#fbfaff] px-2.5 py-2">
             <p className="text-[9px] font-black uppercase tracking-[0.08em] text-[#98a2b3]">{label}</p>
             <p className={`mt-0.5 truncate text-[12px] font-black ${color}`}>{value}</p>
+        </div>
+    );
+}
+
+function CompactStat({ label, value, tone }: { label: string; value: string; tone: "blue" | "green" | "orange" | "purple" | "red" }) {
+    const color =
+        tone === "green"
+            ? "text-emerald-700 bg-emerald-50 border-emerald-100"
+            : tone === "orange"
+                ? "text-amber-700 bg-amber-50 border-amber-100"
+                : tone === "red"
+                    ? "text-red-700 bg-red-50 border-red-100"
+                    : tone === "blue"
+                        ? "text-blue-700 bg-blue-50 border-blue-100"
+                        : "text-[#6d28d9] bg-[#f3f0ff] border-[#ded8ff]";
+    return (
+        <div className={`min-w-0 rounded-[14px] border px-2.5 py-2 shadow-sm ${color}`}>
+            <p className="truncate text-[9px] font-black uppercase tracking-[0.06em] opacity-80">{label}</p>
+            <p className="mt-0.5 truncate text-[12px] font-black leading-tight sm:text-[13px]">{value}</p>
         </div>
     );
 }
