@@ -485,12 +485,6 @@ export default function AdminDebtsPage() {
                 onClose={() => { setHistoryOpen(false); setHistoryDebt(null); }}
             />
 
-            <ConfirmActionModal
-                action={confirmAction}
-                saving={saving}
-                onClose={() => setConfirmAction(null)}
-            />
-
             <DebtFiltersModal
                 open={filterModalOpen}
                 filter={filter}
@@ -533,6 +527,12 @@ export default function AdminDebtsPage() {
                 onChange={setPaymentDraft}
                 onSave={handleRegisterPayment}
                 onClose={() => { setPaymentModalOpen(false); setPaymentDebt(null); }}
+            />
+
+            <ConfirmActionModal
+                action={confirmAction}
+                saving={saving}
+                onClose={() => setConfirmAction(null)}
             />
         </main>
     );
