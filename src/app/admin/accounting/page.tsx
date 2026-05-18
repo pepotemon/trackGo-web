@@ -670,10 +670,17 @@ export default function AccountingPage() {
     const weeklySummariesForMonth = useMemo(() => {
         if (periodMode !== "monthly") return [];
         return monthWeekRanges(period.startDate, period.endDate).map((weekRange) => {
+            const weekEndMs = endOfRangeMs(weekRange.endDate);
+            const weekUsers = isSuperAdmin || !profile
+                ? myUsers
+                : myUsers.filter((user) => {
+                    const startMs = accountingStartByUser.get(user.id);
+                    return startMs !== undefined && startMs <= weekEndMs;
+                });
             const weekInvestment = monthlyInvestments.find((item) => item.weekStartKey === weekRange.startKey) ?? null;
             let scopedWeekInvestment = weekInvestment;
             if (!isSuperAdmin && profile && weekInvestment) {
-                const myIds = new Set(myUsers.map((u) => u.id));
+                const myIds = new Set(weekUsers.map((u) => u.id));
                 scopedWeekInvestment = {
                     ...weekInvestment,
                     amount: 0,
@@ -692,7 +699,7 @@ export default function AccountingPage() {
             return buildAccountingSummary({
                 startKey: weekRange.startKey,
                 endKey: weekRange.endKey,
-                users: myUsers,
+                users: weekUsers,
                 events: scopedEvents.filter((event) => inKeyRange(event.dayKey, weekRange.startKey, weekRange.endKey)),
                 assignments: scopedAssignments.filter((assignment) => inKeyRange(assignment.assignedDayKey, weekRange.startKey, weekRange.endKey)),
                 subscriptions: scopedSubscriptions.filter((subscription) =>
@@ -701,7 +708,7 @@ export default function AccountingPage() {
                 investment: scopedWeekInvestment,
             });
         });
-    }, [periodMode, period.startDate, period.endDate, monthlyInvestments, isSuperAdmin, profile, myUsers, scopedEvents, scopedAssignments, scopedSubscriptions]);
+    }, [periodMode, period.startDate, period.endDate, monthlyInvestments, isSuperAdmin, profile, myUsers, accountingStartByUser, scopedEvents, scopedAssignments, scopedSubscriptions]);
 
     const summary: AccountingSummary | null = useMemo(() => {
         if (periodMode === "monthly") {
