@@ -20,7 +20,7 @@ messaging.onBackgroundMessage((payload) => {
   self.registration.showNotification(title, {
     body,
     icon: "/icons/icon-192.png",
-    badge: "/icons/favicon-32.png",
+    badge: "/icons/badge-96.png",
     tag: payload.data?.clientId ? `client_${payload.data.clientId}` : "trackgo_client",
     renotify: true,
     data: { url },
