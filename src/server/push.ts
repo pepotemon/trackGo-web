@@ -30,7 +30,7 @@ export async function sendPushToUser(
             fcmOptions: data?.link || data?.url ? { link: data.link || data.url } : undefined,
             notification: {
                 icon: "/icons/icon-192.png",
-                badge: "/icons/favicon-32.png",
+                badge: "/icons/badge-96.png",
                 tag: data?.clientId ? `client_${data.clientId}` : undefined,
                 renotify: Boolean(data?.clientId),
             },
