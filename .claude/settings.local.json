@@ -18,7 +18,9 @@
       "Bash(firebase projects:list)",
       "Bash(npx firebase *)",
       "Bash(grep -E \"\\\\.\\(tsx|ts\\)$\")",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(where inkscape *)",
+      "Bash(where magick *)"
     ]
   }
 }
