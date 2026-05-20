@@ -273,14 +273,16 @@ function safeNumber(value: unknown, fallback = 0) {
     return Number.isFinite(n) ? n : fallback;
 }
 
-function effectiveRate(event: DailyEventDoc): number {
+function effectiveRate(event: DailyEventDoc, userRatePerVisit?: number): number {
     const amount = safeNumber(event.amount, NaN);
     if (Number.isFinite(amount)) return amount;
     const amountSnapshot = safeNumber(event.amountSnapshot, NaN);
     if (Number.isFinite(amountSnapshot)) return amountSnapshot;
     const rateApplied = safeNumber(event.rateApplied, NaN);
     if (Number.isFinite(rateApplied)) return rateApplied;
-    return safeNumber(event.ratePerVisitSnapshot, 0);
+    const rateSnapshot = safeNumber(event.ratePerVisitSnapshot, NaN);
+    if (Number.isFinite(rateSnapshot) && rateSnapshot > 0) return rateSnapshot;
+    return safeNumber(userRatePerVisit, 0);
 }
 
 function subscriptionAmount(user: UserDoc) {
@@ -1059,6 +1061,7 @@ export default function AccountingPage() {
                                 assignments={scopedAssignments}
                                 startDate={period.startDate}
                                 endDate={period.endDate}
+                                users={myUsers}
                                 miGanancia={miGanancia}
                             />
                         ) : (
@@ -1307,9 +1310,17 @@ function MobileAccountingPage({
 
     const maxChartValue = Math.max(1, ...chartRows.map((row) => Math.abs(accountingMetricValue(row, chartMetric))));
 
+    const userRatesMap = useMemo(() => {
+        const map = new Map<string, number>();
+        for (const user of users) {
+            if (user.ratePerVisit != null) map.set(user.id, user.ratePerVisit);
+        }
+        return map;
+    }, [users]);
+
     const chartSeries = useMemo(() => {
-        return buildDailyChartSeries(events, assignments, startDate, endDate, chartMetric);
-    }, [events, assignments, startDate, endDate, chartMetric]);
+        return buildDailyChartSeries(events, assignments, startDate, endDate, chartMetric, userRatesMap);
+    }, [events, assignments, startDate, endDate, chartMetric, userRatesMap]);
 
     const chartMeta = ACCOUNTING_METRICS[chartMetric];
     const rankingMeta = ACCOUNTING_METRICS[rankingMetric];
@@ -2300,7 +2311,7 @@ function InvestmentContent({
                         <div className="grid gap-2 xl:grid-cols-2">
                             {perVisitUsersWithVisits.map((user) => {
                                 const visited = events.filter((event) => event.userId === user.id && event.type === "visited");
-                                const total = visited.reduce((sum, event) => sum + eventMoneyValue(event), 0);
+                                const total = visited.reduce((sum, event) => sum + eventMoneyValue(event, user.ratePerVisit), 0);
                                 return (
                                     <button
                                         key={user.id}
@@ -2457,6 +2468,7 @@ function InvestmentContent({
                 <UserEventsModal
                     userId={editingRatesUserId}
                     userName={users.find((user) => user.id === editingRatesUserId)?.name ?? editingRatesUserId}
+                    userRatePerVisit={users.find((user) => user.id === editingRatesUserId)?.ratePerVisit}
                     events={events}
                     onClose={() => setEditingRatesUserId(null)}
                     onSaved={(patches) => {
@@ -3179,14 +3191,8 @@ function dayKeysBetween(startDate: Date, endDate: Date) {
     return out;
 }
 
-function eventMoneyValue(event: DailyEventDoc) {
-    return safeNumber(
-        event.amount,
-        safeNumber(
-            event.amountSnapshot,
-            safeNumber(event.rateApplied, safeNumber(event.ratePerVisitSnapshot, 0))
-        )
-    );
+function eventMoneyValue(event: DailyEventDoc, userRatePerVisit?: number) {
+    return effectiveRate(event, userRatePerVisit);
 }
 
 function buildDailyChartSeries(
@@ -3194,7 +3200,8 @@ function buildDailyChartSeries(
     assignments: AccountingAssignmentDoc[],
     startDate: Date,
     endDate: Date,
-    metric: AccountingMetric
+    metric: AccountingMetric,
+    userRates?: Map<string, number>
 ): ChartPoint[] {
     const days = dayKeysBetween(startDate, endDate);
     const totals = new Map(days.map((day) => [day.key, 0]));
@@ -3222,8 +3229,8 @@ function buildDailyChartSeries(
         let value = 0;
         if (metric === "visited") value = event.type === "visited" ? 1 : 0;
         if (metric === "rejected") value = event.type === "rejected" ? 1 : 0;
-        if (metric === "gross") value = event.type === "visited" ? eventMoneyValue(event) : 0;
-        if (metric === "real") value = event.type === "visited" ? eventMoneyValue(event) : 0;
+        if (metric === "gross") value = event.type === "visited" ? eventMoneyValue(event, userRates?.get(event.userId)) : 0;
+        if (metric === "real") value = event.type === "visited" ? eventMoneyValue(event, userRates?.get(event.userId)) : 0;
         if (metric === "cost") value = 0;
 
         totals.set(event.dayKey, safeNumber(totals.get(event.dayKey), 0) + value);
@@ -3242,6 +3249,7 @@ function DashboardContent({
     assignments,
     startDate,
     endDate,
+    users,
     miGanancia,
 }: {
     summary: AccountingSummary;
@@ -3249,6 +3257,7 @@ function DashboardContent({
     assignments: AccountingAssignmentDoc[];
     startDate: Date;
     endDate: Date;
+    users: UserDoc[];
     miGanancia?: number | null;
 }) {
     const [rankingMetric, setRankingMetric] = useState<AccountingMetric>("real");
@@ -3281,9 +3290,17 @@ function DashboardContent({
     );
     const chartMeta = ACCOUNTING_METRICS[chartMetric];
     const rankingMeta = ACCOUNTING_METRICS[rankingMetric];
+    const dashUserRatesMap = useMemo(() => {
+        const map = new Map<string, number>();
+        for (const user of users) {
+            if (user.ratePerVisit != null) map.set(user.id, user.ratePerVisit);
+        }
+        return map;
+    }, [users]);
+
     const chartSeries = useMemo(() => {
-        return buildDailyChartSeries(events, assignments, startDate, endDate, chartMetric);
-    }, [events, assignments, startDate, endDate, chartMetric]);
+        return buildDailyChartSeries(events, assignments, startDate, endDate, chartMetric, dashUserRatesMap);
+    }, [events, assignments, startDate, endDate, chartMetric, dashUserRatesMap]);
 
     return (
         <div className="space-y-4">
@@ -3494,12 +3511,14 @@ function DashboardContent({
 function UserEventsModal({
     userId,
     userName,
+    userRatePerVisit,
     events,
     onClose,
     onSaved,
 }: {
     userId: string;
     userName: string;
+    userRatePerVisit?: number;
     events: DailyEventDoc[];
     onClose: () => void;
     onSaved: (patches: { id: string; rateApplied: number; amount: number }[]) => void;
@@ -3512,7 +3531,7 @@ function UserEventsModal({
     const [rates, setRates] = useState<Record<string, string>>(() => {
         const initial: Record<string, string> = {};
         for (const event of userEvents) {
-            initial[event.id] = String(effectiveRate(event));
+            initial[event.id] = String(effectiveRate(event, userRatePerVisit));
         }
         return initial;
     });
@@ -3527,7 +3546,7 @@ function UserEventsModal({
             const patches: { id: string; rateApplied: number; amount: number }[] = [];
 
             for (const event of userEvents) {
-                const original = effectiveRate(event);
+                const original = effectiveRate(event, userRatePerVisit);
                 const newRate = safeNumber(rates[event.id], original);
                 if (Math.abs(newRate - original) > 0.001) {
                     await updateDailyEventRate(event.id, newRate);
