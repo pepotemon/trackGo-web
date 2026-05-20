@@ -19,6 +19,7 @@ import {
 } from "@/types/userLeads";
 import { getWhatsAppSentIds, markWhatsAppSent } from "@/lib/userContactState";
 import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
+import { useWhatsAppDailyLimit } from "@/hooks/useWhatsAppDailyLimit";
 import { useVendorSubscriptionStatus, type VendorSubscriptionStatus } from "@/features/subscriptions/useVendorSubscriptionStatus";
 
 type StatusFilter = "pending" | "visited" | "rejected" | "all";
@@ -136,6 +137,8 @@ export default function UserLeadsPage() {
     const [rejectReason, setRejectReason] = useState<RejectedReason | null>(null);
     const [rejectText, setRejectText] = useState("");
     const [saving, setSaving] = useState(false);
+
+    const { triggerWa, WaLimitModal } = useWhatsAppDailyLimit();
 
     const userId = firebaseUser?.uid ?? "";
     const userName = profile?.name?.split(" ")[0] ?? "Vendedor";
@@ -284,10 +287,12 @@ export default function UserLeadsPage() {
         const msg = isSpanishPhone(lead.phone)
             ? `¡Buenas tardes! Somos de Crédito Comercial. Nos comunicamos para continuar con la liberación del crédito y el registro de tu negocio. ¡Quedamos atentos! 😊`
             : `Boa tarde! Somos da Crédito Comercial. Estamos entrando em contato para dar continuidade à liberação do crédito e realização do cadastro. Aguardamos seu retorno! 😊`;
-        window.open(buildWALink(lead.phone, msg), "_blank");
-        markWhatsAppSent(lead.id);
-        setWaSent((prev) => new Set(prev).add(lead.id));
         setWaConfirmLead(null);
+        triggerWa(() => {
+            window.open(buildWALink(lead.phone, msg), "_blank");
+            markWhatsAppSent(lead.id);
+            setWaSent((prev) => new Set(prev).add(lead.id));
+        });
     }
 
     function openMaps(lead: MetaLeadDoc) {
@@ -678,6 +683,8 @@ export default function UserLeadsPage() {
                     </div>
                 </BottomSheet>
             ) : null}
+
+            {WaLimitModal}
         </div>
     );
 }

@@ -19,6 +19,7 @@ import {
 import { buildWhatsAppUrl } from "@/lib/whatsapp";
 import { getWhatsAppSentIds, markWhatsAppSent } from "@/lib/userContactState";
 import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
+import { useWhatsAppDailyLimit } from "@/hooks/useWhatsAppDailyLimit";
 
 type MapFilter = "all" | "pending" | "visited" | "rejected";
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY ?? "";
@@ -112,6 +113,7 @@ function MapConfigError({ message }: { message: string }) {
 function MapPageInner() {
     const { firebaseUser } = useAuth();
     const userId = firebaseUser?.uid ?? "";
+    const { triggerWa, WaLimitModal } = useWhatsAppDailyLimit();
     const mapContainerRef = useRef<HTMLDivElement | null>(null);
     const mapRef = useRef<maplibregl.Map | null>(null);
     const mapLoadedRef = useRef(false);
@@ -263,18 +265,18 @@ function MapPageInner() {
 
     function openWhatsApp(lead: MetaLeadDoc) {
         const fixedUrl = buildWhatsAppUrl(lead.phone, `Olá, ${lead.name || "tudo bem"}! Estou entrando em contato sobre seu interesse.`);
-        if (fixedUrl) {
-            window.open(fixedUrl, "_blank");
+        triggerWa(() => {
+            if (fixedUrl) {
+                window.open(fixedUrl, "_blank");
+            } else {
+                const phone = lead.phone.replace(/\D/g, "");
+                const br = phone.startsWith("55") ? phone : `55${phone}`;
+                const msg = encodeURIComponent(`Olá, ${lead.name || "tudo bem"}! Estou entrando em contato sobre seu interesse.`);
+                window.open(`https://wa.me/${br}?text=${msg}`, "_blank");
+            }
             markWhatsAppSent(lead.id);
             setWaSent((prev) => new Set(prev).add(lead.id));
-            return;
-        }
-        const phone = lead.phone.replace(/\D/g, "");
-        const br = phone.startsWith("55") ? phone : `55${phone}`;
-        const msg = encodeURIComponent(`Olá, ${lead.name || "tudo bem"}! Estou entrando em contato sobre seu interesse.`);
-        window.open(`https://wa.me/${br}?text=${msg}`, "_blank");
-        markWhatsAppSent(lead.id);
-        setWaSent((prev) => new Set(prev).add(lead.id));
+        });
     }
 
     function openMaps(lead: MetaLeadDoc) {
@@ -847,6 +849,8 @@ function MapPageInner() {
                     )}
                 </BottomSheet>
             ) : null}
+
+            {WaLimitModal}
         </div>
     );
 }

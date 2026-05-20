@@ -14,6 +14,7 @@ import {
     type RejectedReason,
 } from "@/types/userLeads";
 import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
+import { useWhatsAppDailyLimit } from "@/hooks/useWhatsAppDailyLimit";
 
 type HistoryFilter = "all" | "visited" | "rejected";
 
@@ -117,6 +118,7 @@ export default function UserHistoryPage() {
     const { firebaseUser } = useAuth();
     const userId = firebaseUser?.uid ?? "";
     const today = todayKey();
+    const { triggerWa, WaLimitModal } = useWhatsAppDailyLimit();
 
     const [leads, setLeads] = useState<MetaLeadDoc[]>([]);
     const [loading, setLoading] = useState(true);
@@ -252,7 +254,7 @@ export default function UserHistoryPage() {
         const msg = isSpanishPhone(lead.phone)
             ? `¡Buenas tardes! Somos de Crédito Comercial. Nos comunicamos para continuar con la liberación del crédito y el registro de tu negocio. ¡Quedamos atentos! 😊`
             : `Boa tarde! Somos da Crédito Comercial. Estamos entrando em contato para dar continuidade à liberação do crédito e realização do cadastro. Aguardamos seu retorno! 😊`;
-        window.open(buildWALink(lead.phone, msg), "_blank");
+        triggerWa(() => { window.open(buildWALink(lead.phone, msg), "_blank"); });
     }
 
     function openMaps(lead: MetaLeadDoc) {
@@ -537,6 +539,8 @@ export default function UserHistoryPage() {
                     )}
                 </BottomSheet>
             ) : null}
+
+            {WaLimitModal}
         </div>
     );
 }
