@@ -20,6 +20,7 @@ import { buildWhatsAppUrl } from "@/lib/whatsapp";
 import { getWhatsAppSentIds, markWhatsAppSent } from "@/lib/userContactState";
 import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
 import { useWhatsAppDailyLimit } from "@/hooks/useWhatsAppDailyLimit";
+import { WhatsAppLimitModal } from "@/components/WhatsAppLimitModal";
 
 type MapFilter = "all" | "pending" | "visited" | "rejected";
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY ?? "";
@@ -113,7 +114,7 @@ function MapConfigError({ message }: { message: string }) {
 function MapPageInner() {
     const { firebaseUser } = useAuth();
     const userId = firebaseUser?.uid ?? "";
-    const { triggerWa, WaLimitModal } = useWhatsAppDailyLimit();
+    const { triggerWa, showModal: waLimitOpen, countAtWarning: waLimitCount, confirmWa, cancelWa } = useWhatsAppDailyLimit();
     const mapContainerRef = useRef<HTMLDivElement | null>(null);
     const mapRef = useRef<maplibregl.Map | null>(null);
     const mapLoadedRef = useRef(false);
@@ -850,7 +851,9 @@ function MapPageInner() {
                 </BottomSheet>
             ) : null}
 
-            {WaLimitModal}
+            {waLimitOpen ? (
+                <WhatsAppLimitModal count={waLimitCount} onConfirm={confirmWa} onCancel={cancelWa} />
+            ) : null}
         </div>
     );
 }

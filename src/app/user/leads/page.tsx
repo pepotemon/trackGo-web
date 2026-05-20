@@ -20,6 +20,7 @@ import {
 import { getWhatsAppSentIds, markWhatsAppSent } from "@/lib/userContactState";
 import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
 import { useWhatsAppDailyLimit } from "@/hooks/useWhatsAppDailyLimit";
+import { WhatsAppLimitModal } from "@/components/WhatsAppLimitModal";
 import { useVendorSubscriptionStatus, type VendorSubscriptionStatus } from "@/features/subscriptions/useVendorSubscriptionStatus";
 
 type StatusFilter = "pending" | "visited" | "rejected" | "all";
@@ -138,7 +139,7 @@ export default function UserLeadsPage() {
     const [rejectText, setRejectText] = useState("");
     const [saving, setSaving] = useState(false);
 
-    const { triggerWa, WaLimitModal } = useWhatsAppDailyLimit();
+    const { triggerWa, showModal: waLimitOpen, countAtWarning: waLimitCount, confirmWa, cancelWa } = useWhatsAppDailyLimit();
 
     const userId = firebaseUser?.uid ?? "";
     const userName = profile?.name?.split(" ")[0] ?? "Vendedor";
@@ -684,7 +685,9 @@ export default function UserLeadsPage() {
                 </BottomSheet>
             ) : null}
 
-            {WaLimitModal}
+            {waLimitOpen ? (
+                <WhatsAppLimitModal count={waLimitCount} onConfirm={confirmWa} onCancel={cancelWa} />
+            ) : null}
         </div>
     );
 }

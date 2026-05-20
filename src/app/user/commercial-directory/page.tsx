@@ -11,6 +11,7 @@ import {
 } from "@/data/commercialDirectoryRepo";
 import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
 import { useWhatsAppDailyLimit } from "@/hooks/useWhatsAppDailyLimit";
+import { WhatsAppLimitModal } from "@/components/WhatsAppLimitModal";
 import type {
     CommercialDirectoryAssignmentDoc,
     CommercialDirectoryProspectDoc,
@@ -72,7 +73,7 @@ export default function UserCommercialDirectoryPage() {
     const { firebaseUser, profile, userPermissions } = useAuth();
     const userId = firebaseUser?.uid ?? "";
     const userName = profile?.name?.split(" ")[0] || "Vendedor";
-    const { triggerWa, WaLimitModal } = useWhatsAppDailyLimit();
+    const { triggerWa, showModal: waLimitOpen, countAtWarning: waLimitCount, confirmWa, cancelWa } = useWhatsAppDailyLimit();
     const [assignments, setAssignments] = useState<CommercialDirectoryAssignmentDoc[]>([]);
     const [prospects, setProspects] = useState<CommercialDirectoryProspectDoc[]>([]);
     const [touches, setTouches] = useState<CommercialDirectoryProspectTouchDoc[]>([]);
@@ -461,7 +462,9 @@ export default function UserCommercialDirectoryPage() {
                 </BottomSheet>
             ) : null}
 
-            {WaLimitModal}
+            {waLimitOpen ? (
+                <WhatsAppLimitModal count={waLimitCount} onConfirm={confirmWa} onCancel={cancelWa} />
+            ) : null}
         </div>
     );
 }

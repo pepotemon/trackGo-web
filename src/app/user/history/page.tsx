@@ -15,6 +15,7 @@ import {
 } from "@/types/userLeads";
 import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
 import { useWhatsAppDailyLimit } from "@/hooks/useWhatsAppDailyLimit";
+import { WhatsAppLimitModal } from "@/components/WhatsAppLimitModal";
 
 type HistoryFilter = "all" | "visited" | "rejected";
 
@@ -118,7 +119,7 @@ export default function UserHistoryPage() {
     const { firebaseUser } = useAuth();
     const userId = firebaseUser?.uid ?? "";
     const today = todayKey();
-    const { triggerWa, WaLimitModal } = useWhatsAppDailyLimit();
+    const { triggerWa, showModal: waLimitOpen, countAtWarning: waLimitCount, confirmWa, cancelWa } = useWhatsAppDailyLimit();
 
     const [leads, setLeads] = useState<MetaLeadDoc[]>([]);
     const [loading, setLoading] = useState(true);
@@ -540,7 +541,9 @@ export default function UserHistoryPage() {
                 </BottomSheet>
             ) : null}
 
-            {WaLimitModal}
+            {waLimitOpen ? (
+                <WhatsAppLimitModal count={waLimitCount} onConfirm={confirmWa} onCancel={cancelWa} />
+            ) : null}
         </div>
     );
 }

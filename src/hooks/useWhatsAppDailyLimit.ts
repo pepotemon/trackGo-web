@@ -1,15 +1,9 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { createElement } from "react";
-import type { ReactNode } from "react";
 import { getWaDailyCount, incrementWaDailyCount, WA_DAILY_LIMIT } from "@/lib/whatsappDailyCounter";
-import { WhatsAppLimitModal } from "@/components/WhatsAppLimitModal";
 
-export function useWhatsAppDailyLimit(): {
-    triggerWa: (action: () => unknown) => void;
-    WaLimitModal: ReactNode;
-} {
+export function useWhatsAppDailyLimit() {
     const [showModal, setShowModal] = useState(false);
     const [countAtWarning, setCountAtWarning] = useState(0);
     const pendingRef = useRef<(() => unknown) | null>(null);
@@ -26,25 +20,17 @@ export function useWhatsAppDailyLimit(): {
         action();
     }
 
-    function handleConfirm() {
+    function confirmWa() {
         incrementWaDailyCount();
         void pendingRef.current?.();
         pendingRef.current = null;
         setShowModal(false);
     }
 
-    function handleCancel() {
+    function cancelWa() {
         pendingRef.current = null;
         setShowModal(false);
     }
 
-    const WaLimitModal: ReactNode = showModal
-        ? createElement(WhatsAppLimitModal, {
-              count: countAtWarning,
-              onConfirm: handleConfirm,
-              onCancel: handleCancel,
-          })
-        : null;
-
-    return { triggerWa, WaLimitModal };
+    return { triggerWa, showModal, countAtWarning, confirmWa, cancelWa };
 }
