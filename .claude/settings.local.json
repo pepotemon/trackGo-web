@@ -20,7 +20,8 @@
       "Bash(grep -E \"\\\\.\\(tsx|ts\\)$\")",
       "Bash(git push *)",
       "Bash(where inkscape *)",
-      "Bash(where magick *)"
+      "Bash(where magick *)",
+      "Bash(git fetch *)"
     ]
   }
 }

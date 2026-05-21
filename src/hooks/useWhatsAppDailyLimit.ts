@@ -10,7 +10,7 @@ export function useWhatsAppDailyLimit() {
 
     function triggerWa(action: () => unknown) {
         const currentCount = getWaDailyCount();
-        if (currentCount >= WA_DAILY_LIMIT) {
+        if (currentCount >= WA_DAILY_LIMIT - 1) {
             setCountAtWarning(currentCount);
             pendingRef.current = action;
             setShowModal(true);
