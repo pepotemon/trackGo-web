@@ -15,6 +15,8 @@ import { sendManualLeadMessage, subscribeLeadMessages } from "@/data/leadChatRep
 import type { LeadMessageDoc, MetaLeadDoc } from "@/types/leads";
 import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
 import { getReviewedIds, getWhatsAppSentIds, markReviewed, markWhatsAppSent } from "@/lib/userContactState";
+import { useWhatsAppDailyLimit } from "@/hooks/useWhatsAppDailyLimit";
+import { WhatsAppLimitModal } from "@/components/WhatsAppLimitModal";
 
 type Tab = "incomplete" | "not_suitable";
 type RangePreset = "all" | "today" | "week" | "month" | "custom";
@@ -198,6 +200,7 @@ export default function UserIncompleteClientsPage() {
     // whatsapp + reviewed
     const [waSent, setWaSent] = useState<Set<string>>(new Set());
     const [reviewed, setReviewed] = useState<Set<string>>(new Set());
+    const { triggerWa, showModal: waLimitOpen, countAtWarning: waLimitCount, confirmWa, cancelWa } = useWhatsAppDailyLimit();
 
     useEffect(() => {
         const timer = window.setInterval(() => setRecoveryClock((value) => value + 1), 5 * 60 * 1000);
@@ -348,9 +351,11 @@ export default function UserIncompleteClientsPage() {
         const msg = isSpanishPhone(lead.phone)
             ? `¡Hola! Somos de Crédito Comercial. Usted nos contactó anteriormente sobre la liberación de crédito para su negocio. Nos gustaría saber si aún tiene interés. ¡Gracias y disculpe la molestia! 🙏`
             : `Olá! Somos da Crédito Comercial. Você nos contatou anteriormente sobre a liberação de crédito para o seu comércio. Gostaríamos de saber se ainda tem interesse. Obrigado e desculpe o incômodo! 🙏`;
-        window.open(buildWALink(lead.phone, msg), "_blank");
-        markWhatsAppSent(lead.id);
-        setWaSent((prev) => new Set(prev).add(lead.id));
+        triggerWa(() => {
+            window.open(buildWALink(lead.phone, msg), "_blank");
+            markWhatsAppSent(lead.id);
+            setWaSent((prev) => new Set(prev).add(lead.id));
+        });
     }
 
     function openNotSuitable(lead: MetaLeadDoc) { setActionLead(lead); setActionType("not_suitable"); }
@@ -1017,6 +1022,10 @@ export default function UserIncompleteClientsPage() {
                         </button>
                     </div>
                 </BottomSheet>
+            ) : null}
+
+            {waLimitOpen ? (
+                <WhatsAppLimitModal count={waLimitCount} onConfirm={confirmWa} onCancel={cancelWa} />
             ) : null}
 
         </div>

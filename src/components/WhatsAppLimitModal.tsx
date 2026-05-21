@@ -44,7 +44,7 @@ export function WhatsAppLimitModal({
                 </div>
 
                 <p className="mt-3 text-[11px] font-semibold text-[#98A2B3]">
-                    El contador se reinicia automaticamente manana.
+                    El contador se reinicia automaticamente mañana.
                 </p>
 
                 <div className="mt-4 grid gap-2">
