@@ -22,7 +22,19 @@
       "Bash(where inkscape *)",
       "Bash(where magick *)",
       "Bash(git fetch *)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(sed 's/.*collection\\(db, //')",
+      "Bash(sed 's/[\"\\)].*//')",
+      "Bash(sed 's/.*collection\\(db, \"//')",
+      "Bash(sed 's/\".*//')",
+      "Bash(mkdir *)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(d.get\\('dependencies',{}\\).get\\('next','not found'\\)\\)\")",
+      "Bash(git *)",
+      "Bash(cp C:/Users/helle/trackgo-web/.claude/worktrees/agent-ade4ef5949149778f/src/types/accounting.ts C:/Users/helle/trackgo-web/src/types/accounting.ts)",
+      "Bash(cp C:/Users/helle/trackgo-web/.claude/worktrees/agent-ade4ef5949149778f/src/types/users.ts C:/Users/helle/trackgo-web/src/types/users.ts)",
+      "Bash(cp C:/Users/helle/trackgo-web/.claude/worktrees/agent-ade4ef5949149778f/src/data/accountingRepo.ts C:/Users/helle/trackgo-web/src/data/accountingRepo.ts)",
+      "Bash(cp C:/Users/helle/trackgo-web/.claude/worktrees/agent-ade4ef5949149778f/src/features/accounting/calcAccounting.ts C:/Users/helle/trackgo-web/src/features/accounting/calcAccounting.ts)",
+      "Bash(cp C:/Users/helle/trackgo-web/.claude/worktrees/agent-ade4ef5949149778f/src/app/admin/accounting/page.tsx C:/Users/helle/trackgo-web/src/app/admin/accounting/page.tsx)"
     ]
   }
 }
