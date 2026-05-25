@@ -2,6 +2,8 @@ const admin = require("firebase-admin");
 const { dayKeyFromMs } = require("../utils/geo");
 const { matchUserToLead, sn } = require("./coverageMatcher");
 
+const DELIVERY_CONTROLLED_SUBSCRIPTION_STATUSES = ["active", "paused"];
+
 async function countUserAssignmentsToday(dayKey, userId, coverageKey) {
     const snap = await admin
         .firestore()
@@ -12,6 +14,60 @@ async function countUserAssignmentsToday(dayKey, userId, coverageKey) {
         .get();
 
     return snap.size || 0;
+}
+
+function buildLeadCityKeys(lead, match = {}) {
+    const keys = [
+        match.matchedCityNormalized,
+        match.coverageItem?.cityNormalized,
+        lead?.geoAdminCityNormalized,
+        lead?.geoAdminCityLabel,
+        lead?.geoCityNormalized,
+        lead?.geoCityLabel,
+    ]
+        .map((value) => sn(value))
+        .filter(Boolean);
+
+    return new Set(keys);
+}
+
+function buildSubscriptionCityKeys(subscription) {
+    return [
+        subscription?.cityId,
+        subscription?.city,
+        subscription?.cityName,
+    ]
+        .map((value) => sn(value))
+        .filter(Boolean);
+}
+
+function subscriptionMatchesLeadCity(subscription, leadCityKeys) {
+    if (!leadCityKeys.size) return false;
+    return buildSubscriptionCityKeys(subscription).some((key) => leadCityKeys.has(key));
+}
+
+async function getUserSubscriptionDeliveryStatus(userId, lead, match) {
+    const leadCityKeys = buildLeadCityKeys(lead, match);
+    if (!leadCityKeys.size) return "uncontrolled";
+
+    const snap = await admin
+        .firestore()
+        .collection("subscriptions")
+        .where("userId", "==", userId)
+        .where("status", "in", DELIVERY_CONTROLLED_SUBSCRIPTION_STATUSES)
+        .limit(20)
+        .get();
+
+    const matchingSubscriptions = snap.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .filter((subscription) => subscriptionMatchesLeadCity(subscription, leadCityKeys));
+
+    if (!matchingSubscriptions.length) return "uncontrolled";
+    if (matchingSubscriptions.some((subscription) => subscription.status === "active")) {
+        return "active";
+    }
+
+    return "paused";
 }
 
 function rankCoverageKey(key) {
@@ -42,6 +98,9 @@ async function selectAutoAssignUser(lead) {
             matchType: match.matchType,
             coverageKey: match.coverageKey,
             coverageItem: match.coverageItem,
+            matchedCityNormalized: match.matchedCityNormalized,
+            matchedStateNormalized: match.matchedStateNormalized,
+            matchedCountryNormalized: match.matchedCountryNormalized,
         });
     });
 
@@ -74,10 +133,39 @@ async function selectAutoAssignUser(lead) {
 
     if (!bucket.length) return null;
 
+    const deliveryEligibleBucket = [];
+    for (const item of bucket) {
+        const deliveryStatus = await getUserSubscriptionDeliveryStatus(
+            item.user.id,
+            lead,
+            item
+        );
+
+        if (deliveryStatus === "paused") {
+            console.log("[AUTO ASSIGN] user skipped by paused subscription:", {
+                userId: item.user.id,
+                coverageKey: selectedCoverageKey,
+                geoAdminCityNormalized: lead?.geoAdminCityNormalized || "",
+                geoCityNormalized: lead?.geoCityNormalized || "",
+            });
+            continue;
+        }
+
+        deliveryEligibleBucket.push(item);
+    }
+
+    if (!deliveryEligibleBucket.length) {
+        console.log("[AUTO ASSIGN] no eligible users after subscription delivery filter:", {
+            clientId: lead?.id || "",
+            coverageKey: selectedCoverageKey,
+        });
+        return null;
+    }
+
     const dayKey = dayKeyFromMs(Date.now());
 
     const enriched = [];
-    for (const item of bucket) {
+    for (const item of deliveryEligibleBucket) {
         const userDailyCount = await countUserAssignmentsToday(
             dayKey,
             item.user.id,
