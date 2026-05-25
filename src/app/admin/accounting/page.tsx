@@ -10,6 +10,7 @@ import {
     listClientAssignmentsByRange,
     listInvestmentGroups,
     listAccountingUsers,
+    listAdminUsers,
     listDailyEventsByRange,
     listPaidSubscriptionsByRange,
     reopenWeeklyInvestment,
@@ -18,6 +19,7 @@ import {
     upsertInvestmentGroup,
     upsertWeeklyInvestment,
 } from "@/data/accountingRepo";
+import { listWeeklyExpenses } from "@/data/gastosRepo";
 import { buildAccountingSummary } from "@/features/accounting/calcAccounting";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { useCan } from "@/features/auth/usePermissions";
@@ -28,6 +30,7 @@ import type {
     DailyEventDoc,
     InvestmentGroupDoc,
     UserDoc,
+    WeeklyExpenseDoc,
     WeeklyInvestmentDoc,
     WeeklyInvestmentGroup,
 } from "@/types/accounting";
@@ -359,8 +362,145 @@ function excelMoney(value: number) {
     return Number.isFinite(value) ? value.toFixed(2) : "0.00";
 }
 
-function exportAccountingSheet(summary: AccountingSummary) {
-    const rows = summary.rows
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+}
+
+function downloadReceiptAsImage({
+    adminName,
+    weekStartKey,
+    weekEndKey,
+    gross,
+    subscriptionInvestment,
+    real,
+    expensesTotal,
+    miGanancia,
+}: {
+    adminName: string;
+    weekStartKey: string;
+    weekEndKey: string;
+    gross: number;
+    subscriptionInvestment: number;
+    real: number;
+    expensesTotal: number;
+    miGanancia: number;
+}) {
+    const dpr = (typeof window !== "undefined" ? window.devicePixelRatio : 1) || 1;
+    const W = 520;
+    const H = 340;
+    const canvas = document.createElement("canvas");
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.scale(dpr, dpr);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, W, H);
+
+    const grad = ctx.createLinearGradient(0, 0, W, 0);
+    grad.addColorStop(0, "#7C3AED");
+    grad.addColorStop(1, "#4F46E5");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, 6);
+
+    ctx.fillStyle = "#7C3AED";
+    ctx.font = "bold 20px Arial, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("TrackGo", 28, 44);
+
+    ctx.fillStyle = "#66739a";
+    ctx.font = "12px Arial, sans-serif";
+    ctx.fillText("Recibo de cierre de semana", 28, 62);
+
+    ctx.fillStyle = "#344054";
+    ctx.font = "bold 13px Arial, sans-serif";
+    ctx.textAlign = "right";
+    ctx.fillText(`${weekStartKey}  –  ${weekEndKey}`, W - 28, 44);
+
+    ctx.strokeStyle = "#e4e7ec";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(28, 80);
+    ctx.lineTo(W - 28, 80);
+    ctx.stroke();
+
+    const summaryRows: { label: string; value: number; bold?: boolean; color?: string }[] = [
+        { label: "Bruto total", value: gross },
+        { label: "Inversion (suscripciones)", value: subscriptionInvestment },
+        { label: "Ganancia real", value: real, bold: true, color: real >= 0 ? "#047857" : "#dc2626" },
+        { label: "Gastos", value: expensesTotal, color: expensesTotal > 0 ? "#dc2626" : "#344054" },
+    ];
+
+    let y = 110;
+    for (const row of summaryRows) {
+        ctx.fillStyle = "#667085";
+        ctx.font = "13px Arial, sans-serif";
+        ctx.textAlign = "left";
+        ctx.fillText(row.label, 28, y);
+        ctx.fillStyle = row.color ?? "#344054";
+        ctx.font = row.bold ? "bold 13px Arial, sans-serif" : "13px Arial, sans-serif";
+        ctx.textAlign = "right";
+        ctx.fillText(money(row.value), W - 28, y);
+        y += 30;
+    }
+
+    y += 8;
+    ctx.fillStyle = "#ecfdf5";
+    roundRect(ctx, 24, y - 22, W - 48, 52, 10);
+    ctx.fill();
+    ctx.fillStyle = "#065f46";
+    ctx.font = "bold 13px Arial, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("MI GANANCIA", 36, y + 4);
+    ctx.fillStyle = "#047857";
+    ctx.font = "bold 22px Arial, sans-serif";
+    ctx.textAlign = "right";
+    ctx.fillText(money(miGanancia), W - 36, y + 4);
+
+    y += 46;
+    ctx.strokeStyle = "#e4e7ec";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(28, y);
+    ctx.lineTo(W - 28, y);
+    ctx.stroke();
+
+    y += 22;
+    ctx.fillStyle = "#344054";
+    ctx.font = "bold 13px Arial, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(adminName, 28, y);
+    ctx.fillStyle = "#98a2b3";
+    ctx.font = "11px Arial, sans-serif";
+    ctx.textAlign = "right";
+    ctx.fillText(`Generado ${new Date().toLocaleDateString("es")}`, W - 28, y);
+
+    const url = canvas.toDataURL("image/png");
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `recibo-${adminName.replace(/\s+/g, "-")}-${weekStartKey}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+}
+
+function exportAccountingSheet(summary: AccountingSummary, miGanancia?: number | null, isSuperAdmin?: boolean) {
+    const activeRows = summary.rows.filter((row) => {
+        if (row.billingMode === "per_visit") return row.visited > 0;
+        return row.subscriptionPaid === true;
+    });
+    const rows = activeRows
         .map((row) => {
             const model = row.subscriptionSource === "real"
                 ? "Suscripcion pagada"
@@ -426,16 +566,19 @@ function exportAccountingSheet(summary: AccountingSummary) {
                     </tr>
                     <tr>
                         <td class="label">Ganancia bruta</td><td class="money">${excelMoney(summary.gross)}</td>
-                        <td class="label">Inversion</td><td class="money">${excelMoney(summary.investment)}</td>
+                        <td class="label">Inversion</td><td class="money">${excelMoney(isSuperAdmin ? summary.investment : summary.subscriptionInvestment)}</td>
                         <td class="label">Ganancia real</td><td class="money ${summary.real >= 0 ? "positive" : "negative"}">${excelMoney(summary.real)}</td>
                         <td class="label">ROI</td><td class="num">${summary.roi == null ? "" : summary.roi.toFixed(2) + "%"}</td>
-                        <td class="label">Ajuste manual</td><td class="money">${excelMoney(summary.manualAdjustment)}</td>
+                        ${isSuperAdmin ? `<td class="label">Ajuste manual</td><td class="money">${excelMoney(summary.manualAdjustment)}</td>` : "<td></td><td></td>"}
                     </tr>
+                    ${miGanancia != null ? `<tr>
+                        <td class="label">Mi ganancia</td><td class="money ${miGanancia >= 0 ? "positive" : "negative"}" colspan="9">${excelMoney(miGanancia)}</td>
+                    </tr>` : ""}
                     <tr>
                         <td class="label">Ventas por visita</td><td class="money">${excelMoney(summary.grossVisits)}</td>
                         <td class="label">Suscripciones</td><td class="money">${excelMoney(summary.grossSubscriptions)}</td>
                         <td class="label">Inversion suscripciones</td><td class="money">${excelMoney(summary.subscriptionInvestment)}</td>
-                        <td class="label">Inversion grupos</td><td class="money" colspan="3">${excelMoney(summary.groupInvestment)}</td>
+                        ${isSuperAdmin ? `<td class="label">Inversion grupos</td><td class="money" colspan="3">${excelMoney(summary.groupInvestment)}</td>` : "<td colspan=\"4\"></td>"}
                     </tr>
                     <tr><td class="section" colspan="10">Detalle por usuario</td></tr>
                     <tr>
@@ -492,6 +635,7 @@ export default function AccountingPage() {
     const canInvestmentView = useCan("accountingInvestmentView");
     const canInvestmentEdit = useCan("accountingInvestmentEdit");
     const canClose = useCan("accountingClose");
+    const canGastos = useCan("gastosView");
     const [activeTab, setActiveTab] = useState<AccountingTab>("overview");
     const [periodMode, setPeriodMode] = useState<AccountingPeriodMode>("weekly");
     const [weekOffset, setWeekOffset] = useState(0);
@@ -504,8 +648,11 @@ export default function AccountingPage() {
     const [investment, setInvestment] = useState<WeeklyInvestmentDoc | null>(null);
     const [monthlyInvestments, setMonthlyInvestments] = useState<WeeklyInvestmentDoc[]>([]);
     const [investmentGroups, setInvestmentGroups] = useState<InvestmentGroupDoc[]>([]);
+    const [expenses, setExpenses] = useState<WeeklyExpenseDoc[]>([]);
+    const [adminUsers, setAdminUsers] = useState<UserDoc[]>([]);
     const [closeOpen, setCloseOpen] = useState(false);
     const [reopenOpen, setReopenOpen] = useState(false);
+    const [excludedUserIds, setExcludedUserIds] = useState<string[]>([]);
 
     const [loading, setLoading] = useState(true);
     const [savingWeek, setSavingWeek] = useState(false);
@@ -541,7 +688,7 @@ export default function AccountingPage() {
                 const queryStartDate = periodMode === "monthly" && weekRanges[0] ? weekRanges[0].startDate : period.startDate;
                 const queryEndDate = periodMode === "monthly" && weekRanges[weekRanges.length - 1] ? weekRanges[weekRanges.length - 1].endDate : period.endDate;
 
-                const [u, ev, ass, subs, inv, groupCatalog] = await Promise.all([
+                const [u, ev, ass, subs, inv, groupCatalog, weekExpenses, admins] = await Promise.all([
                     listAccountingUsers(),
                     listDailyEventsByRange(queryStartKey, queryEndKey),
                     listClientAssignmentsByRange({
@@ -558,6 +705,8 @@ export default function AccountingPage() {
                         ? getWeeklyInvestment(week.startKey)
                         : Promise.all(weekRanges.map((item) => getWeeklyInvestment(item.startKey))),
                     listInvestmentGroups(),
+                    canGastos && periodMode === "weekly" ? listWeeklyExpenses(week.startKey) : Promise.resolve([] as WeeklyExpenseDoc[]),
+                    canGastos ? listAdminUsers() : Promise.resolve([] as UserDoc[]),
                 ]);
 
                 if (cancelled) return;
@@ -585,6 +734,8 @@ export default function AccountingPage() {
                 setInvestment(weeklyInvestment);
                 setMonthlyInvestments(loadedMonthlyInvestments);
                 setInvestmentGroups(groupCatalog);
+                setExpenses(weekExpenses);
+                setAdminUsers(admins);
             } catch (e: unknown) {
                 if (cancelled) return;
                 setErr(e instanceof Error ? e.message : "No se pudo cargar la contabilidad.");
@@ -653,21 +804,13 @@ export default function AccountingPage() {
     const myInvestment = useMemo(() => {
         const sourceInvestment = periodMode === "monthly" ? mergeMonthlyInvestment(monthlyInvestments) : investment;
         if (isSuperAdmin || !profile || !sourceInvestment) return sourceInvestment;
-        const myIds = new Set(myUsers.map((u) => u.id));
         return {
             ...sourceInvestment,
             amount: 0,
             allocations: {},
-            groups: (sourceInvestment.groups ?? [])
-                .map((g) => {
-                    const originalUserIds = Array.isArray(g.userIds) ? g.userIds.filter(Boolean) : [];
-                    const scopedUserIds = originalUserIds.filter((id) => myIds.has(id));
-                    const ratio = originalUserIds.length ? scopedUserIds.length / originalUserIds.length : 0;
-                    return { ...g, userIds: scopedUserIds, amount: Math.round((g.amount || 0) * ratio * 100) / 100 };
-                })
-                .filter((g) => g.userIds.length > 0),
+            groups: [],
         };
-    }, [investment, monthlyInvestments, myUsers, isSuperAdmin, profile, periodMode]);
+    }, [investment, monthlyInvestments, isSuperAdmin, profile, periodMode]);
 
     const weeklySummariesForMonth = useMemo(() => {
         if (periodMode !== "monthly") return [];
@@ -682,19 +825,11 @@ export default function AccountingPage() {
             const weekInvestment = monthlyInvestments.find((item) => item.weekStartKey === weekRange.startKey) ?? null;
             let scopedWeekInvestment = weekInvestment;
             if (!isSuperAdmin && profile && weekInvestment) {
-                const myIds = new Set(weekUsers.map((u) => u.id));
                 scopedWeekInvestment = {
                     ...weekInvestment,
                     amount: 0,
                     allocations: {},
-                    groups: (weekInvestment.groups ?? [])
-                        .map((g) => {
-                            const originalUserIds = Array.isArray(g.userIds) ? g.userIds.filter(Boolean) : [];
-                            const scopedUserIds = originalUserIds.filter((id) => myIds.has(id));
-                            const ratio = originalUserIds.length ? scopedUserIds.length / originalUserIds.length : 0;
-                            return { ...g, userIds: scopedUserIds, amount: Math.round((g.amount || 0) * ratio * 100) / 100 };
-                        })
-                        .filter((g) => g.userIds.length > 0),
+                    groups: [],
                 };
             }
 
@@ -724,8 +859,9 @@ export default function AccountingPage() {
             assignments: scopedAssignments,
             subscriptions: scopedSubscriptions,
             investment: myInvestment,
+            expenses,
         });
-    }, [periodMode, weeklySummariesForMonth, period.startKey, period.endKey, myUsers, scopedEvents, scopedAssignments, scopedSubscriptions, myInvestment]);
+    }, [periodMode, weeklySummariesForMonth, period.startKey, period.endKey, myUsers, scopedEvents, scopedAssignments, scopedSubscriptions, myInvestment, expenses]);
 
     const miGanancia = useMemo(() => {
         if (!profile || !summary) return null;
@@ -770,8 +906,131 @@ export default function AccountingPage() {
         }, 0);
     }, [summary, myUsers, isSuperAdmin, profile, periodMode, weeklySummariesForMonth]);
 
+    const miGananciaPerAdmin = useMemo(() => {
+        if (!isSuperAdmin || !summary) return [] as { admin: UserDoc; gain: number }[];
+        return adminUsers
+            .map((admin) => ({
+                admin,
+                gain: summary.rows.reduce((acc, row) => {
+                    const user = myUsers.find((u) => u.id === row.userId);
+                    const share = user?.sharedWith?.find((s) => s.adminId === admin.id);
+                    if (!share) return acc;
+                    return acc + (row.real * share.percentage / 100);
+                }, 0),
+            }))
+            .filter(({ admin }) => myUsers.some((u) => u.sharedWith?.some((s) => s.adminId === admin.id)));
+    }, [isSuperAdmin, summary, adminUsers, myUsers]);
+
+    const adjustedCloseSummary = useMemo(() => {
+        if (!summary || periodMode !== "weekly" || excludedUserIds.length === 0) return summary;
+        const excludedSet = new Set(excludedUserIds);
+        const modifiedUsers = myUsers.map((user) =>
+            excludedSet.has(user.id)
+                ? {
+                    ...user,
+                    weeklySubscriptionWeeks: {
+                        ...(user.weeklySubscriptionWeeks ?? {}),
+                        [week.startKey]: { ...(user.weeklySubscriptionWeeks?.[week.startKey] ?? {}), paid: false },
+                    },
+                }
+                : user
+        );
+        const modifiedSubscriptions = scopedSubscriptions.filter((sub) => !excludedSet.has(sub.userId));
+        return buildAccountingSummary({
+            startKey: week.startKey,
+            endKey: week.endKey,
+            users: modifiedUsers,
+            events: scopedEvents,
+            assignments: scopedAssignments,
+            subscriptions: modifiedSubscriptions,
+            investment: myInvestment,
+            expenses,
+        });
+    }, [summary, excludedUserIds, myUsers, week.startKey, week.endKey, scopedSubscriptions, scopedEvents, scopedAssignments, myInvestment, expenses, periodMode]);
+
+    const closeMiGanancia = useMemo(() => {
+        if (!profile || !adjustedCloseSummary) return null;
+        const s = adjustedCloseSummary;
+        if (isSuperAdmin) {
+            const givenAway = s.rows.reduce((acc, row) => {
+                const user = myUsers.find((u) => u.id === row.userId);
+                const totalPct = (user?.sharedWith ?? []).reduce((sum, sw) => sum + sw.percentage, 0);
+                return acc + (row.real * totalPct / 100);
+            }, 0);
+            return givenAway === 0 ? null : s.real - givenAway;
+        }
+        return s.rows.reduce((acc, row) => {
+            const user = myUsers.find((u) => u.id === row.userId);
+            const share = user?.sharedWith?.find((sw) => sw.adminId === profile.id);
+            if (!share) return acc;
+            return acc + (row.real * share.percentage / 100);
+        }, 0);
+    }, [adjustedCloseSummary, myUsers, isSuperAdmin, profile]);
+
+    const closeMiGananciaPerAdmin = useMemo(() => {
+        if (!isSuperAdmin || !adjustedCloseSummary) return [] as { admin: UserDoc; gain: number }[];
+        return adminUsers
+            .map((admin) => ({
+                admin,
+                gain: adjustedCloseSummary.rows.reduce((acc, row) => {
+                    const user = myUsers.find((u) => u.id === row.userId);
+                    const share = user?.sharedWith?.find((s) => s.adminId === admin.id);
+                    if (!share) return acc;
+                    return acc + (row.real * share.percentage / 100);
+                }, 0),
+            }))
+            .filter(({ admin }) => myUsers.some((u) => u.sharedWith?.some((s) => s.adminId === admin.id)));
+    }, [isSuperAdmin, adjustedCloseSummary, adminUsers, myUsers]);
+
     const weekStatus = periodMode === "weekly" ? investment?.status ?? "draft" : "draft";
     const isClosed = periodMode === "weekly" && weekStatus === "closed";
+
+    const exportSummary = useMemo((): AccountingSummary | null => {
+        if (!summary) return null;
+        const fs = isClosed ? investment?.finalSummary : null;
+        if (!fs) return summary;
+        return {
+            ...summary,
+            gross: fs.gross,
+            grossVisits: fs.grossVisits,
+            grossSubscriptions: fs.grossSubscriptions,
+            subscriptionsPaid: fs.subscriptionsPaid,
+            investment: fs.investment,
+            subscriptionInvestment: fs.subscriptionInvestment,
+            groupInvestment: fs.groupInvestment,
+            manualAdjustment: fs.manualAdjustment,
+            real: fs.real,
+            roi: fs.roi,
+            visited: fs.visited,
+            rejected: fs.rejected,
+            assigned: fs.assigned ?? summary.assigned,
+            rows: fs.rows ?? summary.rows,
+            subscriptionRows: fs.subscriptionRows ?? summary.subscriptionRows,
+            expenses: fs.expenses ?? summary.expenses,
+            expensesTotal: fs.expensesTotal ?? summary.expensesTotal,
+        };
+    }, [isClosed, investment, summary]);
+
+    const snapMiGanancia = useMemo(() => {
+        if (!isClosed || !exportSummary) return miGanancia;
+        if (miGanancia == null) return null;
+        if (!profile) return miGanancia;
+        const rows = exportSummary.rows;
+        if (isSuperAdmin) {
+            const givenAway = rows.reduce((acc, row) => {
+                const user = myUsers.find((u) => u.id === row.userId);
+                const totalPct = (user?.sharedWith ?? []).reduce((s, sw) => s + sw.percentage, 0);
+                return acc + (row.real * totalPct / 100);
+            }, 0);
+            return exportSummary.real - givenAway;
+        }
+        return rows.reduce((acc, row) => {
+            const user = myUsers.find((u) => u.id === row.userId);
+            const share = user?.sharedWith?.find((s) => s.adminId === profile.id);
+            if (!share) return acc;
+            return acc + (row.real * share.percentage / 100);
+        }, 0);
+    }, [isClosed, exportSummary, miGanancia, profile, isSuperAdmin, myUsers]);
 
     async function toggleSubscriptionPayment(user: UserDoc) {
         if (isClosed) {
@@ -827,7 +1086,8 @@ export default function AccountingPage() {
     }
 
     async function handleCloseWeek() {
-        if (!summary) return;
+        const closingSummary = adjustedCloseSummary;
+        if (!closingSummary) return;
 
         setErr(null);
         setSavingWeek(true);
@@ -836,11 +1096,13 @@ export default function AccountingPage() {
             const next = await closeWeeklyInvestment({
                 weekStartKey: week.startKey,
                 weekEndKey: week.endKey,
-                summary,
+                summary: closingSummary,
+                expenses,
                 closedBy: firebaseUser?.uid ?? null,
             });
             setInvestment(next);
             setCloseOpen(false);
+            setExcludedUserIds([]);
         } catch (error) {
             setErr(error instanceof Error ? error.message : "No se pudo cerrar la semana.");
         } finally {
@@ -911,8 +1173,8 @@ export default function AccountingPage() {
                     activeTab={activeTab}
                     setActiveTab={setActiveTab}
                     onRefresh={() => setRefreshNonce((value) => value + 1)}
-                    onExport={summary ? () => exportAccountingSheet(summary) : undefined}
-                    onCloseWeek={() => setCloseOpen(true)}
+                    onExport={exportSummary ? () => exportAccountingSheet(exportSummary, snapMiGanancia, isSuperAdmin) : undefined}
+                    onCloseWeek={() => { setExcludedUserIds([]); setCloseOpen(true); }}
                     onReopenWeek={() => setReopenOpen(true)}
                     savingWeek={savingWeek}
                     onInvestmentSaved={setInvestment}
@@ -921,6 +1183,7 @@ export default function AccountingPage() {
                     onPatchEvents={handlePatchEvents}
                     onError={setErr}
                     miGanancia={miGanancia}
+                    isSuperAdmin={isSuperAdmin}
                 />
             </div>
 
@@ -945,7 +1208,7 @@ export default function AccountingPage() {
                                         icon="download"
                                         label="Exportar Excel"
                                         variant="primary"
-                                        onClick={() => exportAccountingSheet(summary)}
+                                        onClick={() => exportAccountingSheet(exportSummary ?? summary, snapMiGanancia, isSuperAdmin)}
                                     />
                                 ) : null}
                                 {canInvestmentView && periodMode === "weekly" ? (
@@ -956,7 +1219,7 @@ export default function AccountingPage() {
                                         onClick={() => setActiveTab("investment")}
                                     />
                                 ) : null}
-                                {canClose && periodMode === "weekly" ? (
+                                {isSuperAdmin && periodMode === "weekly" ? (
                                     isClosed ? (
                                         <IconButton
                                             icon="unlock"
@@ -969,7 +1232,7 @@ export default function AccountingPage() {
                                             icon="lock"
                                             label="Cerrar semana"
                                             variant="primary"
-                                            onClick={() => setCloseOpen(true)}
+                                            onClick={() => { setExcludedUserIds([]); setCloseOpen(true); }}
                                             disabled={savingWeek || !summary}
                                         />
                                     )
@@ -1051,6 +1314,12 @@ export default function AccountingPage() {
                                 summary={summary}
                                 finalSummary={investment.finalSummary}
                                 miGanancia={miGanancia}
+                                adminUsers={adminUsers}
+                                sellers={myUsers}
+                                isSuperAdmin={isSuperAdmin}
+                                profile={profile}
+                                weekStartKey={week.startKey}
+                                weekEndKey={week.endKey}
                             />
                         ) : null}
 
@@ -1063,6 +1332,9 @@ export default function AccountingPage() {
                                 endDate={period.endDate}
                                 users={myUsers}
                                 miGanancia={miGanancia}
+                                isSuperAdmin={isSuperAdmin}
+                                exportSummary={exportSummary}
+                                snapMiGanancia={snapMiGanancia}
                             />
                         ) : (
                             <InvestmentContent
@@ -1074,6 +1346,7 @@ export default function AccountingPage() {
                                 investmentGroups={myInvestmentGroups}
                                 useCatalogDefaults={weekOffset === 0}
                                 isClosed={isClosed || !canInvestmentEdit}
+                                isSuperAdmin={isSuperAdmin}
                                 events={scopedEvents}
                                 onToggleSubscriptionPayment={toggleSubscriptionPayment}
                                 onPatchEvents={handlePatchEvents}
@@ -1092,12 +1365,14 @@ export default function AccountingPage() {
                 onClose={() => setCloseOpen(false)}
                 title="Cerrar semana"
                 subtitle={`${week.startKey} a ${week.endKey}`}
+                size="lg"
             >
                 <div className="space-y-4">
-                    <div className="grid gap-3 rounded-lg border border-[#e4e7ec] bg-[#f9fafb] p-3 sm:grid-cols-3">
-                        <MiniInvestmentStat label="Bruta" value={money(summary?.gross ?? 0)} />
-                        <MiniInvestmentStat label="Inversion" value={money(summary?.investment ?? 0)} />
-                        <MiniInvestmentStat label="Real" value={money(summary?.real ?? 0)} />
+                    <div className="grid gap-3 rounded-lg border border-[#e4e7ec] bg-[#f9fafb] p-3 sm:grid-cols-4">
+                        <MiniInvestmentStat label="Bruta" value={money(adjustedCloseSummary?.gross ?? 0)} />
+                        <MiniInvestmentStat label="Inversion" value={money(adjustedCloseSummary?.investment ?? 0)} />
+                        <MiniInvestmentStat label="Gastos" value={money(adjustedCloseSummary?.expensesTotal ?? 0)} />
+                        <MiniInvestmentStat label="Real" value={money(adjustedCloseSummary?.real ?? 0)} tone={((adjustedCloseSummary?.real ?? 0) >= 0) ? "green" : "red"} />
                     </div>
 
                     {summary ? (
@@ -1133,14 +1408,163 @@ export default function AccountingPage() {
                                     ) : null}
                                 </div>
                             </div>
-                            {miGanancia != null ? (
+
+                            {expenses.length > 0 ? (
+                                <div className="rounded-lg border border-red-100 bg-red-50 p-3 sm:col-span-2">
+                                    <div className="mb-2 text-[12px] font-black text-red-700">Gastos de mantenimiento</div>
+                                    <div className="space-y-1 text-[12px] font-semibold">
+                                        {expenses.map((expense) => (
+                                            <div key={expense.id} className="flex justify-between gap-3">
+                                                <span className="min-w-0 truncate text-[#667085]">{expense.name}</span>
+                                                <span className="shrink-0 font-black text-[#172033]">{money(expense.amount)}</span>
+                                            </div>
+                                        ))}
+                                        <div className="mt-1.5 flex justify-between gap-3 border-t border-red-100 pt-1.5">
+                                            <span className="font-black text-red-700">Total gastos</span>
+                                            <span className="font-black text-red-700">{money(summary.expensesTotal ?? 0)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : null}
+
+                            {adminUsers.filter((a) => (a.gastosSharePercentage ?? 0) > 0).length > 0 ? (
+                                <div className="rounded-lg border border-[#e4e7ec] bg-white p-3 sm:col-span-2">
+                                    <div className="mb-2 text-[12px] font-black text-[#101936]">Participacion de socios en gastos</div>
+                                    <div className="space-y-1.5 text-[12px] font-semibold">
+                                        {adminUsers
+                                            .filter((a) => (a.gastosSharePercentage ?? 0) > 0)
+                                            .map((admin) => {
+                                                const pct = admin.gastosSharePercentage ?? 0;
+                                                const contribution = Math.round(((summary.expensesTotal ?? 0) * pct / 100) * 100) / 100;
+                                                return (
+                                                    <div key={admin.id} className="flex justify-between gap-3">
+                                                        <span className="min-w-0 truncate text-[#667085]">{admin.name || admin.email || admin.id}</span>
+                                                        <span className="shrink-0 font-black text-[#172033]">{pct}% · {money(contribution)}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                    </div>
+                                </div>
+                            ) : null}
+
+                            {isSuperAdmin && (closeMiGananciaPerAdmin.length > 0 || closeMiGanancia != null) ? (
+                                <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3 sm:col-span-2">
+                                    <div className="mb-2 text-[11px] font-black uppercase tracking-[0.08em] text-emerald-700">Ganancias de socios</div>
+                                    <div className="space-y-2">
+                                        {closeMiGanancia != null ? (
+                                            <div className="flex items-center justify-between gap-3">
+                                                <span className="text-[13px] font-bold text-emerald-800">Mi ganancia</span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[13px] font-black text-emerald-700">{money(closeMiGanancia)}</span>
+                                                    <button
+                                                        type="button"
+                                                        title="Descargar recibo"
+                                                        className="flex h-7 w-7 items-center justify-center rounded-md border border-emerald-200 bg-white text-emerald-600 transition hover:bg-emerald-100"
+                                                        onClick={() => adjustedCloseSummary && closeMiGanancia != null && downloadReceiptAsImage({
+                                                            adminName: profile?.name || profile?.email || "SuperAdmin",
+                                                            weekStartKey: week.startKey,
+                                                            weekEndKey: week.endKey,
+                                                            gross: adjustedCloseSummary.gross,
+                                                            subscriptionInvestment: adjustedCloseSummary.subscriptionInvestment,
+                                                            real: adjustedCloseSummary.real,
+                                                            expensesTotal: adjustedCloseSummary.expensesTotal ?? 0,
+                                                            miGanancia: closeMiGanancia,
+                                                        })}
+                                                    >
+                                                        <Icon name="download" />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ) : null}
+                                        {closeMiGananciaPerAdmin.map(({ admin, gain }) => (
+                                            <div key={admin.id} className="flex items-center justify-between gap-3">
+                                                <span className="min-w-0 truncate text-[12px] font-semibold text-emerald-700">{admin.name || admin.email || admin.id}</span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[12px] font-black text-emerald-700">{money(gain)}</span>
+                                                    <button
+                                                        type="button"
+                                                        title="Descargar recibo"
+                                                        className="flex h-7 w-7 items-center justify-center rounded-md border border-emerald-200 bg-white text-emerald-600 transition hover:bg-emerald-100"
+                                                        onClick={() => adjustedCloseSummary && downloadReceiptAsImage({
+                                                            adminName: admin.name || admin.email || admin.id,
+                                                            weekStartKey: week.startKey,
+                                                            weekEndKey: week.endKey,
+                                                            gross: adjustedCloseSummary.gross,
+                                                            subscriptionInvestment: adjustedCloseSummary.subscriptionInvestment,
+                                                            real: adjustedCloseSummary.real,
+                                                            expensesTotal: adjustedCloseSummary.expensesTotal ?? 0,
+                                                            miGanancia: gain,
+                                                        })}
+                                                    >
+                                                        <Icon name="download" />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : closeMiGanancia != null ? (
                                 <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3 sm:col-span-2">
                                     <div className="text-[11px] font-black uppercase tracking-[0.08em] text-emerald-700">Mi ganancia</div>
-                                    <div className="mt-1 text-[18px] font-black text-emerald-700">{money(miGanancia)}</div>
+                                    <div className="mt-1 text-[18px] font-black text-emerald-700">{money(closeMiGanancia)}</div>
                                 </div>
                             ) : null}
                         </div>
                     ) : null}
+
+                    {summary ? (() => {
+                        const subsRows = summary.rows.filter((row) =>
+                            row.billingMode === "weekly_subscription" && row.subscriptionPaid === true
+                        );
+                        if (!subsRows.length) return null;
+                        return (
+                            <div className="rounded-lg border border-[#e4e7ec] bg-white p-3">
+                                <div className="mb-1 text-[12px] font-black text-[#101936]">Ajuste de suscripciones</div>
+                                <p className="mb-2.5 text-[11px] font-semibold text-[#98a2b3]">Desmarca las que no quieres incluir en este cierre. Puedes revertirlo reabriendo la semana.</p>
+                                <div className="space-y-1.5">
+                                    {subsRows.map((row) => {
+                                        const excluded = excludedUserIds.includes(row.userId);
+                                        return (
+                                            <button
+                                                key={row.userId}
+                                                type="button"
+                                                onClick={() => setExcludedUserIds((prev) =>
+                                                    prev.includes(row.userId)
+                                                        ? prev.filter((id) => id !== row.userId)
+                                                        : [...prev, row.userId]
+                                                )}
+                                                className={[
+                                                    "flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition",
+                                                    excluded
+                                                        ? "border-red-200 bg-red-50 opacity-60"
+                                                        : "border-[#e4e7ec] bg-[#f9fafb] hover:bg-[#f0edff]",
+                                                ].join(" ")}
+                                            >
+                                                <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border text-[10px] font-black ${excluded ? "border-red-300 bg-white text-red-400" : "border-[#7C3AED] bg-[#7C3AED] text-white"}`}>
+                                                    {excluded ? "✕" : "✓"}
+                                                </span>
+                                                <span className={`min-w-0 flex-1 truncate text-[12px] font-bold ${excluded ? "text-[#98a2b3] line-through" : "text-[#172033]"}`}>
+                                                    {row.name}
+                                                </span>
+                                                <span className="shrink-0 text-[11px] font-semibold text-[#667085]">
+                                                    {row.subscriptionSource === "real" ? "Real" : "Manual"}
+                                                </span>
+                                                <span className={`shrink-0 text-[12px] font-black ${excluded ? "text-[#98a2b3]" : row.real >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                                                    {money(row.real)}
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                {excludedUserIds.length > 0 ? (
+                                    <div className="mt-2 flex items-center justify-between rounded-lg bg-[#f0edff] px-3 py-1.5 text-[11px] font-semibold text-[#7C3AED]">
+                                        <span>{excludedUserIds.length} excluida{excludedUserIds.length !== 1 ? "s" : ""} del cierre</span>
+                                        <button type="button" className="font-black hover:underline" onClick={() => setExcludedUserIds([])}>Restablecer</button>
+                                    </div>
+                                ) : null}
+                            </div>
+                        );
+                    })() : null}
 
                     <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] font-semibold text-amber-800">
                         Al cerrar la semana se guarda un snapshot final y se bloquean pagos, grupos y ajustes hasta reabrirla.
@@ -1230,6 +1654,7 @@ function MobileAccountingPage({
     onPatchEvents,
     onError,
     miGanancia,
+    isSuperAdmin,
 }: {
     period: ReturnType<typeof monthRange>;
     periodMode: AccountingPeriodMode;
@@ -1263,6 +1688,7 @@ function MobileAccountingPage({
     onPatchEvents: (patches: { id: string; rateApplied: number; amount: number }[]) => void;
     onError: (msg: string | null) => void;
     miGanancia?: number | null;
+    isSuperAdmin?: boolean;
 }) {
     const canInvestmentView = useCan("accountingInvestmentView");
     const canInvestmentEdit = useCan("accountingInvestmentEdit");
@@ -1357,7 +1783,7 @@ function MobileAccountingPage({
                         />
                     ) : null}
 
-                    {canClose && periodMode === "weekly" ? (
+                    {isSuperAdmin && periodMode === "weekly" ? (
                         <MobileAccountingIconButton
                             icon={isClosed ? "unlock" : "lock"}
                             label={isClosed ? "Reabrir" : "Cerrar"}
@@ -1498,6 +1924,7 @@ function MobileAccountingPage({
                                 investmentGroups={investmentGroups}
                                 useCatalogDefaults={periodOffset === 0}
                                 isClosed={isClosed || !canInvestmentEdit}
+                                isSuperAdmin={isSuperAdmin}
                                 events={events}
                                 onToggleSubscriptionPayment={onToggleSubscriptionPayment}
                                 onPatchEvents={onPatchEvents}
@@ -1942,6 +2369,7 @@ function InvestmentContent({
     investmentGroups,
     useCatalogDefaults,
     isClosed,
+    isSuperAdmin,
     events,
     onToggleSubscriptionPayment,
     onPatchEvents,
@@ -1957,6 +2385,7 @@ function InvestmentContent({
     investmentGroups: InvestmentGroupDoc[];
     useCatalogDefaults: boolean;
     isClosed: boolean;
+    isSuperAdmin?: boolean;
     events: DailyEventDoc[];
     onToggleSubscriptionPayment: (user: UserDoc) => void;
     onPatchEvents: (patches: { id: string; rateApplied: number; amount: number }[]) => void;
@@ -2203,44 +2632,67 @@ function InvestmentContent({
 
     return (
         <div className="space-y-4">
-            <section className="grid gap-4 md:grid-cols-3">
-                <KpiCard label="Inversion total" value={money(totalInvestment)} caption={`${weekStartKey} a ${weekEndKey}`} icon="activity" tone="green" />
-                <KpiCard label="Suscripciones" value={money(subscriptionInvestment)} caption={`${paidSubscriptionRows.length} pagadas`} icon="users" tone="purple" />
-                <KpiCard label="Grupos activos" value={money(assigned)} caption={`${activeGroups.length} activos / ${validGroups.length} guardados`} icon="assign" tone="purple" />
-            </section>
-
             <Card className="overflow-hidden">
                 <CardHeader
                     title="Inversion semanal"
-                    subtitle={isClosed ? "Semana cerrada. Reabre para modificar inversion, grupos o pagos." : "Total calculado por suscripciones pagadas, grupos activos y ajustes manuales."}
-                    action={
+                    subtitle={isClosed
+                        ? (isSuperAdmin ? "Semana cerrada. Reabre para modificar inversion, grupos o pagos." : "Semana cerrada.")
+                        : (isSuperAdmin ? "Suscripciones pagadas, grupos activos y ajustes manuales." : "Inversion por suscripciones pagadas.")}
+                    action={isSuperAdmin && !isClosed ? (
                         <IconButton
                             icon="settings"
                             label="Configurar ajuste"
                             variant="primary"
                             onClick={() => setBudgetOpen(true)}
-                            disabled={isClosed}
                         />
-                    }
+                    ) : undefined}
                 />
 
-                <div className="grid gap-4 border-t border-[#eef1f5] p-4 md:grid-cols-3">
-                    <MiniInvestmentStat label="Suscripciones" value={money(subscriptionInvestment)} />
-                    <MiniInvestmentStat label="Grupos activos" value={money(assigned)} />
-                    <MiniInvestmentStat label="Ajuste manual" value={money(manualAdjustment)} />
+                <div className="border-t border-[#eef1f5] p-4">
+                    {isSuperAdmin ? (
+                        <div className={`grid gap-x-6 gap-y-4 ${manualAdjustment > 0 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-2 sm:grid-cols-3"}`}>
+                            <div className="col-span-2 sm:col-span-1 border-b sm:border-b-0 sm:border-r border-[#eef1f5] pb-3 sm:pb-0 sm:pr-6">
+                                <div className="text-[10px] font-black uppercase tracking-[0.08em] text-[#667085]">Total</div>
+                                <div className="mt-1 text-[20px] font-black text-[#172033]">{money(totalInvestment)}</div>
+                                <div className="mt-0.5 text-[10px] font-semibold text-[#98a2b3]">{weekStartKey} a {weekEndKey}</div>
+                            </div>
+                            <div>
+                                <div className="text-[10px] font-black uppercase tracking-[0.08em] text-[#667085]">Suscripciones</div>
+                                <div className="mt-1 text-[15px] font-black text-[#172033]">{money(subscriptionInvestment)}</div>
+                                <div className="mt-0.5 text-[10px] font-semibold text-[#98a2b3]">{paidSubscriptionRows.length} pagadas</div>
+                            </div>
+                            <div>
+                                <div className="text-[10px] font-black uppercase tracking-[0.08em] text-[#667085]">Grupos activos</div>
+                                <div className="mt-1 text-[15px] font-black text-[#172033]">{money(assigned)}</div>
+                                <div className="mt-0.5 text-[10px] font-semibold text-[#98a2b3]">{activeGroups.length} activos / {validGroups.length} guardados</div>
+                            </div>
+                            {manualAdjustment > 0 ? (
+                                <div>
+                                    <div className="text-[10px] font-black uppercase tracking-[0.08em] text-[#667085]">Ajuste manual</div>
+                                    <div className="mt-1 text-[15px] font-black text-[#172033]">{money(manualAdjustment)}</div>
+                                    <div className="mt-0.5 text-[10px] font-semibold text-[#98a2b3]">Ajuste adicional</div>
+                                </div>
+                            ) : null}
+                        </div>
+                    ) : (
+                        <div>
+                            <div className="text-[10px] font-black uppercase tracking-[0.08em] text-[#667085]">Suscripciones</div>
+                            <div className="mt-1 text-[20px] font-black text-[#172033]">{money(subscriptionInvestment)}</div>
+                            <div className="mt-0.5 text-[10px] font-semibold text-[#98a2b3]">{paidSubscriptionRows.length} pagadas · {weekStartKey} a {weekEndKey}</div>
+                        </div>
+                    )}
                 </div>
-                <div className="border-t border-[#eef1f5] px-4 py-4">
-                    <div className="mb-2 flex items-center justify-between text-[11px] font-semibold text-[#667085]">
-                        <span>Participacion de grupos en la inversion</span>
-                        <span>{assignedPct}%</span>
+                {isSuperAdmin ? (
+                    <div className="border-t border-[#eef1f5] px-4 py-3">
+                        <div className="mb-2 flex items-center justify-between text-[11px] font-semibold text-[#667085]">
+                            <span>Participacion de grupos en la inversion</span>
+                            <span>{assignedPct}%</span>
+                        </div>
+                        <div className="h-1.5 overflow-hidden rounded-full bg-[#eef1f5]">
+                            <div className="h-full rounded-full bg-[#7c3aed]" style={{ width: `${assignedPct}%` }} />
+                        </div>
                     </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-[#eef1f5]">
-                        <div
-                            className="h-full rounded-full bg-[#7c3aed]"
-                            style={{ width: `${assignedPct}%` }}
-                        />
-                    </div>
-                </div>
+                ) : null}
             </Card>
 
             <Card className="overflow-hidden">
@@ -2300,7 +2752,7 @@ function InvestmentContent({
                 </div>
             </Card>
 
-            <Card className="overflow-hidden">
+            {isSuperAdmin ? <Card className="overflow-hidden">
                 <CardHeader
                     title="Tarifas por usuarios"
                     subtitle="Ajusta los valores aplicados a visitas de la semana. La contabilidad solo lee el resultado."
@@ -2342,9 +2794,9 @@ function InvestmentContent({
                         </div>
                     )}
                 </div>
-            </Card>
+            </Card> : null}
 
-            <Card>
+            {isSuperAdmin ? <Card>
                 <CardHeader
                     title="Grupos de inversion"
                     subtitle="Cada grupo se configura y se activa de forma individual."
@@ -2429,9 +2881,9 @@ function InvestmentContent({
                         </div>
                     )}
                 </div>
-            </Card>
+            </Card> : null}
 
-            <Modal
+            {isSuperAdmin ? <Modal
                 open={budgetOpen}
                 onClose={() => setBudgetOpen(false)}
                 title="Ajuste manual"
@@ -2462,9 +2914,9 @@ function InvestmentContent({
                         </Button>
                     </div>
                 </div>
-            </Modal>
+            </Modal> : null}
 
-            {editingRatesUserId ? (
+            {isSuperAdmin && editingRatesUserId ? (
                 <UserEventsModal
                     userId={editingRatesUserId}
                     userName={users.find((user) => user.id === editingRatesUserId)?.name ?? editingRatesUserId}
@@ -2478,7 +2930,7 @@ function InvestmentContent({
                 />
             ) : null}
 
-            <Modal
+            {isSuperAdmin ? <Modal
                 open={groupOpen}
                 onClose={() => {
                     setGroupOpen(false);
@@ -2515,9 +2967,9 @@ function InvestmentContent({
                         </Button>
                     </div>
                 </div>
-            </Modal>
+            </Modal> : null}
 
-            <Modal
+            {isSuperAdmin ? <Modal
                 open={Boolean(deleteDraft)}
                 onClose={() => setDeleteDraft(null)}
                 title="Eliminar grupo"
@@ -2551,7 +3003,7 @@ function InvestmentContent({
                         </Button>
                     </div>
                 </div>
-            </Modal>
+            </Modal> : null}
         </div>
     );
 }
@@ -2624,65 +3076,216 @@ function ClosedWeekPanel({
     summary,
     finalSummary,
     miGanancia,
+    adminUsers,
+    sellers,
+    isSuperAdmin,
+    profile,
+    weekStartKey,
+    weekEndKey,
 }: {
     summary: AccountingSummary;
     finalSummary: NonNullable<WeeklyInvestmentDoc["finalSummary"]>;
     miGanancia?: number | null;
+    adminUsers: UserDoc[];
+    sellers: UserDoc[];
+    isSuperAdmin: boolean;
+    profile: UserDoc | null | undefined;
+    weekStartKey: string;
+    weekEndKey: string;
 }) {
-    const hasDrift = snapshotDiffers(summary, finalSummary);
-    const perVisitRows = (finalSummary.rows ?? []).filter((row) => row.billingMode === "per_visit" && (row.visited > 0 || row.gross > 0));
-    const groupDetails = [
-        finalSummary.groupInvestment > 0 ? { label: "Grupos de inversion", value: finalSummary.groupInvestment } : null,
-        finalSummary.manualAdjustment > 0 ? { label: "Ajuste manual", value: finalSummary.manualAdjustment } : null,
-        finalSummary.subscriptionInvestment > 0 ? { label: "Inversion suscripciones", value: finalSummary.subscriptionInvestment } : null,
-    ].filter(Boolean) as { label: string; value: number }[];
+    const rows = finalSummary.rows ?? summary.rows;
+
+    // For non-superadmin: scope all display values to their sellers only
+    const sellerIds = new Set(sellers.map((u) => u.id));
+    const displayRows = isSuperAdmin ? rows : rows.filter((row) => sellerIds.has(row.userId));
+    const c2 = (n: number) => Math.round(n * 100) / 100;
+    const dGross = isSuperAdmin ? finalSummary.gross : c2(displayRows.reduce((s, r) => s + r.gross, 0));
+    const dCost = isSuperAdmin ? finalSummary.investment : c2(displayRows.reduce((s, r) => s + r.cost, 0));
+    const dSubCost = isSuperAdmin ? finalSummary.subscriptionInvestment : dCost;
+    const dExpenses = finalSummary.expensesTotal ?? 0;
+    const dReal = isSuperAdmin ? finalSummary.real : c2(dGross - dCost - dExpenses);
+    const dRoi: number | null = isSuperAdmin
+        ? finalSummary.roi
+        : ((dCost + dExpenses) > 0 ? (dReal / (dCost + dExpenses)) * 100 : null);
+    const dVisited = isSuperAdmin ? finalSummary.visited : displayRows.reduce((s, r) => s + r.visited, 0);
+    const dRejected = isSuperAdmin ? finalSummary.rejected : displayRows.reduce((s, r) => s + r.rejected, 0);
+    const dAssigned = isSuperAdmin ? (finalSummary.assigned ?? 0) : displayRows.reduce((s, r) => s + r.assigned, 0);
+    const dSubsPaid = isSuperAdmin ? finalSummary.subscriptionsPaid : displayRows.filter((r) => r.subscriptionPaid === true).length;
+    const dRowsCount = isSuperAdmin ? finalSummary.rowsCount : displayRows.length;
+    const dSubRows = isSuperAdmin
+        ? (finalSummary.subscriptionRows ?? [])
+        : (finalSummary.subscriptionRows ?? []).filter((item) => sellerIds.has(item.userId));
+
+    const hasDrift = isSuperAdmin
+        ? snapshotDiffers(summary, finalSummary)
+        : (differs(summary.gross, dGross) || differs(summary.real, dReal) || summary.visited !== dVisited);
+
+    const perVisitRows = isSuperAdmin
+        ? (finalSummary.rows ?? []).filter((row) => row.billingMode === "per_visit" && (row.visited > 0 || row.gross > 0))
+        : [];
+    const groupDetails = (isSuperAdmin
+        ? [
+            finalSummary.groupInvestment > 0 ? { label: "Grupos de inversion", value: finalSummary.groupInvestment } : null,
+            finalSummary.manualAdjustment > 0 ? { label: "Ajuste manual", value: finalSummary.manualAdjustment } : null,
+            dSubCost > 0 ? { label: "Inversion suscripciones", value: dSubCost } : null,
+        ]
+        : [
+            dSubCost > 0 ? { label: "Inversion suscripciones", value: dSubCost } : null,
+        ]
+    ).filter(Boolean) as { label: string; value: number }[];
+
+    const snapMyGain: number | null = (() => {
+        if (miGanancia == null) return null;
+        if (!profile) return miGanancia;
+        if (isSuperAdmin) {
+            const givenAway = rows.reduce((acc, row) => {
+                const user = sellers.find((u) => u.id === row.userId);
+                const totalPct = (user?.sharedWith ?? []).reduce((s, sw) => s + sw.percentage, 0);
+                return acc + (row.real * totalPct / 100);
+            }, 0);
+            return finalSummary.real - givenAway;
+        }
+        return rows.reduce((acc, row) => {
+            const user = sellers.find((u) => u.id === row.userId);
+            const share = user?.sharedWith?.find((s) => s.adminId === profile.id);
+            if (!share) return acc;
+            return acc + (row.real * share.percentage / 100);
+        }, 0);
+    })();
+
+    const adminGains = adminUsers
+        .map((admin) => ({
+            admin,
+            gain: rows.reduce((acc, row) => {
+                const user = sellers.find((u) => u.id === row.userId);
+                const share = user?.sharedWith?.find((s) => s.adminId === admin.id);
+                if (!share) return acc;
+                return acc + (row.real * share.percentage / 100);
+            }, 0),
+        }))
+        .filter(({ admin }) => sellers.some((u) => u.sharedWith?.some((s) => s.adminId === admin.id)));
+
+    const receiptBase = {
+        weekStartKey,
+        weekEndKey,
+        gross: dGross,
+        subscriptionInvestment: dSubCost,
+        real: dReal,
+        expensesTotal: dExpenses,
+    };
+
+    const headerAction = (
+        <div className="flex items-center gap-2">
+            <Badge tone={hasDrift ? "yellow" : "green"}>
+                {hasDrift ? "Diferencias" : "Snapshot vigente"}
+            </Badge>
+            {!isSuperAdmin && snapMyGain != null ? (
+                <button
+                    type="button"
+                    title="Descargar recibo"
+                    className="flex h-8 w-8 items-center justify-center rounded-md border border-emerald-200 bg-emerald-50 text-emerald-600 transition hover:bg-emerald-100"
+                    onClick={() => downloadReceiptAsImage({
+                        ...receiptBase,
+                        adminName: profile?.name || profile?.email || "Admin",
+                        miGanancia: snapMyGain,
+                    })}
+                >
+                    <Icon name="download" />
+                </button>
+            ) : null}
+        </div>
+    );
 
     return (
         <Card className="overflow-hidden border-emerald-200">
             <CardHeader
                 title="Semana cerrada"
                 subtitle={`Cierre guardado el ${formatDateTime(finalSummary.closedAt)}`}
-                action={
-                    <Badge tone={hasDrift ? "yellow" : "green"}>
-                        {hasDrift ? "Diferencias" : "Snapshot vigente"}
-                    </Badge>
-                }
+                action={headerAction}
             />
 
-            <div className={`grid gap-4 border-t border-[#eef1f5] p-4 ${miGanancia != null ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
-                <MiniInvestmentStat label="Bruta final" value={money(finalSummary.gross)} />
-                <MiniInvestmentStat label="Inversion final" value={money(finalSummary.investment)} />
-                <MiniInvestmentStat label="Real final" value={money(finalSummary.real)} tone={finalSummary.real >= 0 ? "green" : "red"} />
-                {miGanancia != null ? (
-                    <MiniInvestmentStat label="Mi ganancia" value={money(miGanancia)} tone={miGanancia >= 0 ? "green" : "red"} />
+            <div className={`grid gap-4 border-t border-[#eef1f5] p-4 ${snapMyGain != null ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
+                <MiniInvestmentStat label="Bruta final" value={money(dGross)} />
+                <MiniInvestmentStat label="Inversion final" value={money(dCost)} />
+                <MiniInvestmentStat label="Real final" value={money(dReal)} tone={dReal >= 0 ? "green" : "red"} />
+                {snapMyGain != null ? (
+                    <MiniInvestmentStat label="Mi ganancia" value={money(snapMyGain)} tone={snapMyGain >= 0 ? "green" : "red"} />
                 ) : null}
-                <MiniInvestmentStat label="ROI final" value={formatPercent(finalSummary.roi)} />
+                <MiniInvestmentStat label="ROI final" value={formatPercent(dRoi)} />
             </div>
+
+            {isSuperAdmin && adminGains.length > 0 ? (
+                <div className="border-t border-[#eef1f5] p-4">
+                    <div className="mb-2 text-[11px] font-black uppercase tracking-[0.08em] text-[#667085]">Ganancias de socios</div>
+                    <div className="space-y-2">
+                        {snapMyGain != null ? (
+                            <div className="flex items-center justify-between gap-3">
+                                <span className="text-[12px] font-bold text-[#172033]">Mi ganancia (superadmin)</span>
+                                <div className="flex items-center gap-2">
+                                    <span className={`text-[12px] font-black ${snapMyGain >= 0 ? "text-emerald-600" : "text-red-500"}`}>{money(snapMyGain)}</span>
+                                    <button
+                                        type="button"
+                                        title="Descargar recibo"
+                                        className="flex h-7 w-7 items-center justify-center rounded-md border border-[#e4e7ec] bg-[#f9fafb] text-[#667085] transition hover:bg-[#f0edff] hover:text-[#7C3AED]"
+                                        onClick={() => downloadReceiptAsImage({
+                                            ...receiptBase,
+                                            adminName: profile?.name || profile?.email || "SuperAdmin",
+                                            miGanancia: snapMyGain,
+                                        })}
+                                    >
+                                        <Icon name="download" />
+                                    </button>
+                                </div>
+                            </div>
+                        ) : null}
+                        {adminGains.map(({ admin, gain }) => (
+                            <div key={admin.id} className="flex items-center justify-between gap-3">
+                                <span className="min-w-0 truncate text-[12px] font-semibold text-[#667085]">{admin.name || admin.email || admin.id}</span>
+                                <div className="flex items-center gap-2">
+                                    <span className={`shrink-0 text-[12px] font-black ${gain >= 0 ? "text-emerald-600" : "text-red-500"}`}>{money(gain)}</span>
+                                    <button
+                                        type="button"
+                                        title="Descargar recibo"
+                                        className="flex h-7 w-7 items-center justify-center rounded-md border border-[#e4e7ec] bg-[#f9fafb] text-[#667085] transition hover:bg-[#f0edff] hover:text-[#7C3AED]"
+                                        onClick={() => downloadReceiptAsImage({
+                                            ...receiptBase,
+                                            adminName: admin.name || admin.email || admin.id,
+                                            miGanancia: gain,
+                                        })}
+                                    >
+                                        <Icon name="download" />
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ) : null}
 
             <div className="grid gap-3 border-t border-[#eef1f5] bg-[#f9fafb] p-4 text-[12px] font-semibold text-[#667085] sm:grid-cols-5">
                 <div>
                     <span className="block text-[10px] uppercase tracking-[0.08em] text-[#98a2b3]">Asignados</span>
-                    <span className="mt-1 block text-[#172033]">{finalSummary.assigned ?? 0}</span>
+                    <span className="mt-1 block text-[#172033]">{dAssigned}</span>
                 </div>
                 <div>
                     <span className="block text-[10px] uppercase tracking-[0.08em] text-[#98a2b3]">Visitados</span>
-                    <span className="mt-1 block text-[#172033]">{finalSummary.visited}</span>
+                    <span className="mt-1 block text-[#172033]">{dVisited}</span>
                 </div>
                 <div>
                     <span className="block text-[10px] uppercase tracking-[0.08em] text-[#98a2b3]">Rechazados</span>
-                    <span className="mt-1 block text-[#172033]">{finalSummary.rejected}</span>
+                    <span className="mt-1 block text-[#172033]">{dRejected}</span>
                 </div>
                 <div>
                     <span className="block text-[10px] uppercase tracking-[0.08em] text-[#98a2b3]">Suscripciones</span>
-                    <span className="mt-1 block text-[#172033]">{finalSummary.subscriptionsPaid} pagadas</span>
+                    <span className="mt-1 block text-[#172033]">{dSubsPaid} pagadas</span>
                 </div>
                 <div>
                     <span className="block text-[10px] uppercase tracking-[0.08em] text-[#98a2b3]">Usuarios</span>
-                    <span className="mt-1 block text-[#172033]">{finalSummary.rowsCount} incluidos</span>
+                    <span className="mt-1 block text-[#172033]">{dRowsCount} incluidos</span>
                 </div>
             </div>
 
-            {groupDetails.length || perVisitRows.length ? (
+            {groupDetails.length || (isSuperAdmin && perVisitRows.length) ? (
                 <div className="grid gap-3 border-t border-[#eef1f5] p-4 md:grid-cols-2">
                     {groupDetails.length ? (
                         <div className="rounded-lg border border-[#e4e7ec] bg-white p-3">
@@ -2697,7 +3300,7 @@ function ClosedWeekPanel({
                             </div>
                         </div>
                     ) : null}
-                    {perVisitRows.length ? (
+                    {isSuperAdmin && perVisitRows.length ? (
                         <div className="rounded-lg border border-[#e4e7ec] bg-white p-3">
                             <div className="mb-2 text-[12px] font-black text-[#101936]">Tarifas por cliente visitado</div>
                             <div className="space-y-1.5">
@@ -2713,11 +3316,11 @@ function ClosedWeekPanel({
                 </div>
             ) : null}
 
-            {finalSummary.subscriptionRows?.length ? (
+            {dSubRows.length ? (
                 <div className="border-t border-[#eef1f5] p-4">
                     <div className="mb-3 text-[12px] font-black text-[#101936]">Suscripciones guardadas en el cierre</div>
                     <div className="grid gap-2 md:grid-cols-2">
-                        {finalSummary.subscriptionRows.map((item) => (
+                        {dSubRows.map((item) => (
                             <div key={item.subscriptionId} className="rounded-lg border border-[#e4e7ec] bg-white px-3 py-2.5">
                                 <div className="flex items-start justify-between gap-3">
                                     <div className="min-w-0">
@@ -3251,6 +3854,9 @@ function DashboardContent({
     endDate,
     users,
     miGanancia,
+    isSuperAdmin,
+    exportSummary,
+    snapMiGanancia,
 }: {
     summary: AccountingSummary;
     events: DailyEventDoc[];
@@ -3259,6 +3865,9 @@ function DashboardContent({
     endDate: Date;
     users: UserDoc[];
     miGanancia?: number | null;
+    isSuperAdmin?: boolean;
+    exportSummary?: AccountingSummary | null;
+    snapMiGanancia?: number | null;
 }) {
     const [rankingMetric, setRankingMetric] = useState<AccountingMetric>("real");
     const [chartMetric, setChartMetric] = useState<AccountingMetric>("real");
@@ -3341,8 +3950,10 @@ function DashboardContent({
                             <Metric label="Ganancia bruta" value={money(summary.gross)} delta="+ semana" tone="green" />
                             <Metric
                                 label="Inversion"
-                                value={money(summary.investment)}
-                                delta={`${money(summary.subscriptionInvestment)} sub · ${money(summary.groupInvestment)} grp · ${money(summary.manualAdjustment)} aj`}
+                                value={money(isSuperAdmin ? summary.investment : summary.subscriptionInvestment)}
+                                delta={isSuperAdmin
+                                    ? `${money(summary.subscriptionInvestment)} sub · ${money(summary.groupInvestment)} grp · ${money(summary.manualAdjustment)} aj`
+                                    : `${money(summary.subscriptionInvestment)} sub`}
                                 tone="neutral"
                             />
                             <Metric
@@ -3444,7 +4055,7 @@ function DashboardContent({
                         <IconButton
                             icon="download"
                             label="Exportar Excel"
-                            onClick={() => exportAccountingSheet(summary)}
+                            onClick={() => exportAccountingSheet(exportSummary ?? summary, snapMiGanancia ?? miGanancia, isSuperAdmin)}
                         />
                     }
                 />

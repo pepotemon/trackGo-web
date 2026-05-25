@@ -21,6 +21,7 @@ import type {
     DailyEventDoc,
     InvestmentGroupDoc,
     UserDoc,
+    WeeklyExpenseDoc,
     WeeklyInvestmentDoc,
     WeeklyInvestmentGroup,
     WeeklyInvestmentAllocations,
@@ -163,6 +164,10 @@ function normalizeFinalSummary(value: unknown): AccountingFinalSummary | undefin
         subscriptionRows: Array.isArray(data.subscriptionRows)
             ? (data.subscriptionRows as AccountingFinalSummary["subscriptionRows"])
             : undefined,
+        expensesTotal: data.expensesTotal != null ? clamp2(safeNumber(data.expensesTotal, 0)) : undefined,
+        expenses: Array.isArray(data.expenses)
+            ? (data.expenses as AccountingFinalSummary["expenses"])
+            : undefined,
     };
 }
 
@@ -196,6 +201,22 @@ export async function listAccountingUsers(): Promise<UserDoc[]> {
         where("role", "==", "user"),
         orderBy("createdAt", "desc"),
         limit(500)
+    );
+
+    const snap = await getDocs(q);
+
+    return snap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<UserDoc, "id">),
+    }));
+}
+
+export async function listAdminUsers(): Promise<UserDoc[]> {
+    const q = query(
+        collection(db, "users"),
+        where("role", "==", "admin"),
+        orderBy("createdAt", "desc"),
+        limit(200)
     );
 
     const snap = await getDocs(q);
@@ -421,6 +442,7 @@ export async function closeWeeklyInvestment(input: {
     weekStartKey: string;
     weekEndKey: string;
     summary: AccountingSummary;
+    expenses?: WeeklyExpenseDoc[];
     closedBy?: string | null;
 }) {
     const now = Date.now();
@@ -449,6 +471,8 @@ export async function closeWeeklyInvestment(input: {
         closedBy: input.closedBy ?? null,
         rows: input.summary.rows,
         subscriptionRows: input.summary.subscriptionRows,
+        expensesTotal: clamp2((input.expenses ?? []).reduce((acc, e) => acc + safeNumber(e.amount, 0), 0)),
+        expenses: input.expenses ?? [],
     });
 
     await setDoc(

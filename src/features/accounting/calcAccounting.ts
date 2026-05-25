@@ -6,6 +6,7 @@ import type {
     AccountingSubscriptionDoc,
     DailyEventDoc,
     UserDoc,
+    WeeklyExpenseDoc,
     WeeklyInvestmentDoc,
 } from "@/types/accounting";
 
@@ -191,6 +192,7 @@ export function buildAccountingSummary(input: {
     assignments: AccountingAssignmentDoc[];
     subscriptions?: AccountingSubscriptionDoc[];
     investment: WeeklyInvestmentDoc | null;
+    expenses?: WeeklyExpenseDoc[];
 }): AccountingSummary {
     const usersById = new Map(input.users.map((u) => [u.id, u]));
     const investmentByUser = buildGroupAllocations(input.investment);
@@ -368,8 +370,9 @@ export function buildAccountingSummary(input: {
     const groupInvestment = getGroupInvestmentTotal(input.investment);
     const manualAdjustment = clamp2(input.investment?.amount ?? 0);
     const investment = clamp2(subscriptionInvestment + groupInvestment + manualAdjustment);
-    const real = clamp2(gross - investment);
-    const roi = investment > 0 ? (real / investment) * 100 : null;
+    const expensesTotal = clamp2((input.expenses ?? []).reduce((acc, e) => acc + safeNumber(e.amount, 0), 0));
+    const real = clamp2(gross - investment - expensesTotal);
+    const roi = (investment + expensesTotal) > 0 ? (real / (investment + expensesTotal)) * 100 : null;
 
     return {
         startKey: input.startKey,
@@ -389,5 +392,7 @@ export function buildAccountingSummary(input: {
         roi,
         rows,
         subscriptionRows: subscriptionRows.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0)),
+        expenses: input.expenses ?? [],
+        expensesTotal,
     };
 }

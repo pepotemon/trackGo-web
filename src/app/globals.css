@@ -30,13 +30,26 @@
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
-  user-select: none;
 }
 
-input,
-textarea,
-[contenteditable] {
-  user-select: text;
+@media (max-width: 1279px) {
+  * {
+    user-select: none;
+  }
+
+  input,
+  textarea,
+  [contenteditable] {
+    user-select: text;
+  }
+}
+
+@media (min-width: 1280px) {
+  button,
+  [role="button"],
+  select {
+    user-select: none;
+  }
 }
 
 html,

@@ -806,6 +806,29 @@ service cloud.firestore {
     }
 
     // -------------------------
+    // WEEKLY EXPENSES
+    // Gastos de mantenimiento semanales (servidores, plataforma, etc.)
+    // -------------------------
+    match /weeklyExpenses/{expenseId} {
+      allow read: if hasAdminPermission("gastosView");
+
+      allow create: if hasAdminPermission("gastosEdit")
+        && request.resource.data.weekStartKey is string
+        && request.resource.data.weekStartKey.size() == 10
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.amount is number
+        && request.resource.data.amount > 0
+        && request.resource.data.createdAt is int
+        && validOptionalString(request.resource.data, "description")
+        && validOptionalString(request.resource.data, "createdBy");
+
+      allow delete: if hasAdminPermission("gastosEdit");
+
+      allow update: if false;
+    }
+
+    // -------------------------
     // DEFAULT DENY
     // -------------------------
     match /{document=**} {

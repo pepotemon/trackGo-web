@@ -28,6 +28,7 @@ export type UserDoc = {
         }
     >;
     sharedWith?: { adminId: string; adminName?: string; percentage: number; assignedAt?: number }[];
+    gastosSharePercentage?: number | null;
 };
 
 export type DailyEventType = "visited" | "rejected" | "pending";
@@ -161,6 +162,16 @@ export type AccountingSubscriptionSummaryRow = {
     createdAt?: number | null;
 };
 
+export type WeeklyExpenseDoc = {
+    id: string;
+    weekStartKey: string;
+    name: string;
+    description?: string | null;
+    amount: number;
+    createdAt: number;
+    createdBy?: string | null;
+};
+
 export type AccountingSummary = {
     startKey: string;
     endKey: string;
@@ -183,6 +194,9 @@ export type AccountingSummary = {
 
     rows: AccountingUserRow[];
     subscriptionRows: AccountingSubscriptionSummaryRow[];
+
+    expenses?: WeeklyExpenseDoc[];
+    expensesTotal?: number;
 };
 
 export type AccountingFinalSummary = {
@@ -204,4 +218,6 @@ export type AccountingFinalSummary = {
     closedBy?: string | null;
     rows?: AccountingFinalUserRow[];
     subscriptionRows?: AccountingSubscriptionSummaryRow[];
+    expenses?: WeeklyExpenseDoc[];
+    expensesTotal?: number;
 };

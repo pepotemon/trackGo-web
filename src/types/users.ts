@@ -70,6 +70,10 @@ export type AdminPermissions = {
     chatView: boolean;
     /** Can access the administrative chat grouped by city/DDD. */
     cityChatView: boolean;
+    /** Can view the Gastos screen. */
+    gastosView: boolean;
+    /** Can add and delete expenses. */
+    gastosEdit: boolean;
 };
 
 /** Returns a safe default with all permissions disabled. */
@@ -100,6 +104,8 @@ export function defaultAdminPermissions(): AdminPermissions {
         usersEdit: false,
         chatView: false,
         cityChatView: false,
+        gastosView: false,
+        gastosEdit: false,
     };
 }
 
@@ -155,6 +161,8 @@ export function fullAdminPermissions(): AdminPermissions {
         usersEdit: true,
         chatView: true,
         cityChatView: true,
+        gastosView: true,
+        gastosEdit: true,
     };
 }
 
@@ -216,6 +224,9 @@ export type UserDoc = {
     userPermissions?: UserPermissions;
     /** Brazilian phone area codes (DDDs) this vendor covers, e.g. ["91","85"]. */
     phoneCodes?: string[];
+
+    /** For admin (socio) users: their share % of weekly expenses (0-100). */
+    gastosSharePercentage?: number | null;
 
     createdAt?: number;
     updatedAt?: number;

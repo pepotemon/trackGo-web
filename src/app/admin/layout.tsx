@@ -23,6 +23,7 @@ type NavIconName =
     | "dashboard"
     | "inbox"
     | "more"
+    | "receipt"
     | "search"
     | "settings"
     | "users"
@@ -34,6 +35,7 @@ const NAV_MAIN: { href: string; label: string; icon: NavIconName }[] = [
     { href: "/admin/leads", label: "Prospectos", icon: "inbox" },
     { href: "/admin/activity", label: "Actividad", icon: "activity" },
     { href: "/admin/accounting", label: "Contabilidad", icon: "wallet" },
+    { href: "/admin/gastos", label: "Gastos", icon: "receipt" },
 ];
 
 const NAV_SETTINGS: { href: string; label: string; icon: NavIconName }[] = [
@@ -45,6 +47,7 @@ const MOBILE_NAV: { href: string; label: string; icon: NavIconName }[] = [
     { href: "/admin/leads", label: "Prospectos", icon: "inbox" },
     { href: "/admin/activity", label: "Actividad", icon: "activity" },
     { href: "/admin/accounting", label: "Conta", icon: "wallet" },
+    { href: "/admin/gastos", label: "Gastos", icon: "receipt" },
     { href: "/admin/settings", label: "Config.", icon: "settings" },
 ];
 
@@ -74,6 +77,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         if (item.href === "/admin/leads") return permissions.prospectos;
         if (item.href === "/admin/activity") return permissions.actividad;
         if (item.href === "/admin/accounting") return permissions.accountingView;
+        if (item.href === "/admin/gastos") return permissions.gastosView;
         return true;
     });
     const visibleSettingsNav = NAV_SETTINGS.filter((item) => {
@@ -85,6 +89,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         if (item.href === "/admin/leads") return permissions.prospectos;
         if (item.href === "/admin/activity") return permissions.actividad;
         if (item.href === "/admin/accounting") return permissions.accountingView;
+        if (item.href === "/admin/gastos") return permissions.gastosView;
         if (item.href === "/admin/settings") return true;
         return true;
     });
@@ -419,6 +424,7 @@ function isAdminRouteAllowed(pathname: string, permissions: AdminPermissions) {
     if (pathname.startsWith("/admin/settings/commercial-directory")) return permissions.commercialDirectoryView || permissions.commercialDirectoryEdit;
     if (pathname.startsWith("/admin/settings/debts")) return true;
     if (pathname.startsWith("/admin/accounting")) return permissions.accountingView;
+    if (pathname.startsWith("/admin/gastos")) return permissions.gastosView;
     if (pathname.startsWith("/admin/activity")) return permissions.actividad;
     if (pathname.startsWith("/admin/leads/assignments")) return permissions.assignmentsView;
     if (pathname.startsWith("/admin/leads/city-chat")) return permissions.cityChatView;
@@ -520,6 +526,13 @@ function NavIcon({ name, size = "sm" }: { name: NavIconName; size?: "sm" | "md" 
                     <circle {...common} cx="9" cy="7" r="4" />
                     <path {...common} d="M22 20v-1.5a4 4 0 0 0-3-3.8" />
                     <path {...common} d="M16 3.3a4 4 0 0 1 0 7.4" />
+                </>
+            ) : null}
+
+            {name === "receipt" ? (
+                <>
+                    <rect {...common} x="4" y="2" width="16" height="20" rx="2" />
+                    <path {...common} d="M8 7h8M8 11h8M8 15h5" />
                 </>
             ) : null}
 
