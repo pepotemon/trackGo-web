@@ -61,6 +61,7 @@ type OverviewSubscription = {
     status: string;
     source?: string | null;
     sharedPool?: boolean | null;
+    activeParticipantsCount?: number | null;
     startDate?: number | null;
     endDate?: number | null;
 };
@@ -881,8 +882,36 @@ function CampaignSpendPanel({
     onRefresh: () => void;
     loading: boolean;
 }) {
-    const rows = subscriptions
+    const rows = Array.from(subscriptions
         .filter((item) => item.campaignId || item.cycleSpend || item.todaySpend)
+        .reduce((map, item) => {
+            const sharedKey = item.sharedPool && item.cityId && item.campaignId
+                ? `shared:${item.cityId}:${item.campaignId}`
+                : item.id;
+            const existing = map.get(sharedKey);
+            if (!existing) {
+                map.set(sharedKey, {
+                    ...item,
+                    participantCount: item.sharedPool ? Math.max(1, Number(item.activeParticipantsCount || 0)) : 1,
+                    participantNames: [item.userName].filter(Boolean),
+                });
+                return map;
+            }
+
+            existing.participantCount = Math.max(
+                existing.participantCount,
+                Number(item.activeParticipantsCount || 0),
+                existing.participantNames.length + 1,
+            );
+            existing.participantNames.push(item.userName);
+            existing.todaySpend = Math.max(Number(existing.todaySpend || 0), Number(item.todaySpend || 0));
+            existing.cycleSpend = Math.max(Number(existing.cycleSpend || 0), Number(item.cycleSpend || 0));
+            existing.totalSpend = Math.max(Number(existing.totalSpend || 0), Number(item.totalSpend || 0));
+            existing.dailyBudget = Math.max(Number(existing.dailyBudget || 0), Number(item.dailyBudget || 0));
+            existing.targetSpend = Math.max(Number(existing.targetSpend || 0), Number(item.targetSpend || item.adsBudget || 0));
+            return map;
+        }, new Map<string, OverviewSubscription & { participantCount: number; participantNames: string[] }>())
+        .values())
         .sort((a, b) => Number(b.todaySpend || 0) - Number(a.todaySpend || 0));
 
     const totals = rows.reduce(
@@ -924,7 +953,11 @@ function CampaignSpendPanel({
                                 <div className="flex items-start justify-between gap-3">
                                     <div className="min-w-0">
                                         <p className="truncate text-[13px] font-black text-[#101936]">{item.city || item.cityId}</p>
-                                        <p className="mt-0.5 truncate text-[11px] font-bold text-[#66739a]">{item.userName}</p>
+                                        <p className="mt-0.5 truncate text-[11px] font-bold text-[#66739a]">
+                                            {item.sharedPool && item.participantCount > 1
+                                                ? `${item.participantCount} vendedores compartiendo bolsa`
+                                                : item.userName}
+                                        </p>
                                         <p className="mt-0.5 truncate text-[10px] font-semibold text-[#98a2b3]">{item.campaignName || item.campaignId || "Sin campana"}</p>
                                     </div>
                                     <span className={[

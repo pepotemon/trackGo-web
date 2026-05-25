@@ -114,15 +114,27 @@ export async function getSubscriptionsOverview(scope?: { adminId?: string; isSup
     ]);
 
     const todayKey = dayKeyFromMs(Date.now());
+    const citiesById = new Map(cities.map((city) => [city.id, city]));
     const subscriptions = await Promise.all(subscriptionsDocs.map(async (doc) => {
         const data = doc.data();
         const user = users.get(String(data.userId || ""));
         const status = data.status || "unknown";
         const campaignId = data.campaignId || null;
+        const city = citiesById.get(String(data.cityId || ""));
+        const isSharedPool = data.sharedPool === true || Number(city?.activeParticipantsCount || 0) > 1;
+        const spendBaseline = isSharedPool
+            ? Number(city?.sharedPoolSpendBaseline ?? data.spendBaseline ?? data.metaSpendBaseline ?? 0)
+            : Number(data.spendBaseline ?? data.metaSpendBaseline ?? 0);
+        const dailyBudget = isSharedPool
+            ? Number(city?.sharedPoolDailyBudget || data.dailyBudget || data.metaDailyBudget || 0)
+            : Number(data.dailyBudget || data.metaDailyBudget || 0);
+        const targetSpend = isSharedPool
+            ? Number(city?.sharedPoolTargetSpend || data.targetSpend || data.adsBudget || 0)
+            : Number(data.targetSpend || data.adsBudget || 0);
         const spendSnapshot = await getSubscriptionSpendSnapshot({
             status,
             campaignId,
-            spendBaseline: Number(data.spendBaseline ?? data.metaSpendBaseline ?? 0),
+            spendBaseline,
             storedCycleSpend: Number(data.cycleSpend ?? 0),
             todayKey,
         });
@@ -140,11 +152,12 @@ export async function getSubscriptionsOverview(scope?: { adminId?: string; isSup
             cycleDays: Number(data.cycleDays || 5),
             status,
             source: data.source || null,
-            sharedPool: data.sharedPool === true,
+            sharedPool: isSharedPool,
+            activeParticipantsCount: Number(city?.activeParticipantsCount || 0),
             campaignId,
             campaignName: data.campaignName || null,
-            dailyBudget: Number(data.dailyBudget || data.metaDailyBudget || 0),
-            targetSpend: Number(data.targetSpend || data.adsBudget || 0),
+            dailyBudget,
+            targetSpend,
             spendPauseThreshold: Number(data.spendPauseThreshold || 0),
             cycleSpend: spendSnapshot.cycleSpend,
             todaySpend: spendSnapshot.todaySpend,
