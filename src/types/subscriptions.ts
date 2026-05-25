@@ -19,6 +19,12 @@ export type SubscriptionCity = {
     country?: string | null;
     status: SubscriptionCityStatus;
     ownerUserId?: string | null;
+    ownerUserIds?: string[];
+    activeSubscriptionIds?: string[];
+    activeParticipantsCount?: number;
+    sharedPoolDailyBudget?: number;
+    sharedPoolTargetSpend?: number;
+    sharedPoolSpendBaseline?: number;
     campaignId?: string | null;
     activeCampaignId?: string | null;
     baseCampaignId?: string | null;

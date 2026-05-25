@@ -124,7 +124,7 @@ export default function UserSubscriptionsPage() {
     const operatingBase = Math.round(selectedAmount * settings.adsShare * 100) / 100;
     const estimatedClients = estimateClientRange(operatingBase);
     const selectedCity = useMemo(() => cities.find((city) => city.id === selectedCityId) || null, [cities, selectedCityId]);
-    const availableCities = useMemo(() => cities.filter((city) => city.status === "available"), [cities]);
+    const availableCities = useMemo(() => cities.filter((city) => city.status === "available" || city.status === "occupied"), [cities]);
 
     const activeSubscription = useMemo(
         () => subscriptions.find((item) => item.status === "active") || null,
@@ -182,7 +182,7 @@ export default function UserSubscriptionsPage() {
             setSettings(data.settings || { adsShare: 0.5, cycleDays: 5 });
             setSelectedCityId((current) => {
                 if (current && nextCities.some((city) => city.id === current)) return current;
-                return nextCities.find((city) => city.status === "available")?.id || "";
+                return nextCities.find((city) => city.status === "available" || city.status === "occupied")?.id || "";
             });
         } catch (error) {
             setMessage(error instanceof Error ? error.message : "No se pudieron cargar las suscripciones.");
@@ -483,7 +483,8 @@ export default function UserSubscriptionsPage() {
                                 <EmptyLine text="No hay ciudades habilitadas para tu cobertura geografica." />
                             ) : null}
                             {cities.map((city) => {
-                                const isAvailable = city.status === "available";
+                                const isAvailable = city.status === "available" || city.status === "occupied";
+                                const isShared = city.status === "occupied";
                                 const selected = selectedCityId === city.id;
                                 return (
                                     <button
@@ -495,13 +496,17 @@ export default function UserSubscriptionsPage() {
                                             "flex items-center gap-3 rounded-2xl border px-4 py-3 text-left transition",
                                             selected
                                                 ? "border-[#8b5cf6] bg-[#f4f0ff] shadow-[0_10px_24px_rgba(91,33,255,0.14)]"
+                                                : isShared
+                                                ? "border-violet-100 bg-violet-50/60 active:scale-[0.99] hover:border-violet-200"
                                                 : isAvailable
                                                 ? "border-emerald-100 bg-emerald-50/60 active:scale-[0.99] hover:border-emerald-200"
                                                 : "border-[#f3f4f6] bg-[#fafafa] opacity-55",
                                         ].join(" ")}
                                     >
                                         <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                                            isAvailable
+                                            isShared
+                                                ? "bg-violet-500 shadow-[0_0_0_3px_rgba(124,58,237,0.16)]"
+                                                : isAvailable
                                                 ? "bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.18)]"
                                                 : city.status === "reserved"
                                                 ? "bg-amber-400"
@@ -515,7 +520,7 @@ export default function UserSubscriptionsPage() {
                                         </span>
                                         {isAvailable ? (
                                             <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-black text-emerald-700">
-                                                Libre
+                                                {isShared ? "Compartida" : "Libre"}
                                             </span>
                                         ) : (
                                             <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-bold text-slate-500">

@@ -208,6 +208,50 @@ export async function resumeCityCampaign({
     return setCityCampaignDeliveryStatus({ campaignId, adsetIds, status: "ACTIVE" });
 }
 
+export async function updateCityCampaignDailyBudget({
+    campaignId,
+    adsetIds,
+    dailyBudget,
+    status = "ACTIVE",
+}: {
+    campaignId: string;
+    adsetIds?: string[];
+    dailyBudget: number;
+    status?: "ACTIVE" | "PAUSED";
+}) {
+    const campaign = await validateCityCampaign(campaignId);
+    const ids = adsetIds?.filter(Boolean).length ? adsetIds.filter(Boolean) : campaign.adsetIds;
+    const dailyBudgetMinorUnits = Math.max(0, Math.round(Number(dailyBudget || 0) * 100));
+
+    if (dailyBudgetMinorUnits <= 0) {
+        throw new ResponseError("invalid_ads_budget", "El presupuesto diario para Meta debe ser mayor a cero.");
+    }
+
+    if (ids.length !== 1) {
+        throw new ResponseError(
+            "meta_multiple_adsets",
+            `La campana ${campaign.name} tiene ${ids.length} conjuntos de anuncios. La bolsa compartida necesita exactamente 1.`,
+            409,
+        );
+    }
+
+    await graphPost(`${ids[0]}`, {
+        daily_budget: dailyBudgetMinorUnits,
+        status,
+    });
+    await graphPost(`${campaign.id}`, { status });
+
+    return {
+        campaignId: campaign.id,
+        campaignName: campaign.name,
+        adsetIds: ids,
+        adIds: campaign.adIds,
+        dailyBudget: dailyBudgetMinorUnits / 100,
+        dailyBudgetMinorUnits,
+        status,
+    };
+}
+
 async function setCityCampaignDeliveryStatus({
     campaignId,
     adsetIds,

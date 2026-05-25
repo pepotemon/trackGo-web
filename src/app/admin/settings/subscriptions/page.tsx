@@ -60,6 +60,7 @@ type OverviewSubscription = {
     campaignId?: string | null;
     status: string;
     source?: string | null;
+    sharedPool?: boolean | null;
     startDate?: number | null;
     endDate?: number | null;
 };
@@ -179,7 +180,7 @@ export default function SubscriptionsAdminPage() {
     }, [loadOverview]);
 
     const activeSubscriptions = useMemo(
-        () => overview?.subscriptions.filter((item) => item.status === "active" || item.status === "expiring") ?? [],
+        () => overview?.subscriptions.filter((item) => item.status === "active" || item.status === "expiring" || item.status === "paused") ?? [],
         [overview],
     );
 
@@ -213,6 +214,12 @@ export default function SubscriptionsAdminPage() {
         () => detailCityId
             ? (overview?.subscriptions.find((s) => s.cityId === detailCityId && ["active", "provisioning", "payment_approved_meta_failed"].includes(s.status)) ?? null)
             : null,
+        [detailCityId, overview],
+    );
+    const detailSubscriptions = useMemo(
+        () => detailCityId
+            ? (overview?.subscriptions.filter((s) => s.cityId === detailCityId && ["active", "paused", "provisioning", "payment_approved_meta_failed"].includes(s.status)) ?? [])
+            : [],
         [detailCityId, overview],
     );
     const detailCheckout = useMemo(
@@ -476,6 +483,29 @@ export default function SubscriptionsAdminPage() {
         }
     }
 
+    async function updateParticipantDelivery(subscriptionId: string, status: "active" | "paused") {
+        const label = status === "paused" ? "pausar este vendedor" : "reanudar este vendedor";
+        if (!window.confirm(`Esto va a ${label} dentro de la bolsa compartida. Continuar?`)) return;
+        try {
+            setActionBusyId(`participant:${subscriptionId}:${status}`);
+            setActionMessage("");
+            const token = await getAuthToken();
+            const response = await fetch("/api/subscriptions/participant-delivery", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ subscriptionId, status }),
+            });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.message || `No se pudo ${status === "paused" ? "pausar" : "reanudar"} el vendedor.`);
+            setActionMessage(status === "paused" ? "Vendedor pausado y presupuesto recalculado." : "Vendedor reanudado y presupuesto recalculado.");
+            await loadOverview();
+        } catch (err) {
+            setActionMessage(err instanceof Error ? humanizeError(err.message) : `No se pudo ${status === "paused" ? "pausar" : "reanudar"} el vendedor.`);
+        } finally {
+            setActionBusyId("");
+        }
+    }
+
     if (!canView) {
         return <EmptyState title="Sin permiso" body="No tienes permiso para ver suscripciones." />;
     }
@@ -598,6 +628,7 @@ export default function SubscriptionsAdminPage() {
             <CityDetailModal
                 city={detailCity}
                 subscription={detailSubscription}
+                subscriptions={detailSubscriptions}
                 checkout={detailCheckout}
                 canManage={canManage}
                 canDelete={isSuperAdmin}
@@ -607,6 +638,7 @@ export default function SubscriptionsAdminPage() {
                 onRetry={() => { if (detailCheckout) void retryCheckout(detailCheckout.id); }}
                 onHideCheckout={() => { if (detailCheckout) void hideCheckoutNotice(detailCheckout.id); }}
                 onCampaignDelivery={(status) => { if (detailCityId) void updateCampaignDelivery(detailCityId, status); }}
+                onParticipantDelivery={(subscriptionId, status) => { void updateParticipantDelivery(subscriptionId, status); }}
                 onClose={() => setDetailCityId(null)}
             />
 
@@ -1142,7 +1174,7 @@ function ManualActivationModal({
     onSave: () => void;
     onClose: () => void;
 }) {
-    const availableCities = cities.filter((city) => city.status === "available");
+    const availableCities = cities.filter((city) => city.status === "available" || city.status === "occupied");
     const selectedCity = cities.find((city) => city.id === form.cityId) || null;
     const selectedPlan = SUBSCRIPTION_PLANS.find((plan) => plan.id === form.plan);
     const amount = form.plan === "custom" ? form.amount : (selectedPlan?.amount ?? form.amount);
@@ -1161,7 +1193,7 @@ function ManualActivationModal({
         <Modal open={open} title="Activacion manual" subtitle="Crea un ciclo activo sin Pix para una ciudad asignada." size="md" onClose={onClose}>
             <div className="space-y-4">
                 <Notice tone="violet">
-                    Esta accion ocupa la ciudad, crea una suscripcion activa para el vendedor y bloquea nuevas compras mientras el ciclo este vigente.
+                    Esta accion crea una suscripcion activa para el vendedor. Si la ciudad ya esta ocupada, se suma a la bolsa compartida y se recalcula el presupuesto.
                     Con Meta sincronizado, TrackGo usa la fecha final real del conjunto de anuncios.
                 </Notice>
 
@@ -1190,7 +1222,7 @@ function ManualActivationModal({
                             <option value="">Seleccionar ciudad libre</option>
                             {availableCities.map((city) => (
                                 <option key={city.id} value={city.id}>
-                                    {[city.name, city.state, city.country].filter(Boolean).join(" - ")}
+                                    {[city.name, city.state, city.country].filter(Boolean).join(" - ")}{city.status === "occupied" ? " - bolsa compartida" : ""}
                                 </option>
                             ))}
                         </select>
@@ -1251,7 +1283,7 @@ function ManualActivationModal({
                     </span>
                 </label>
 
-                {availableCities.length === 0 ? <Notice tone="red">No hay ciudades libres para activar manualmente.</Notice> : null}
+                {availableCities.length === 0 ? <Notice tone="red">No hay ciudades disponibles para activar manualmente.</Notice> : null}
                 {error ? <Notice tone="red">{error}</Notice> : null}
                 <div className="flex justify-end gap-2">
                     <Button type="button" variant="ghost" onClick={onClose}>Cerrar</Button>
@@ -1336,6 +1368,7 @@ function CityConfigModal({
 function CityDetailModal({
     city,
     subscription,
+    subscriptions,
     checkout,
     canManage,
     canDelete,
@@ -1345,10 +1378,12 @@ function CityDetailModal({
     onRetry,
     onHideCheckout,
     onCampaignDelivery,
+    onParticipantDelivery,
     onClose,
 }: {
     city: SubscriptionCity | null;
     subscription: OverviewSubscription | null;
+    subscriptions: OverviewSubscription[];
     checkout: OverviewCheckout | null;
     canManage: boolean;
     canDelete: boolean;
@@ -1358,6 +1393,7 @@ function CityDetailModal({
     onRetry: () => void;
     onHideCheckout: () => void;
     onCampaignDelivery: (status: "active" | "paused") => void;
+    onParticipantDelivery: (subscriptionId: string, status: "active" | "paused") => void;
     onClose: () => void;
 }) {
     if (!city) return null;
@@ -1378,17 +1414,55 @@ function CityDetailModal({
                     {subscription ? <StatusPill status={subscription.status} /> : null}
                 </div>
 
-                {/* Vendedor y compra */}
-                {subscription ? (
-                    <DetailSection title="Compra activa">
-                        <DetailRow label="Vendedor" value={subscription.userName} />
-                        {subscription.userEmail ? <DetailRow label="Email" value={subscription.userEmail} /> : null}
-                        <DetailRow label="Plan" value={subscription.plan || "sin plan"} />
-                        {subscription.source === "manual_admin" ? <DetailRow label="Origen" value="Manual admin" /> : null}
-                        <DetailRow label="Monto" value={currency.format(subscription.amount)} />
-                        <DetailRow label="Inversion" value={currency.format(subscription.adsBudget)} />
-                        {subscription.startDate ? <DetailRow label="Inicio" value={dateTime.format(new Date(subscription.startDate))} /> : null}
-                        <DetailRow label="Fin del ciclo" value={formatDate(subscription.endDate)} />
+                {/* Vendedores y compras */}
+                {subscriptions.length > 0 ? (
+                    <DetailSection title={subscriptions.length > 1 ? "Compradores de la bolsa" : "Compra activa"}>
+                        <div className="grid gap-2">
+                            {subscriptions.map((item) => {
+                                const paused = item.status === "paused";
+                                const canToggleParticipant = canManage && (item.status === "active" || item.status === "paused");
+                                return (
+                                    <div key={item.id} className="rounded-2xl border border-[#e8e7fb] bg-white px-3 py-3">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <p className="truncate text-[13px] font-black text-[#101936]">{item.userName}</p>
+                                                    <StatusPill status={item.status} />
+                                                    {item.source === "manual_admin" ? <StatusPill status="manual_admin" /> : null}
+                                                </div>
+                                                {item.userEmail ? <p className="mt-0.5 truncate text-[11px] font-semibold text-[#66739a]">{item.userEmail}</p> : null}
+                                            </div>
+                                            {canToggleParticipant ? (
+                                                <button
+                                                    type="button"
+                                                    disabled={busy}
+                                                    onClick={() => onParticipantDelivery(item.id, paused ? "active" : "paused")}
+                                                    className={[
+                                                        "shrink-0 rounded-xl border px-3 py-1.5 text-[11px] font-black transition disabled:opacity-50",
+                                                        paused
+                                                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                                            : "border-amber-200 bg-amber-50 text-amber-700",
+                                                    ].join(" ")}
+                                                >
+                                                    {paused ? "Reanudar" : "Pausar"}
+                                                </button>
+                                            ) : null}
+                                        </div>
+                                        <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] font-bold text-[#66739a]">
+                                            <MiniMetric label="Plan" value={item.plan || "sin plan"} />
+                                            <MiniMetric label="Monto" value={currency.format(item.amount)} />
+                                            <MiniMetric label="Inversion" value={currency.format(item.adsBudget)} />
+                                            <MiniMetric label="Fin" value={formatDate(item.endDate)} />
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        {city.activeParticipantsCount !== undefined && subscriptions.length > 1 ? (
+                            <div className="mt-2 rounded-2xl border border-violet-100 bg-[#f8f7ff] px-3 py-2 text-[11px] font-bold text-[#6d28d9]">
+                                {city.activeParticipantsCount} activo{city.activeParticipantsCount === 1 ? "" : "s"} · presupuesto diario {currency.format(city.sharedPoolDailyBudget || 0)}
+                            </div>
+                        ) : null}
                     </DetailSection>
                 ) : (
                     <Notice tone="violet">Sin suscripcion activa registrada para esta ciudad.</Notice>
@@ -1478,11 +1552,22 @@ function DetailRow({ label, value }: { label: string; value: ReactNode }) {
     );
 }
 
+function MiniMetric({ label, value }: { label: string; value: ReactNode }) {
+    return (
+        <div className="rounded-xl bg-[#fbfaff] px-2.5 py-2">
+            <span className="block text-[10px] font-black uppercase tracking-[0.08em] text-[#8a8fa3]">{label}</span>
+            <span className="mt-0.5 block truncate text-[12px] font-black text-[#101936]">{value}</span>
+        </div>
+    );
+}
+
 function StatusPill({ status }: { status: string }) {
     const normalized = status || "unknown";
     const classes =
         normalized === "available" || normalized === "active" || normalized === "approved"
             ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
+            : normalized === "paused" || normalized === "campaign_paused"
+              ? "bg-amber-50 text-amber-700 ring-amber-100"
             : normalized === "campaign_active"
               ? "bg-blue-50 text-blue-700 ring-blue-100"
             : normalized === "occupied" || normalized === "reserved" || normalized === "processing" || normalized === "waiting_payment"
@@ -1564,6 +1649,8 @@ function labelStatus(status: string) {
         waiting_payment: "Esperando",
         processing: "Procesando",
         active: "Activa",
+        paused: "Pausada",
+        manual_admin: "Manual",
         campaign_active: "Campana activa",
         campaign_paused: "Campana pausada",
         approved: "Aprobado",

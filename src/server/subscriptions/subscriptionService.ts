@@ -4,12 +4,14 @@ import { ResponseError } from "@/server/auth";
 import { adminDb } from "@/server/firebaseAdmin";
 import { cancelMercadoPagoPayment, createPixPayment, getMercadoPagoPayment } from "@/server/subscriptions/mercadoPago";
 import { calculateAdsBudget, calculateAdsBudgetAllocation, calculateCycleEnd, getPlanAmount } from "@/server/subscriptions/plans";
-import { configureAndActivateCityCampaign, getMetaCampaignCycleSpend, getMetaCampaignSpendForRange, pauseCityCampaign, resumeCityCampaign } from "@/server/subscriptions/metaAds";
+import { configureAndActivateCityCampaign, getMetaCampaignCycleSpend, getMetaCampaignSpendForRange, getMetaCampaignTotalSpend, pauseCityCampaign, resumeCityCampaign, updateCityCampaignDailyBudget } from "@/server/subscriptions/metaAds";
 import { sendPushToUser } from "@/server/push";
 import type { PixCheckoutResponse, SubscriptionPlanId } from "@/types/subscriptions";
 
 const RESERVATION_TTL_MS = 30 * 60 * 1000;
-const USER_BLOCKING_SUBSCRIPTION_STATUSES = ["active", "provisioning", "payment_approved_meta_failed", "expiring"];
+const USER_BLOCKING_SUBSCRIPTION_STATUSES = ["active", "provisioning", "payment_approved_meta_failed", "expiring", "paused"];
+const CITY_POOL_ACTIVE_SUBSCRIPTION_STATUSES = ["active", "provisioning"];
+const CITY_POOL_PRESENT_SUBSCRIPTION_STATUSES = ["active", "provisioning", "paused"];
 
 function nowMs() {
     return Date.now();
@@ -31,6 +33,12 @@ export async function listSubscriptionCities() {
             country: typeof data.country === "string" ? data.country : null,
             status: isExpiredReservation ? "available" : data.status || "available",
             ownerUserId: data.ownerUserId || null,
+            ownerUserIds: Array.isArray(data.ownerUserIds) ? data.ownerUserIds : [],
+            activeSubscriptionIds: Array.isArray(data.activeSubscriptionIds) ? data.activeSubscriptionIds : [],
+            activeParticipantsCount: Number(data.activeParticipantsCount || 0),
+            sharedPoolDailyBudget: Number(data.sharedPoolDailyBudget || 0),
+            sharedPoolTargetSpend: Number(data.sharedPoolTargetSpend || 0),
+            sharedPoolSpendBaseline: Number(data.sharedPoolSpendBaseline || 0),
             campaignId: data.campaignId || null,
             baseCampaignId: data.baseCampaignId || null,
             campaignDeliveryStatus: data.campaignDeliveryStatus || null,
@@ -132,6 +140,7 @@ export async function getSubscriptionsOverview(scope?: { adminId?: string; isSup
             cycleDays: Number(data.cycleDays || 5),
             status,
             source: data.source || null,
+            sharedPool: data.sharedPool === true,
             campaignId,
             campaignName: data.campaignName || null,
             dailyBudget: Number(data.dailyBudget || data.metaDailyBudget || 0),
@@ -301,6 +310,141 @@ function timestampToMs(value: unknown) {
         return (value as { toMillis: () => number }).toMillis();
     }
     return null;
+}
+
+function subscriptionDailyBudget(data: FirebaseFirestore.DocumentData) {
+    const stored = Number(data.dailyBudget || data.metaDailyBudget || 0);
+    if (Number.isFinite(stored) && stored > 0) return stored;
+    return calculateAdsBudgetAllocation(Number(data.adsBudget || 0), Number(data.cycleDays || 5) || 5).dailyBudget;
+}
+
+async function listActiveCityPoolSubscriptions(cityId: string) {
+    const snap = await adminDb
+        .collection("subscriptions")
+        .where("cityId", "==", cityId)
+        .where("status", "in", CITY_POOL_PRESENT_SUBSCRIPTION_STATUSES)
+        .limit(50)
+        .get();
+
+    return snap.docs;
+}
+
+async function syncSharedCityCampaignBudget(cityId: string) {
+    const cityRef = adminDb.collection("cities").doc(cityId);
+    const [citySnap, subscriptionDocs] = await Promise.all([
+        cityRef.get(),
+        listActiveCityPoolSubscriptions(cityId),
+    ]);
+
+    if (!citySnap.exists) throw new ResponseError("city_not_found", "La ciudad no existe.", 404);
+
+    const city = citySnap.data() || {};
+    const campaignId = String(city.activeCampaignId || city.campaignId || city.baseCampaignId || "");
+    if (!campaignId) throw new ResponseError("campaign_required", "La ciudad no tiene campana Meta configurada.", 409);
+
+    const poolSubscriptions = subscriptionDocs.map((doc) => ({ id: doc.id, data: doc.data() }));
+    const activeSubscriptions = poolSubscriptions.filter((item) => CITY_POOL_ACTIVE_SUBSCRIPTION_STATUSES.includes(String(item.data.status)));
+    const ownerUserIds = Array.from(new Set(poolSubscriptions.map((item) => String(item.data.userId || "")).filter(Boolean)));
+    const subscriptionIds = poolSubscriptions.map((item) => item.id);
+
+    if (poolSubscriptions.length === 0) {
+        const adsetIds = Array.isArray(city.adsetIds) ? city.adsetIds.map((id) => String(id)).filter(Boolean) : [];
+        await pauseCityCampaign({ campaignId, adsetIds }).catch(() => undefined);
+        await cityRef.set(
+            {
+                status: "available",
+                ownerUserId: null,
+                ownerUserIds: [],
+                activeSubscriptionId: FieldValue.delete(),
+                activeSubscriptionIds: [],
+                activeParticipantsCount: 0,
+                activeCampaignId: FieldValue.delete(),
+                campaignDeliveryStatus: FieldValue.delete(),
+                campaignDeliveryUpdatedAt: FieldValue.delete(),
+                sharedPoolDailyBudget: FieldValue.delete(),
+                sharedPoolTargetSpend: FieldValue.delete(),
+                updatedAt: nowMs(),
+            },
+            { merge: true },
+        );
+        return null;
+    }
+
+    if (activeSubscriptions.length === 0) {
+        const adsetIds = Array.isArray(city.adsetIds) ? city.adsetIds.map((id) => String(id)).filter(Boolean) : [];
+        const result = await pauseCityCampaign({ campaignId, adsetIds });
+        await cityRef.set(
+            {
+                status: "occupied",
+                ownerUserId: ownerUserIds[0] || null,
+                ownerUserIds,
+                activeSubscriptionId: subscriptionIds[0],
+                activeSubscriptionIds: subscriptionIds,
+                activeParticipantsCount: 0,
+                pausedParticipantsCount: poolSubscriptions.length,
+                activeCampaignId: result.campaignId,
+                campaignDeliveryStatus: "paused",
+                campaignDeliveryUpdatedAt: nowMs(),
+                adsetIds: result.adsetIds,
+                sharedPoolDailyBudget: 0,
+                sharedPoolTargetSpend: 0,
+                updatedAt: nowMs(),
+            },
+            { merge: true },
+        );
+        return {
+            campaignId: result.campaignId,
+            adsetIds: result.adsetIds,
+            adIds: Array.isArray(city.adIds) ? city.adIds : [],
+            dailyBudget: 0,
+            targetSpend: 0,
+            participantCount: 0,
+            subscriptionIds,
+            status: "PAUSED",
+        };
+    }
+
+    const dailyBudget = Math.round(activeSubscriptions.reduce((sum, item) => sum + subscriptionDailyBudget(item.data), 0) * 100) / 100;
+    const targetSpend = Math.round(activeSubscriptions.reduce((sum, item) => sum + Number(item.data.targetSpend || item.data.adsBudget || 0), 0) * 100) / 100;
+    const existingAdsetIds = Array.isArray(city.adsetIds) ? city.adsetIds.map((id) => String(id)).filter(Boolean) : [];
+    const baselineCandidates = poolSubscriptions
+        .map((item) => Number(item.data.spendBaseline || item.data.metaSpendBaseline || 0))
+        .filter((value) => Number.isFinite(value) && value >= 0);
+    const existingBaseline = Number(city.sharedPoolSpendBaseline);
+    const spendBaseline = Number.isFinite(existingBaseline) && existingBaseline > 0
+        ? existingBaseline
+        : (baselineCandidates.length ? Math.min(...baselineCandidates) : 0);
+
+    const campaign = await updateCityCampaignDailyBudget({
+        campaignId,
+        adsetIds: existingAdsetIds,
+        dailyBudget,
+        status: "ACTIVE",
+    });
+
+    await cityRef.set(
+        {
+            status: "occupied",
+            ownerUserId: ownerUserIds[0] || null,
+            ownerUserIds,
+            activeSubscriptionId: subscriptionIds[0],
+            activeSubscriptionIds: subscriptionIds,
+            activeParticipantsCount: activeSubscriptions.length,
+            pausedParticipantsCount: poolSubscriptions.length - activeSubscriptions.length,
+            activeCampaignId: campaign.campaignId,
+            campaignDeliveryStatus: "active",
+            campaignDeliveryUpdatedAt: nowMs(),
+            adsetIds: campaign.adsetIds,
+            adIds: campaign.adIds,
+            sharedPoolDailyBudget: campaign.dailyBudget,
+            sharedPoolTargetSpend: targetSpend,
+            sharedPoolSpendBaseline: spendBaseline,
+            updatedAt: nowMs(),
+        },
+        { merge: true },
+    );
+
+    return { ...campaign, targetSpend, participantCount: activeSubscriptions.length, subscriptionIds };
 }
 
 export async function saveSubscriptionCity(input: {
@@ -505,7 +649,10 @@ export async function createPixSubscriptionCheckout(input: {
         const reservationExpired = cityStatus === "reserved" && currentReservationExpiresAt < nowMs();
 
         if (cityStatus === "occupied") {
-            throw new ResponseError("city_occupied", "Esta ciudad ya esta ocupada por otro usuario.", 409);
+            const ownerIds = Array.isArray(city.ownerUserIds) ? city.ownerUserIds.map((id) => String(id)) : [];
+            if (city.ownerUserId === input.userId || ownerIds.includes(input.userId)) {
+                throw new ResponseError("city_already_active_for_you", "Ya tienes una suscripcion activa para esta ciudad.", 409);
+            }
         }
 
         if (cityStatus === "reserved" && !reservationExpired && !reservedByThisCheckout) {
@@ -553,20 +700,23 @@ export async function createPixSubscriptionCheckout(input: {
             paymentId: "",
             status: "pending",
             activationStatus: "waiting_payment",
+            sharedPool: cityStatus === "occupied",
             createdAt: nowMs(),
             updatedAt: nowMs(),
         });
 
-        tx.set(
-            cityRef,
-            {
-                status: "reserved",
-                reservedByCheckoutId: checkoutId,
-                reservationExpiresAt,
-                updatedAt: nowMs(),
-            },
-            { merge: true },
-        );
+        if (cityStatus !== "occupied") {
+            tx.set(
+                cityRef,
+                {
+                    status: "reserved",
+                    reservedByCheckoutId: checkoutId,
+                    reservationExpiresAt,
+                    updatedAt: nowMs(),
+                },
+                { merge: true },
+            );
+        }
 
         return {
             name: cityName,
@@ -696,7 +846,10 @@ export async function activateManualSubscription(input: {
         const reservationExpiresAt = Number(city.reservationExpiresAt || 0);
         const reservationExpired = cityStatus === "reserved" && reservationExpiresAt < nowMs();
         if (cityStatus === "occupied") {
-            throw new ResponseError("city_occupied", "Esta ciudad ya esta ocupada por otro vendedor.", 409);
+            const ownerIds = Array.isArray(city.ownerUserIds) ? city.ownerUserIds.map((id) => String(id)) : [];
+            if (city.ownerUserId === userId || ownerIds.includes(userId)) {
+                throw new ResponseError("city_already_active_for_user", "Este vendedor ya participa en esta ciudad.", 409);
+            }
         }
         if (cityStatus === "reserved" && !reservationExpired) {
             throw new ResponseError("city_reserved", "Esta ciudad esta reservada por un pago en curso.", 409);
@@ -705,13 +858,15 @@ export async function activateManualSubscription(input: {
         if (!campaignId) {
             throw new ResponseError("campaign_required", "La ciudad no tiene campana Meta para activar.", 409);
         }
-        campaignActivation = await configureAndActivateCityCampaign({
-            campaignId,
-            cityName: String(city.name || cityId),
-            userId,
-            adsBudget,
-            cycleDays,
-        });
+        if (cityStatus !== "occupied") {
+            campaignActivation = await configureAndActivateCityCampaign({
+                campaignId,
+                cityName: String(city.name || cityId),
+                userId,
+                adsBudget,
+                cycleDays,
+            });
+        }
     }
 
     const budgetAllocation = calculateAdsBudgetAllocation(adsBudget, cycleDays);
@@ -774,7 +929,10 @@ export async function activateManualSubscription(input: {
         const reservationExpiresAt = Number(city.reservationExpiresAt || 0);
         const reservationExpired = cityStatus === "reserved" && reservationExpiresAt < nowMs();
         if (cityStatus === "occupied") {
-            throw new ResponseError("city_occupied", "Esta ciudad ya esta ocupada por otro vendedor.", 409);
+            const ownerIds = Array.isArray(city.ownerUserIds) ? city.ownerUserIds.map((id) => String(id)) : [];
+            if (city.ownerUserId === userId || ownerIds.includes(userId)) {
+                throw new ResponseError("city_already_active_for_user", "Este vendedor ya participa en esta ciudad.", 409);
+            }
         }
         if (cityStatus === "reserved" && !reservationExpired) {
             throw new ResponseError("city_reserved", "Esta ciudad esta reservada por un pago en curso.", 409);
@@ -813,8 +971,9 @@ export async function activateManualSubscription(input: {
             status: "active",
             source: "manual_admin",
             manual: true,
+            sharedPool: cityStatus === "occupied",
             metaManagedManually: Boolean(campaignActivation),
-            campaignId: campaignActivation?.campaignId || null,
+            campaignId: campaignActivation?.campaignId || String(city.activeCampaignId || city.campaignId || city.baseCampaignId || "") || null,
             adsetIds: campaignActivation?.adsetIds || [],
             adIds: campaignActivation?.adIds || [],
             metaDailyBudget: campaignActivation?.dailyBudget ?? null,
@@ -831,12 +990,15 @@ export async function activateManualSubscription(input: {
             cityRef,
             {
                 status: "occupied",
-                ownerUserId: userId,
+                ownerUserId: city.ownerUserId || userId,
+                ownerUserIds: Array.from(new Set([...(Array.isArray(city.ownerUserIds) ? city.ownerUserIds.map((id) => String(id)) : []), String(city.ownerUserId || ""), userId].filter(Boolean))),
                 activeSubscriptionId: subscriptionId,
-                activeCampaignId: campaignActivation?.campaignId || FieldValue.delete(),
-                campaignDeliveryStatus: campaignActivation ? "active" : FieldValue.delete(),
-                adsetIds: campaignActivation?.adsetIds || FieldValue.delete(),
-                adIds: campaignActivation?.adIds || FieldValue.delete(),
+                activeSubscriptionIds: Array.from(new Set([...(Array.isArray(city.activeSubscriptionIds) ? city.activeSubscriptionIds.map((id) => String(id)) : []), String(city.activeSubscriptionId || ""), subscriptionId].filter(Boolean))),
+                activeParticipantsCount: FieldValue.increment(1),
+                activeCampaignId: campaignActivation?.campaignId || String(city.activeCampaignId || city.campaignId || city.baseCampaignId || "") || FieldValue.delete(),
+                campaignDeliveryStatus: campaignActivation ? "active" : city.campaignDeliveryStatus || FieldValue.delete(),
+                adsetIds: campaignActivation?.adsetIds || (Array.isArray(city.adsetIds) ? city.adsetIds : FieldValue.delete()),
+                adIds: campaignActivation?.adIds || (Array.isArray(city.adIds) ? city.adIds : FieldValue.delete()),
                 reservedByCheckoutId: FieldValue.delete(),
                 reservationExpiresAt: FieldValue.delete(),
                 updatedAt: now,
@@ -863,6 +1025,22 @@ export async function activateManualSubscription(input: {
             campaignId: campaignActivation?.campaignId || null,
         };
     });
+
+    if (input.syncMeta !== false) {
+        if (result.campaignId) {
+            const spendBaseline = await getMetaCampaignTotalSpend(result.campaignId).catch(() => 0);
+            await subscriptionRef.set(
+                {
+                    spendBaseline,
+                    metaSpendBaseline: spendBaseline,
+                    lastSpendCheckedAt: nowMs(),
+                    updatedAt: nowMs(),
+                },
+                { merge: true },
+            );
+        }
+        await syncSharedCityCampaignBudget(cityId);
+    }
 
     await sendPushToUser(userId, {
         title: "Suscripcion activa",
@@ -1008,17 +1186,20 @@ export async function processMercadoPagoPayment(paymentId: string) {
             throw new ResponseError("city_not_found", "La ciudad asociada al checkout no existe.", 404);
         }
 
-        if (city.status === "occupied" && city.ownerUserId !== freshCheckout.userId) {
-            tx.set(
-                checkoutRef,
-                {
-                    status: "approved",
-                    activationStatus: "city_occupied",
-                    updatedAt: nowMs(),
-                },
-                { merge: true },
-            );
-            throw new ResponseError("city_occupied_after_payment", "La ciudad ya fue tomada por otro usuario.", 409);
+        if (city.status === "occupied") {
+            const ownerIds = Array.isArray(city.ownerUserIds) ? city.ownerUserIds.map((id) => String(id)) : [];
+            if (city.ownerUserId === freshCheckout.userId || ownerIds.includes(freshCheckout.userId)) {
+                tx.set(
+                    checkoutRef,
+                    {
+                        status: "approved",
+                        activationStatus: "city_occupied",
+                        updatedAt: nowMs(),
+                    },
+                    { merge: true },
+                );
+                throw new ResponseError("city_already_active_after_payment", "Este usuario ya tiene activa esta ciudad.", 409);
+            }
         }
 
         tx.set(
@@ -1036,7 +1217,8 @@ export async function processMercadoPagoPayment(paymentId: string) {
             cityRef,
             {
                 status: "occupied",
-                ownerUserId: freshCheckout.userId,
+                ownerUserId: city.ownerUserId || freshCheckout.userId,
+                ownerUserIds: Array.from(new Set([...(Array.isArray(city.ownerUserIds) ? city.ownerUserIds.map((id) => String(id)) : []), String(city.ownerUserId || ""), String(freshCheckout.userId || "")].filter(Boolean))),
                 reservedByCheckoutId: FieldValue.delete(),
                 reservationExpiresAt: FieldValue.delete(),
                 updatedAt: nowMs(),
@@ -1074,46 +1256,35 @@ export async function processMercadoPagoPayment(paymentId: string) {
     }
 
     try {
-        const campaign = await configureAndActivateCityCampaign({
-            campaignId: String(transactionResult.city.campaignId || transactionResult.city.baseCampaignId),
-            cityName: String(checkout.cityName),
-            userId: String(checkout.userId),
-            adsBudget: Number(checkout.adsBudget || 0),
-            cycleDays: Number(checkout.cycleDays || 5) || 5,
-        });
+        const campaignId = String(transactionResult.city.activeCampaignId || transactionResult.city.campaignId || transactionResult.city.baseCampaignId);
+        const spendBaseline = await getMetaCampaignTotalSpend(campaignId).catch(() => 0);
+        await subscriptionRef.set(
+            {
+                campaignId,
+                spendBaseline,
+                metaSpendBaseline: spendBaseline,
+                lastSpendCheckedAt: nowMs(),
+                updatedAt: nowMs(),
+            },
+            { merge: true },
+        );
+        const campaign = await syncSharedCityCampaignBudget(String(checkout.cityId));
+        if (!campaign) throw new ResponseError("campaign_sync_failed", "No se pudo sincronizar la bolsa compartida.", 409);
 
         await Promise.all([
-            cityRef.set(
-                {
-                    activeCampaignId: campaign.campaignId,
-                    campaignDeliveryStatus: "active",
-                    activeSubscriptionId: checkoutId,
-                    adsetIds: campaign.adsetIds,
-                    adIds: campaign.adIds,
-                    updatedAt: nowMs(),
-                },
-                { merge: true },
-            ),
             subscriptionRef.set(
                 {
                     status: "active",
                     campaignId: campaign.campaignId,
                     adsetIds: campaign.adsetIds,
                     adIds: campaign.adIds,
-                    dailyBudget: campaign.dailyBudget,
-                    operatingBudget: campaign.operatingBudget,
-                    reservedBudget: campaign.reservedBudget,
-                    totalBudget: campaign.totalBudget,
-                    lifetimeBudget: campaign.lifetimeBudget,
-                    budgetMode: campaign.budgetMode,
-                    reservePercent: campaign.reservePercent,
-                    targetSpend: campaign.targetSpend,
-                    spendPauseThreshold: campaign.spendPauseThreshold,
-                    spendBaseline: campaign.spendBaseline,
+                    sharedPool: campaign.participantCount > 1,
+                    sharedPoolDailyBudget: campaign.dailyBudget,
+                    sharedPoolTargetSpend: campaign.targetSpend,
+                    budgetMode: "daily",
+                    spendBaseline,
                     cycleSpend: 0,
                     lastSpendCheckedAt: nowMs(),
-                    startDate: Timestamp.fromDate(campaign.startDate),
-                    endDate: Timestamp.fromDate(campaign.endDate),
                     updatedAt: nowMs(),
                 },
                 { merge: true },
@@ -1122,16 +1293,10 @@ export async function processMercadoPagoPayment(paymentId: string) {
                 {
                     activationStatus: "active",
                     campaignId: campaign.campaignId,
-                    dailyBudget: campaign.dailyBudget,
-                    operatingBudget: campaign.operatingBudget,
-                    reservedBudget: campaign.reservedBudget,
-                    totalBudget: campaign.totalBudget,
-                    lifetimeBudget: campaign.lifetimeBudget,
-                    budgetMode: campaign.budgetMode,
-                    reservePercent: campaign.reservePercent,
-                    targetSpend: campaign.targetSpend,
-                    spendPauseThreshold: campaign.spendPauseThreshold,
-                    spendBaseline: campaign.spendBaseline,
+                    sharedPool: campaign.participantCount > 1,
+                    sharedPoolDailyBudget: campaign.dailyBudget,
+                    sharedPoolTargetSpend: campaign.targetSpend,
+                    spendBaseline,
                     cycleSpend: 0,
                     lastSpendCheckedAt: nowMs(),
                     updatedAt: nowMs(),
@@ -1278,7 +1443,7 @@ export async function retryMetaActivation(checkoutId: string) {
     if (!citySnap.exists) throw new ResponseError("city_not_found", "No existe la ciudad del checkout.", 404);
 
     const city = citySnap.data() || {};
-    const campaignId = String(city.campaignId || city.baseCampaignId || "");
+    const campaignId = String(city.activeCampaignId || city.campaignId || city.baseCampaignId || "");
     if (!campaignId) {
         throw new ResponseError("campaign_required", "La ciudad no tiene campaignId configurado.");
     }
@@ -1293,60 +1458,52 @@ export async function retryMetaActivation(checkoutId: string) {
     );
 
     try {
-        const campaign = await configureAndActivateCityCampaign({
-            campaignId,
-            cityName: String(checkout.cityName || city.name || checkout.cityId),
-            userId: String(checkout.userId),
-            adsBudget: Number(checkout.adsBudget || 0),
-            cycleDays: Number(checkout.cycleDays || 5) || 5,
-        });
+        const spendBaseline = await getMetaCampaignTotalSpend(campaignId).catch(() => 0);
+        const cycleDays = Number(checkout.cycleDays || 5) || 5;
+        const allocation = calculateAdsBudgetAllocation(Number(checkout.adsBudget || 0), cycleDays);
+        await subscriptionRef.set(
+            {
+                id: checkoutId,
+                checkoutId,
+                userId: String(checkout.userId),
+                cityId: String(checkout.cityId),
+                city: String(checkout.cityName || city.name || checkout.cityId),
+                plan: String(checkout.plan),
+                amount: Number(checkout.amount || 0),
+                adsBudget: Number(checkout.adsBudget || 0),
+                adsShare: Number(checkout.adsShare ?? 0.5),
+                cycleDays,
+                status: "provisioning",
+                campaignId,
+                dailyBudget: allocation.dailyBudget,
+                targetSpend: Number(checkout.targetSpend || checkout.adsBudget || 0),
+                spendPauseThreshold: Number(checkout.spendPauseThreshold || Math.round(Number(checkout.adsBudget || 0) * 0.98 * 100) / 100),
+                spendBaseline,
+                metaSpendBaseline: spendBaseline,
+                cycleSpend: 0,
+                lastSpendCheckedAt: nowMs(),
+                startDate: Timestamp.fromDate(new Date()),
+                endDate: Timestamp.fromDate(calculateCycleEnd(new Date(), cycleDays)),
+                updatedAt: nowMs(),
+                createdAt: checkout.paymentApprovedAt || checkout.createdAt || nowMs(),
+            },
+            { merge: true },
+        );
+        const campaign = await syncSharedCityCampaignBudget(String(checkout.cityId));
+        if (!campaign) throw new ResponseError("campaign_sync_failed", "No se pudo sincronizar la bolsa compartida.", 409);
 
         await Promise.all([
-            cityRef.set(
-                {
-                    status: "occupied",
-                    ownerUserId: String(checkout.userId),
-                    activeCampaignId: campaign.campaignId,
-                    campaignDeliveryStatus: "active",
-                    activeSubscriptionId: checkoutId,
-                    adsetIds: campaign.adsetIds,
-                    adIds: campaign.adIds,
-                    updatedAt: nowMs(),
-                },
-                { merge: true },
-            ),
             subscriptionRef.set(
                 {
-                    id: checkoutId,
-                    checkoutId,
-                    userId: String(checkout.userId),
-                    cityId: String(checkout.cityId),
-                    city: String(checkout.cityName || city.name || checkout.cityId),
-                    plan: String(checkout.plan),
-                    amount: Number(checkout.amount || 0),
-                    adsBudget: Number(checkout.adsBudget || 0),
-                    adsShare: Number(checkout.adsShare ?? 0.5),
-                    cycleDays: Number(checkout.cycleDays || 5) || 5,
                     status: "active",
                     campaignId: campaign.campaignId,
                     adsetIds: campaign.adsetIds,
                     adIds: campaign.adIds,
-                    dailyBudget: campaign.dailyBudget,
-                    operatingBudget: campaign.operatingBudget,
-                    reservedBudget: campaign.reservedBudget,
-                    totalBudget: campaign.totalBudget,
-                    lifetimeBudget: campaign.lifetimeBudget,
-                    budgetMode: campaign.budgetMode,
-                    reservePercent: campaign.reservePercent,
-                    targetSpend: campaign.targetSpend,
-                    spendPauseThreshold: campaign.spendPauseThreshold,
-                    spendBaseline: campaign.spendBaseline,
-                    cycleSpend: 0,
-                    lastSpendCheckedAt: nowMs(),
-                    startDate: Timestamp.fromDate(campaign.startDate),
-                    endDate: Timestamp.fromDate(campaign.endDate),
+                    sharedPool: campaign.participantCount > 1,
+                    sharedPoolDailyBudget: campaign.dailyBudget,
+                    sharedPoolTargetSpend: campaign.targetSpend,
+                    budgetMode: "daily",
                     updatedAt: nowMs(),
-                    createdAt: checkout.paymentApprovedAt || checkout.createdAt || nowMs(),
                 },
                 { merge: true },
             ),
@@ -1354,16 +1511,10 @@ export async function retryMetaActivation(checkoutId: string) {
                 {
                     activationStatus: "active",
                     campaignId: campaign.campaignId,
-                    dailyBudget: campaign.dailyBudget,
-                    operatingBudget: campaign.operatingBudget,
-                    reservedBudget: campaign.reservedBudget,
-                    totalBudget: campaign.totalBudget,
-                    lifetimeBudget: campaign.lifetimeBudget,
-                    budgetMode: campaign.budgetMode,
-                    reservePercent: campaign.reservePercent,
-                    targetSpend: campaign.targetSpend,
-                    spendPauseThreshold: campaign.spendPauseThreshold,
-                    spendBaseline: campaign.spendBaseline,
+                    sharedPool: campaign.participantCount > 1,
+                    sharedPoolDailyBudget: campaign.dailyBudget,
+                    sharedPoolTargetSpend: campaign.targetSpend,
+                    spendBaseline,
                     cycleSpend: 0,
                     lastSpendCheckedAt: nowMs(),
                     updatedAt: nowMs(),
@@ -1457,6 +1608,58 @@ export async function updateCityCampaignDelivery(input: { cityId: string; status
     return { ok: true, cityId, campaignId: result.campaignId, status: input.status };
 }
 
+export async function updateSubscriptionParticipantDelivery(input: {
+    subscriptionId: string;
+    status: "active" | "paused";
+}) {
+    const subscriptionId = input.subscriptionId.trim();
+    if (!subscriptionId) throw new ResponseError("subscription_required", "Indica la suscripcion.");
+
+    const subscriptionRef = adminDb.collection("subscriptions").doc(subscriptionId);
+    const subscriptionSnap = await subscriptionRef.get();
+    if (!subscriptionSnap.exists) throw new ResponseError("subscription_not_found", "La suscripcion no existe.", 404);
+
+    const subscription = subscriptionSnap.data() || {};
+    const currentStatus = String(subscription.status || "");
+    const cityId = String(subscription.cityId || "");
+    if (!cityId) throw new ResponseError("city_required", "La suscripcion no tiene ciudad asociada.", 409);
+    if (!["active", "paused"].includes(currentStatus)) {
+        throw new ResponseError("subscription_not_toggleable", "Solo puedes pausar o reanudar suscripciones activas o pausadas.", 409);
+    }
+
+    if (currentStatus === input.status) {
+        return { ok: true, idempotent: true, subscriptionId, cityId, status: input.status };
+    }
+
+    await subscriptionRef.set(
+        input.status === "paused"
+            ? {
+                status: "paused",
+                pausedAt: nowMs(),
+                pausedReason: "admin_participant_pause",
+                updatedAt: nowMs(),
+            }
+            : {
+                status: "active",
+                resumedAt: nowMs(),
+                pausedReason: FieldValue.delete(),
+                updatedAt: nowMs(),
+            },
+        { merge: true },
+    );
+
+    const campaign = await syncSharedCityCampaignBudget(cityId);
+    return {
+        ok: true,
+        subscriptionId,
+        cityId,
+        status: input.status,
+        campaignId: campaign?.campaignId || null,
+        sharedPoolDailyBudget: campaign?.dailyBudget ?? 0,
+        activeParticipantsCount: campaign?.participantCount ?? 0,
+    };
+}
+
 export async function releaseSubscriptionCity(cityId: string) {
     if (!cityId.trim()) {
         throw new ResponseError("city_required", "Indica la ciudad a liberar.");
@@ -1480,11 +1683,15 @@ export async function releaseSubscriptionCity(cityId: string) {
         const freshCitySnap = await tx.get(cityRef);
         if (!freshCitySnap.exists) return;
         const freshCity = freshCitySnap.data() || {};
+        const activeSubscriptionIds = Array.isArray(freshCity.activeSubscriptionIds)
+            ? freshCity.activeSubscriptionIds.map((id) => String(id)).filter(Boolean)
+            : [];
         const freshSubscriptionId = String(freshCity.activeSubscriptionId || activeSubscriptionId || "");
+        const subscriptionIdsToRelease = Array.from(new Set([...activeSubscriptionIds, freshSubscriptionId].filter(Boolean)));
         const freshReservedCheckoutId = String(freshCity.reservedByCheckoutId || reservedCheckoutId || "");
 
-        if (freshSubscriptionId) {
-            const subscriptionRef = adminDb.collection("subscriptions").doc(freshSubscriptionId);
+        for (const subscriptionId of subscriptionIdsToRelease) {
+            const subscriptionRef = adminDb.collection("subscriptions").doc(subscriptionId);
             const subscriptionSnap = await tx.get(subscriptionRef);
             const checkoutId = String(subscriptionSnap.data()?.checkoutId || "");
             tx.set(
@@ -1528,12 +1735,17 @@ export async function releaseSubscriptionCity(cityId: string) {
             {
                 status: "available",
                 ownerUserId: null,
+                ownerUserIds: [],
                 activeSubscriptionId: FieldValue.delete(),
+                activeSubscriptionIds: [],
+                activeParticipantsCount: 0,
                 activeCampaignId: FieldValue.delete(),
                 campaignDeliveryStatus: FieldValue.delete(),
                 campaignDeliveryUpdatedAt: FieldValue.delete(),
                 adsetIds: FieldValue.delete(),
                 adIds: FieldValue.delete(),
+                sharedPoolDailyBudget: FieldValue.delete(),
+                sharedPoolTargetSpend: FieldValue.delete(),
                 reservedByCheckoutId: FieldValue.delete(),
                 reservationExpiresAt: FieldValue.delete(),
                 updatedAt: nowMs(),
@@ -1635,7 +1847,17 @@ export async function expireDueSubscriptions(limit = 20) {
                         },
                         { merge: true },
                     );
-                    if (spendSnapshot.cycleSpend >= spendPauseThreshold) {
+                    const citySnap = await adminDb.collection("cities").doc(cityId).get();
+                    const city = citySnap.data() || {};
+                    const isSharedPool = Number(city.activeParticipantsCount || 0) > 1;
+                    const poolBaseline = Number(city.sharedPoolSpendBaseline || spendSnapshot.spendBaseline || 0);
+                    const poolTarget = Number(city.sharedPoolTargetSpend || 0);
+                    const poolCycleSpend = Math.max(0, Math.round((spendSnapshot.totalSpend - poolBaseline) * 100) / 100);
+                    if (isSharedPool && poolTarget > 0) {
+                        if (poolCycleSpend >= Math.round(poolTarget * 0.98 * 100) / 100) {
+                            expirationReason = "target_spend_reached";
+                        }
+                    } else if (spendSnapshot.cycleSpend >= spendPauseThreshold) {
                         expirationReason = "target_spend_reached";
                     }
                 } catch (error) {
@@ -1779,11 +2001,68 @@ async function expireWithCampaign(
     },
 ): Promise<{ subscriptionId: string; cityId: string; status: "expired" | "failed"; message?: string }> {
     try {
+        const cityRef = adminDb.collection("cities").doc(cityId);
+        const citySnap = await cityRef.get();
+        const city = citySnap.data() || {};
+        const activeSubscriptionIds = Array.isArray(city.activeSubscriptionIds)
+            ? city.activeSubscriptionIds.map((id) => String(id)).filter(Boolean)
+            : [];
+
+        if (activeSubscriptionIds.length > 1) {
+            if (meta?.reason === "target_spend_reached") {
+                if (campaignId) {
+                    await pauseCityCampaign({ campaignId, adsetIds });
+                }
+
+                await adminDb.runTransaction(async (tx) => {
+                    for (const activeId of activeSubscriptionIds) {
+                        tx.set(adminDb.collection("subscriptions").doc(activeId), {
+                            status: "expired",
+                            endedAt: nowMs(),
+                            expirationReason: "target_spend_reached",
+                            updatedAt: nowMs(),
+                        }, { merge: true });
+                    }
+                    tx.set(cityRef, {
+                        status: "available",
+                        ownerUserId: null,
+                        ownerUserIds: [],
+                        activeSubscriptionId: FieldValue.delete(),
+                        activeSubscriptionIds: [],
+                        activeParticipantsCount: 0,
+                        activeCampaignId: FieldValue.delete(),
+                        campaignDeliveryStatus: FieldValue.delete(),
+                        campaignDeliveryUpdatedAt: FieldValue.delete(),
+                        adsetIds: FieldValue.delete(),
+                        adIds: FieldValue.delete(),
+                        reservedByCheckoutId: FieldValue.delete(),
+                        reservationExpiresAt: FieldValue.delete(),
+                        sharedPoolDailyBudget: FieldValue.delete(),
+                        sharedPoolTargetSpend: FieldValue.delete(),
+                        updatedAt: nowMs(),
+                    }, { merge: true });
+                });
+
+                return { subscriptionId, cityId, status: "expired" };
+            }
+
+            await docRef.set(
+                {
+                    status: "expired",
+                    endedAt: nowMs(),
+                    expirationReason: meta?.reason || "safety_deadline",
+                    updatedAt: nowMs(),
+                },
+                { merge: true },
+            );
+            await syncSharedCityCampaignBudget(cityId);
+            return { subscriptionId, cityId, status: "expired" };
+        }
+
         if (campaignId) {
             await pauseCityCampaign({ campaignId, adsetIds });
         }
 
-        const cityRef = adminDb.collection("cities").doc(cityId);
         await adminDb.runTransaction(async (tx) => {
             const citySnap = await tx.get(cityRef);
             const city = citySnap.data() || {};

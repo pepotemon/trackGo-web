@@ -21,7 +21,8 @@
       "Bash(git push *)",
       "Bash(where inkscape *)",
       "Bash(where magick *)",
-      "Bash(git fetch *)"
+      "Bash(git fetch *)",
+      "Bash(git checkout *)"
     ]
   }
 }
