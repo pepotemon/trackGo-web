@@ -53,6 +53,13 @@ export default function AdminSettingsPage() {
             tone: "blue",
             visible: true,
         },
+        {
+            href: "/admin/gastos",
+            title: "Gastos",
+            body: "Gastos de mantenimiento de plataforma que reducen la ganancia real.",
+            tone: "purple",
+            visible: permissions.gastosView,
+        },
     ];
 
     const visibleItems = items.filter((item) => item.visible);

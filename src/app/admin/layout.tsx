@@ -47,7 +47,6 @@ const MOBILE_NAV: { href: string; label: string; icon: NavIconName }[] = [
     { href: "/admin/leads", label: "Prospectos", icon: "inbox" },
     { href: "/admin/activity", label: "Actividad", icon: "activity" },
     { href: "/admin/accounting", label: "Conta", icon: "wallet" },
-    { href: "/admin/gastos", label: "Gastos", icon: "receipt" },
     { href: "/admin/settings", label: "Config.", icon: "settings" },
 ];
 
@@ -89,7 +88,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         if (item.href === "/admin/leads") return permissions.prospectos;
         if (item.href === "/admin/activity") return permissions.actividad;
         if (item.href === "/admin/accounting") return permissions.accountingView;
-        if (item.href === "/admin/gastos") return permissions.gastosView;
         if (item.href === "/admin/settings") return true;
         return true;
     });
