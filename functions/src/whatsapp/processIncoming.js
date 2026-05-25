@@ -47,6 +47,71 @@ function pickInboundOriginalMapsUrl({ textBody, locationData }) {
     return "";
 }
 
+function extractMetaReferral(message) {
+    const referral = message?.referral || message?.context?.referral || null;
+    if (!referral || typeof referral !== "object") return null;
+
+    const sourceId = safeString(referral.source_id || referral.sourceId || referral.id || "");
+    const sourceUrl = safeString(referral.source_url || referral.sourceUrl || "");
+    const headline = safeString(referral.headline || "");
+    const body = safeString(referral.body || "");
+
+    if (!sourceId && !sourceUrl && !headline && !body) return null;
+
+    return {
+        sourceId,
+        sourceUrl,
+        headline,
+        body,
+        mediaType: safeString(referral.media_type || referral.mediaType || ""),
+        sourceType: safeString(referral.source_type || referral.sourceType || ""),
+    };
+}
+
+async function findCityByMetaSourceId(sourceId) {
+    const cleanSourceId = safeString(sourceId || "");
+    if (!cleanSourceId) return null;
+
+    const queries = [
+        db.collection("cities").where("adIds", "array-contains", cleanSourceId).limit(1),
+        db.collection("cities").where("campaignId", "==", cleanSourceId).limit(1),
+        db.collection("cities").where("activeCampaignId", "==", cleanSourceId).limit(1),
+        db.collection("cities").where("baseCampaignId", "==", cleanSourceId).limit(1),
+    ];
+
+    for (const cityQuery of queries) {
+        const snap = await cityQuery.get();
+        if (!snap.empty) return snap.docs[0];
+    }
+
+    return null;
+}
+
+async function resolveLeadAcquisitionFromReferral(referral) {
+    if (!referral) return {};
+
+    const sourceId = safeString(referral.sourceId || "");
+    const citySnap = await findCityByMetaSourceId(sourceId).catch((error) => {
+        console.log("[WHATSAPP] referral city lookup error:", error?.message || error);
+        return null;
+    });
+    const city = citySnap?.exists ? citySnap.data() || {} : {};
+
+    return {
+        leadAcquisitionSource: "meta_referral",
+        leadAcquisitionSourceId: sourceId,
+        leadAcquisitionSourceUrl: safeString(referral.sourceUrl || ""),
+        leadAcquisitionHeadline: safeString(referral.headline || ""),
+        leadAcquisitionBody: safeString(referral.body || ""),
+        leadAcquisitionMediaType: safeString(referral.mediaType || ""),
+        leadAcquisitionSourceType: safeString(referral.sourceType || ""),
+        leadAcquisitionCityId: citySnap?.id || "",
+        leadAcquisitionCityLabel: safeString(city.name || city.cityName || citySnap?.id || ""),
+        leadAcquisitionCampaignId: safeString(city.activeCampaignId || city.campaignId || city.baseCampaignId || ""),
+        leadAcquisitionResolvedAt: Date.now(),
+    };
+}
+
 async function tryAutoAssignClientById(clientId, attempt = 1) {
     if (!clientId) return;
 
@@ -160,6 +225,8 @@ function createProcessIncomingWhatsappMessage({
                 textBody,
                 locationData,
             });
+            const metaReferral = extractMetaReferral(msg);
+            const leadAcquisition = await resolveLeadAcquisitionFromReferral(metaReferral);
 
             await inboxRef.set(
                 {
@@ -191,6 +258,7 @@ function createProcessIncomingWhatsappMessage({
                     whatsappDisplayPhoneNumber: channel.displayPhoneNumber,
                     marketCountry: channel.marketCountry,
                     language: channel.language,
+                    ...leadAcquisition,
                 },
                 { merge: true }
             );
@@ -241,6 +309,7 @@ function createProcessIncomingWhatsappMessage({
                     locationData,
                     originalMapsUrl,
                     channel,
+                    leadAcquisition,
                 });
 
                 if (result?.clientId) {
@@ -269,6 +338,7 @@ function createProcessIncomingWhatsappMessage({
                             whatsappDisplayPhoneNumber: channel.displayPhoneNumber,
                             marketCountry: channel.marketCountry,
                             language: channel.language,
+                            ...leadAcquisition,
                         },
                     });
                 }
@@ -358,6 +428,7 @@ function createProcessIncomingWhatsappMessage({
                         whatsappDisplayPhoneNumber: channel.displayPhoneNumber,
                         marketCountry: channel.marketCountry,
                         language: channel.language,
+                        ...leadAcquisition,
                     },
                     { merge: true }
                 );

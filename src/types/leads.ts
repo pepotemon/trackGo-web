@@ -52,6 +52,10 @@ export type MetaLeadDoc = {
     autoAssignedAt?: number | null;
     autoAssignMatchType?: LeadAutoAssignMatchType | null;
     autoAssignCoverageKey?: string | null;
+    leadAcquisitionCityId?: string | null;
+    leadAcquisitionCityLabel?: string | null;
+    leadAcquisitionCampaignId?: string | null;
+    leadAcquisitionSourceId?: string | null;
     currentLeadMapsConfirmedAt?: number | null;
     verifiedAt?: number | null;
     verifiedBy?: string | null;

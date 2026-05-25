@@ -154,6 +154,19 @@ function missingFields(lead: MetaLeadDoc) {
     return missing;
 }
 
+function recoveryLocationLabel(lead: MetaLeadDoc, ddd: string | null) {
+    const realCity =
+        lead.location?.adminCityLabel ||
+        lead.location?.cityLabel ||
+        lead.location?.displayLabel;
+    const fallbackCity = lead.leadAcquisitionCityLabel;
+    const city = realCity || fallbackCity || (ddd ? dddCity(ddd) : "");
+
+    if (ddd && city) return `${ddd} · ${city}`;
+    if (ddd) return ddd;
+    return city;
+}
+
 // ── page ──────────────────────────────────────────────────────────────────────
 
 export default function UserIncompleteClientsPage() {
@@ -318,6 +331,7 @@ export default function UserIncompleteClientsPage() {
             list = list.filter((l) =>
                 norm(l.business).includes(q) || norm(l.name).includes(q) ||
                 norm(l.phone).includes(q) || norm(l.location?.address).includes(q) ||
+                norm(l.leadAcquisitionCityLabel).includes(q) ||
                 norm(l.lastInboundText).includes(q)
             );
         }
@@ -1051,6 +1065,7 @@ function ClientCard({
     onCopy: () => void;
 }) {
     const ddd = extractDDD(lead.phone);
+    const locationBadge = recoveryLocationLabel(lead, ddd);
     const hasLocation = !!lead.location?.lat;
     const missing = missingFields(lead);
 
@@ -1069,9 +1084,9 @@ function ClientCard({
                         ) : null}
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-1">
-                        {ddd ? (
+                        {locationBadge ? (
                             <span className="rounded-full bg-[#f3f0ff] px-2 py-0.5 text-[9px] font-black text-[#7C3AED]">
-                                {ddd} · {dddCity(ddd)}
+                                {locationBadge}
                             </span>
                         ) : null}
                         <span className="text-[10px] font-semibold text-[#98A2B3]">{formatRelative(lead.lastInboundMessageAt)}</span>

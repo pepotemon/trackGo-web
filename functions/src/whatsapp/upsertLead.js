@@ -398,6 +398,30 @@ function applyCountryFallbackToReverseGeo(reverseGeoFields, marketFields) {
     return out;
 }
 
+function pickLeadAcquisitionFields(prevClient, nextAcquisition = {}) {
+    const hasNext = !!(
+        safeString(nextAcquisition.leadAcquisitionCityLabel || "") ||
+        safeString(nextAcquisition.leadAcquisitionSourceId || "") ||
+        safeString(nextAcquisition.leadAcquisitionSourceUrl || "") ||
+        safeString(nextAcquisition.leadAcquisitionHeadline || "")
+    );
+    const source = hasNext ? nextAcquisition : (prevClient || {});
+
+    return {
+        leadAcquisitionSource: safeString(source.leadAcquisitionSource || ""),
+        leadAcquisitionSourceId: safeString(source.leadAcquisitionSourceId || ""),
+        leadAcquisitionSourceUrl: safeString(source.leadAcquisitionSourceUrl || ""),
+        leadAcquisitionHeadline: safeString(source.leadAcquisitionHeadline || ""),
+        leadAcquisitionBody: safeString(source.leadAcquisitionBody || ""),
+        leadAcquisitionMediaType: safeString(source.leadAcquisitionMediaType || ""),
+        leadAcquisitionSourceType: safeString(source.leadAcquisitionSourceType || ""),
+        leadAcquisitionCityId: safeString(source.leadAcquisitionCityId || ""),
+        leadAcquisitionCityLabel: safeString(source.leadAcquisitionCityLabel || ""),
+        leadAcquisitionCampaignId: safeString(source.leadAcquisitionCampaignId || ""),
+        leadAcquisitionResolvedAt: safeNumber(source.leadAcquisitionResolvedAt, 0) || null,
+    };
+}
+
 function createUpsertLeadAsClient({
     parseLeadText,
     resolveNextClientName,
@@ -413,6 +437,7 @@ function createUpsertLeadAsClient({
         locationData,
         originalMapsUrl,
         channel,
+        leadAcquisition,
     }) {
         const now = Date.now();
         const marketFields = buildMarketFields(channel, {}, phone);
@@ -514,9 +539,11 @@ function createUpsertLeadAsClient({
                 reverseGeoFields,
                 marketFields
             );
+            const acquisitionFields = pickLeadAcquisitionFields(null, leadAcquisition);
 
             const draftClient = {
                 ...marketFields,
+                ...acquisitionFields,
                 name: resolvedName || "",
                 business: pickBetterBusiness("", parsed.parsedBusiness || ""),
                 businessRaw: pickBetterBusiness(
@@ -681,6 +708,7 @@ function createUpsertLeadAsClient({
 
         const prev = found.data || {};
         const mergedMarketFields = buildMarketFields(channel, prev, phone);
+        const mergedAcquisitionFields = pickLeadAcquisitionFields(prev, leadAcquisition);
 
         const mergedProfileFlags = Array.from(
             new Set([
@@ -742,6 +770,7 @@ function createUpsertLeadAsClient({
         const mergedClientBase = {
             ...prev,
             ...mergedMarketFields,
+            ...mergedAcquisitionFields,
 
             name: resolveNextClientName({
                 prevName: prev.name,
@@ -843,6 +872,7 @@ function createUpsertLeadAsClient({
             sourceRef: prev.sourceRef || inboxRef.path,
             waId: contactWaId || phone,
             ...mergedMarketFields,
+            ...mergedAcquisitionFields,
 
             name: mergedClient.name,
             business: mergedClient.business,
