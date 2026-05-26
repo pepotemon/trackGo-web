@@ -495,6 +495,20 @@ function downloadReceiptAsImage({
     a.remove();
 }
 
+function getExpenseShareFor(
+    expenses: WeeklyExpenseDoc[],
+    userId: string,
+    superadminDefault: boolean
+): number {
+    return expenses.reduce((acc, e) => {
+        if (!e.allocations || e.allocations.length === 0) {
+            return superadminDefault ? acc + e.amount : acc;
+        }
+        const alloc = e.allocations.find((a) => a.userId === userId);
+        return acc + (e.amount * (alloc?.percentage ?? 0) / 100);
+    }, 0);
+}
+
 function exportAccountingSheet(summary: AccountingSummary, miGanancia?: number | null, isSuperAdmin?: boolean) {
     const activeRows = summary.rows.filter((row) => {
         if (row.billingMode === "per_visit") return row.visited > 0;
@@ -865,26 +879,25 @@ export default function AccountingPage() {
 
     const miGanancia = useMemo(() => {
         if (!profile || !summary) return null;
-        const calculate = (input: AccountingSummary) => {
-            if (isSuperAdmin) {
-                const givenAway = input.rows.reduce((acc, row) => {
-                    const user = myUsers.find((u) => u.id === row.userId);
-                    const totalPct = (user?.sharedWith ?? []).reduce((s, sw) => s + sw.percentage, 0);
-                    return acc + (row.real * totalPct / 100);
-                }, 0);
-                return givenAway === 0 ? null : input.real - givenAway;
-            }
-            return input.rows.reduce((acc, row) => {
-                const user = myUsers.find((u) => u.id === row.userId);
-                const share = user?.sharedWith?.find((s) => s.adminId === profile.id);
-                if (!share) return acc;
-                return acc + (row.real * share.percentage / 100);
-            }, 0);
-        };
 
         if (periodMode === "monthly") {
             const values = weeklySummariesForMonth
-                .map(calculate)
+                .map((input): number | null => {
+                    if (isSuperAdmin) {
+                        const givenAway = input.rows.reduce((acc, row) => {
+                            const user = myUsers.find((u) => u.id === row.userId);
+                            const totalPct = (user?.sharedWith ?? []).reduce((s, sw) => s + sw.percentage, 0);
+                            return acc + (row.real * totalPct / 100);
+                        }, 0);
+                        return givenAway === 0 ? null : input.real - givenAway;
+                    }
+                    return input.rows.reduce((acc, row) => {
+                        const user = myUsers.find((u) => u.id === row.userId);
+                        const share = user?.sharedWith?.find((s) => s.adminId === profile.id);
+                        if (!share) return acc;
+                        return acc + (row.real * share.percentage / 100);
+                    }, 0);
+                })
                 .filter((value): value is number => value !== null);
             if (!values.length) return null;
             return Math.round(values.reduce((sum, value) => sum + value, 0) * 100) / 100;
@@ -896,30 +909,38 @@ export default function AccountingPage() {
                 const totalPct = (user?.sharedWith ?? []).reduce((s, sw) => s + sw.percentage, 0);
                 return acc + (row.real * totalPct / 100);
             }, 0);
-            return givenAway === 0 ? null : summary.real - givenAway;
+            const expensesTotal = summary.expensesTotal ?? 0;
+            const superadminExpenseShare = getExpenseShareFor(expenses, profile.id, true);
+            const hasAllocations = expenses.some((e) => e.allocations && e.allocations.length > 0);
+            if (givenAway === 0 && !hasAllocations) return null;
+            return summary.real - givenAway + (expensesTotal - superadminExpenseShare);
         }
-        return summary.rows.reduce((acc, row) => {
+
+        const revenueShare = summary.rows.reduce((acc, row) => {
             const user = myUsers.find((u) => u.id === row.userId);
             const share = user?.sharedWith?.find((s) => s.adminId === profile.id);
             if (!share) return acc;
             return acc + (row.real * share.percentage / 100);
         }, 0);
-    }, [summary, myUsers, isSuperAdmin, profile, periodMode, weeklySummariesForMonth]);
+        const adminExpenseShare = getExpenseShareFor(expenses, profile.id, false);
+        return revenueShare - adminExpenseShare;
+    }, [summary, myUsers, isSuperAdmin, profile, periodMode, weeklySummariesForMonth, expenses]);
 
     const miGananciaPerAdmin = useMemo(() => {
         if (!isSuperAdmin || !summary) return [] as { admin: UserDoc; gain: number }[];
         return adminUsers
-            .map((admin) => ({
-                admin,
-                gain: summary.rows.reduce((acc, row) => {
+            .map((admin) => {
+                const revenueShare = summary.rows.reduce((acc, row) => {
                     const user = myUsers.find((u) => u.id === row.userId);
                     const share = user?.sharedWith?.find((s) => s.adminId === admin.id);
                     if (!share) return acc;
                     return acc + (row.real * share.percentage / 100);
-                }, 0),
-            }))
+                }, 0);
+                const adminExpenseShare = getExpenseShareFor(expenses, admin.id, false);
+                return { admin, gain: revenueShare - adminExpenseShare };
+            })
             .filter(({ admin }) => myUsers.some((u) => u.sharedWith?.some((s) => s.adminId === admin.id)));
-    }, [isSuperAdmin, summary, adminUsers, myUsers]);
+    }, [isSuperAdmin, summary, adminUsers, myUsers, expenses]);
 
     const adjustedCloseSummary = useMemo(() => {
         if (!summary || periodMode !== "weekly" || excludedUserIds.length === 0) return summary;
@@ -957,30 +978,37 @@ export default function AccountingPage() {
                 const totalPct = (user?.sharedWith ?? []).reduce((sum, sw) => sum + sw.percentage, 0);
                 return acc + (row.real * totalPct / 100);
             }, 0);
-            return givenAway === 0 ? null : s.real - givenAway;
+            const expensesTotal = s.expensesTotal ?? 0;
+            const superadminExpenseShare = getExpenseShareFor(expenses, profile.id, true);
+            const hasAllocations = expenses.some((e) => e.allocations && e.allocations.length > 0);
+            if (givenAway === 0 && !hasAllocations) return null;
+            return s.real - givenAway + (expensesTotal - superadminExpenseShare);
         }
-        return s.rows.reduce((acc, row) => {
+        const revenueShare = s.rows.reduce((acc, row) => {
             const user = myUsers.find((u) => u.id === row.userId);
             const share = user?.sharedWith?.find((sw) => sw.adminId === profile.id);
             if (!share) return acc;
             return acc + (row.real * share.percentage / 100);
         }, 0);
-    }, [adjustedCloseSummary, myUsers, isSuperAdmin, profile]);
+        const adminExpenseShare = getExpenseShareFor(expenses, profile.id, false);
+        return revenueShare - adminExpenseShare;
+    }, [adjustedCloseSummary, myUsers, isSuperAdmin, profile, expenses]);
 
     const closeMiGananciaPerAdmin = useMemo(() => {
         if (!isSuperAdmin || !adjustedCloseSummary) return [] as { admin: UserDoc; gain: number }[];
         return adminUsers
-            .map((admin) => ({
-                admin,
-                gain: adjustedCloseSummary.rows.reduce((acc, row) => {
+            .map((admin) => {
+                const revenueShare = adjustedCloseSummary.rows.reduce((acc, row) => {
                     const user = myUsers.find((u) => u.id === row.userId);
                     const share = user?.sharedWith?.find((s) => s.adminId === admin.id);
                     if (!share) return acc;
                     return acc + (row.real * share.percentage / 100);
-                }, 0),
-            }))
+                }, 0);
+                const adminExpenseShare = getExpenseShareFor(expenses, admin.id, false);
+                return { admin, gain: revenueShare - adminExpenseShare };
+            })
             .filter(({ admin }) => myUsers.some((u) => u.sharedWith?.some((s) => s.adminId === admin.id)));
-    }, [isSuperAdmin, adjustedCloseSummary, adminUsers, myUsers]);
+    }, [isSuperAdmin, adjustedCloseSummary, adminUsers, myUsers, expenses]);
 
     const weekStatus = periodMode === "weekly" ? investment?.status ?? "draft" : "draft";
     const isClosed = periodMode === "weekly" && weekStatus === "closed";
@@ -1016,20 +1044,25 @@ export default function AccountingPage() {
         if (miGanancia == null) return null;
         if (!profile) return miGanancia;
         const rows = exportSummary.rows;
+        const snapExpenses = exportSummary.expenses ?? [];
         if (isSuperAdmin) {
             const givenAway = rows.reduce((acc, row) => {
                 const user = myUsers.find((u) => u.id === row.userId);
                 const totalPct = (user?.sharedWith ?? []).reduce((s, sw) => s + sw.percentage, 0);
                 return acc + (row.real * totalPct / 100);
             }, 0);
-            return exportSummary.real - givenAway;
+            const expensesTotal = exportSummary.expensesTotal ?? 0;
+            const superadminExpenseShare = getExpenseShareFor(snapExpenses, profile.id, true);
+            return exportSummary.real - givenAway + (expensesTotal - superadminExpenseShare);
         }
-        return rows.reduce((acc, row) => {
+        const revenueShare = rows.reduce((acc, row) => {
             const user = myUsers.find((u) => u.id === row.userId);
             const share = user?.sharedWith?.find((s) => s.adminId === profile.id);
             if (!share) return acc;
             return acc + (row.real * share.percentage / 100);
         }, 0);
+        const adminExpenseShare = getExpenseShareFor(snapExpenses, profile.id, false);
+        return revenueShare - adminExpenseShare;
     }, [isClosed, exportSummary, miGanancia, profile, isSuperAdmin, myUsers]);
 
     async function toggleSubscriptionPayment(user: UserDoc) {
@@ -1209,6 +1242,22 @@ export default function AccountingPage() {
                                         label="Exportar Excel"
                                         variant="primary"
                                         onClick={() => exportAccountingSheet(exportSummary ?? summary, snapMiGanancia, isSuperAdmin)}
+                                    />
+                                ) : null}
+                                {snapMiGanancia != null && profile ? (
+                                    <IconButton
+                                        icon="download"
+                                        label="Descargar Recibo"
+                                        onClick={() => downloadReceiptAsImage({
+                                            adminName: profile.name || profile.email || "Admin",
+                                            weekStartKey: week.startKey,
+                                            weekEndKey: week.endKey,
+                                            gross: (exportSummary ?? summary)?.gross ?? 0,
+                                            subscriptionInvestment: (exportSummary ?? summary)?.subscriptionInvestment ?? 0,
+                                            real: (exportSummary ?? summary)?.real ?? 0,
+                                            expensesTotal: (exportSummary ?? summary)?.expensesTotal ?? 0,
+                                            miGanancia: snapMiGanancia,
+                                        })}
                                     />
                                 ) : null}
                                 {canInvestmentView && periodMode === "weekly" ? (
@@ -1427,25 +1476,42 @@ export default function AccountingPage() {
                                 </div>
                             ) : null}
 
-                            {adminUsers.filter((a) => (a.gastosSharePercentage ?? 0) > 0).length > 0 ? (
-                                <div className="rounded-lg border border-[#e4e7ec] bg-white p-3 sm:col-span-2">
-                                    <div className="mb-2 text-[12px] font-black text-[#101936]">Participacion de socios en gastos</div>
-                                    <div className="space-y-1.5 text-[12px] font-semibold">
-                                        {adminUsers
-                                            .filter((a) => (a.gastosSharePercentage ?? 0) > 0)
-                                            .map((admin) => {
-                                                const pct = admin.gastosSharePercentage ?? 0;
-                                                const contribution = Math.round(((summary.expensesTotal ?? 0) * pct / 100) * 100) / 100;
-                                                return (
-                                                    <div key={admin.id} className="flex justify-between gap-3">
-                                                        <span className="min-w-0 truncate text-[#667085]">{admin.name || admin.email || admin.id}</span>
-                                                        <span className="shrink-0 font-black text-[#172033]">{pct}% · {money(contribution)}</span>
-                                                    </div>
-                                                );
-                                            })}
+                            {(() => {
+                                const expTotal = summary.expensesTotal ?? 0;
+                                if (expTotal === 0) return null;
+                                const hasAllocations = expenses.some((e) => e.allocations && e.allocations.length > 0);
+                                if (!hasAllocations) return null;
+                                const participantMap = new Map<string, { name: string; amount: number }>();
+                                for (const e of expenses) {
+                                    if (!e.allocations || e.allocations.length === 0) {
+                                        const prev = participantMap.get("__superadmin__") ?? { name: profile?.name || "Superadmin", amount: 0 };
+                                        participantMap.set("__superadmin__", { ...prev, amount: prev.amount + e.amount });
+                                    } else {
+                                        for (const alloc of e.allocations) {
+                                            const key = alloc.userId === profile?.id ? "__superadmin__" : alloc.userId;
+                                            const prev = participantMap.get(key) ?? { name: alloc.name, amount: 0 };
+                                            participantMap.set(key, { name: prev.name || alloc.name, amount: prev.amount + e.amount * alloc.percentage / 100 });
+                                        }
+                                    }
+                                }
+                                const entries = Array.from(participantMap.entries())
+                                    .filter(([, v]) => v.amount > 0)
+                                    .sort(([a], [b]) => (a === "__superadmin__" ? -1 : b === "__superadmin__" ? 1 : 0));
+                                if (!entries.length) return null;
+                                return (
+                                    <div className="rounded-lg border border-[#e4e7ec] bg-white p-3 sm:col-span-2">
+                                        <div className="mb-2 text-[12px] font-black text-[#101936]">Participacion en gastos</div>
+                                        <div className="space-y-1.5 text-[12px] font-semibold">
+                                            {entries.map(([key, { name, amount }]) => (
+                                                <div key={key} className="flex justify-between gap-3">
+                                                    <span className="min-w-0 truncate text-[#667085]">{key === "__superadmin__" ? (profile?.name || "Superadmin") : name}</span>
+                                                    <span className="shrink-0 font-black text-[#172033]">{Math.round(amount / expTotal * 100)}% · {money(Math.round(amount * 100) / 100)}</span>
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
-                                </div>
-                            ) : null}
+                                );
+                            })()}
 
                             {isSuperAdmin && (closeMiGananciaPerAdmin.length > 0 || closeMiGanancia != null) ? (
                                 <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3 sm:col-span-2">
@@ -1570,21 +1636,34 @@ export default function AccountingPage() {
                         Al cerrar la semana se guarda un snapshot final y se bloquean pagos, grupos y ajustes hasta reabrirla.
                     </div>
 
-                    <div className="flex flex-col-reverse gap-2 border-t border-[#eef1f5] pt-4 sm:flex-row sm:justify-end">
-                        <Button
-                            variant="ghost"
-                            onClick={() => setCloseOpen(false)}
-                            disabled={savingWeek}
+                    <div className="flex flex-col-reverse gap-2 border-t border-[#eef1f5] pt-4 sm:flex-row sm:items-center sm:justify-between">
+                        <button
+                            type="button"
+                            onClick={() => adjustedCloseSummary && exportAccountingSheet(adjustedCloseSummary, closeMiGanancia, isSuperAdmin)}
+                            disabled={!adjustedCloseSummary}
+                            className="flex h-9 items-center gap-2 rounded-xl border border-[#d9d2ff] bg-white px-3 text-[12px] font-bold text-[#4f46e5] shadow-sm transition hover:bg-[#f3f0ff] disabled:opacity-40"
                         >
-                            Cancelar
-                        </Button>
-                        <Button
-                            variant="primary"
-                            onClick={handleCloseWeek}
-                            disabled={savingWeek || !summary}
-                        >
-                            {savingWeek ? "Cerrando..." : "Cerrar semana"}
-                        </Button>
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
+                            </svg>
+                            Descargar Excel
+                        </button>
+                        <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                            <Button
+                                variant="ghost"
+                                onClick={() => setCloseOpen(false)}
+                                disabled={savingWeek}
+                            >
+                                Cancelar
+                            </Button>
+                            <Button
+                                variant="primary"
+                                onClick={handleCloseWeek}
+                                disabled={savingWeek || !summary}
+                            >
+                                {savingWeek ? "Cerrando..." : "Cerrar semana"}
+                            </Button>
+                        </div>
                     </div>
                 </div>
             </Modal>
@@ -3134,6 +3213,8 @@ function ClosedWeekPanel({
         ]
     ).filter(Boolean) as { label: string; value: number }[];
 
+    const snapExpenses = finalSummary.expenses ?? [];
+
     const snapMyGain: number | null = (() => {
         if (miGanancia == null) return null;
         if (!profile) return miGanancia;
@@ -3143,26 +3224,31 @@ function ClosedWeekPanel({
                 const totalPct = (user?.sharedWith ?? []).reduce((s, sw) => s + sw.percentage, 0);
                 return acc + (row.real * totalPct / 100);
             }, 0);
-            return finalSummary.real - givenAway;
+            const expensesTotal = finalSummary.expensesTotal ?? 0;
+            const superadminExpenseShare = getExpenseShareFor(snapExpenses, profile.id, true);
+            return finalSummary.real - givenAway + (expensesTotal - superadminExpenseShare);
         }
-        return rows.reduce((acc, row) => {
+        const revenueShare = rows.reduce((acc, row) => {
             const user = sellers.find((u) => u.id === row.userId);
             const share = user?.sharedWith?.find((s) => s.adminId === profile.id);
             if (!share) return acc;
             return acc + (row.real * share.percentage / 100);
         }, 0);
+        const adminExpenseShare = getExpenseShareFor(snapExpenses, profile.id, false);
+        return revenueShare - adminExpenseShare;
     })();
 
     const adminGains = adminUsers
-        .map((admin) => ({
-            admin,
-            gain: rows.reduce((acc, row) => {
+        .map((admin) => {
+            const revenueShare = rows.reduce((acc, row) => {
                 const user = sellers.find((u) => u.id === row.userId);
                 const share = user?.sharedWith?.find((s) => s.adminId === admin.id);
                 if (!share) return acc;
                 return acc + (row.real * share.percentage / 100);
-            }, 0),
-        }))
+            }, 0);
+            const adminExpenseShare = getExpenseShareFor(snapExpenses, admin.id, false);
+            return { admin, gain: revenueShare - adminExpenseShare };
+        })
         .filter(({ admin }) => sellers.some((u) => u.sharedWith?.some((s) => s.adminId === admin.id)));
 
     const receiptBase = {

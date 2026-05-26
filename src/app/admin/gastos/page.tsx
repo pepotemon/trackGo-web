@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { weekRangeKeysMonToSun, addDays, money } from "@/lib/date";
 import { listWeeklyExpenses, createWeeklyExpense, deleteWeeklyExpense } from "@/data/gastosRepo";
+import { listAdminUsers } from "@/data/accountingRepo";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { useCan } from "@/features/auth/usePermissions";
-import type { WeeklyExpenseDoc } from "@/types/accounting";
+import type { ExpenseAllocation, UserDoc, WeeklyExpenseDoc } from "@/types/accounting";
 import {
     Button,
     Card,
@@ -31,7 +32,7 @@ function clamp2(n: number) {
 }
 
 export default function GastosPage() {
-    const { firebaseUser } = useAuth();
+    const { firebaseUser, profile } = useAuth();
     const canView = useCan("gastosView");
     const canEdit = useCan("gastosEdit");
 
@@ -39,6 +40,7 @@ export default function GastosPage() {
     const week = useMemo(() => weekRangeKeysMonToSun(shiftWeek(new Date(), weekOffset)), [weekOffset]);
 
     const [expenses, setExpenses] = useState<WeeklyExpenseDoc[]>([]);
+    const [adminUsers, setAdminUsers] = useState<UserDoc[]>([]);
     const [loading, setLoading] = useState(true);
     const [err, setErr] = useState<string | null>(null);
     const [refreshNonce, setRefreshNonce] = useState(0);
@@ -48,9 +50,30 @@ export default function GastosPage() {
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
     const [amount, setAmount] = useState("");
+    const [allocations, setAllocations] = useState<Record<string, string>>({});
 
     const [deleteTarget, setDeleteTarget] = useState<WeeklyExpenseDoc | null>(null);
     const [deleting, setDeleting] = useState(false);
+
+    const superadminId = firebaseUser?.uid ?? "";
+    const superadminName = profile?.name || profile?.email || "Superadmin";
+
+    const allParticipants = useMemo((): { id: string; name: string; label: string }[] => {
+        const result = [{ id: superadminId, name: superadminName, label: "Superadmin (Yo)" }];
+        for (const admin of adminUsers) {
+            if (admin.id === superadminId) continue;
+            result.push({ id: admin.id, name: admin.name || admin.email || admin.id, label: admin.name || admin.email || admin.id });
+        }
+        return result;
+    }, [adminUsers, superadminId, superadminName]);
+
+    const allocTotal = useMemo(() => {
+        return Object.values(allocations).reduce((sum, v) => sum + (parseFloat(v) || 0), 0);
+    }, [allocations]);
+
+    useEffect(() => {
+        listAdminUsers().then(setAdminUsers).catch(() => {});
+    }, []);
 
     useEffect(() => {
         if (!canView) return;
@@ -70,12 +93,25 @@ export default function GastosPage() {
         setName("");
         setDescription("");
         setAmount("");
+        setAllocations({});
     }
 
     async function handleAdd() {
         const parsedAmount = parseFloat(amount.replace(",", "."));
         if (!name.trim()) { setErr("El nombre es requerido."); return; }
         if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) { setErr("Monto inválido."); return; }
+
+        const hasAnyAlloc = Object.values(allocations).some((v) => (parseFloat(v) || 0) > 0);
+        if (hasAnyAlloc && Math.round(allocTotal) !== 100) {
+            setErr(`El reparto debe sumar 100%. Actualmente suma ${allocTotal.toFixed(0)}%.`);
+            return;
+        }
+
+        const builtAllocations: ExpenseAllocation[] = hasAnyAlloc
+            ? allParticipants
+                .map((p) => ({ userId: p.id, name: p.name, percentage: parseFloat(allocations[p.id] ?? "0") || 0 }))
+                .filter((a) => a.percentage > 0)
+            : [];
 
         setSaving(true);
         setErr(null);
@@ -86,6 +122,7 @@ export default function GastosPage() {
                 description: description.trim() || null,
                 amount: parsedAmount,
                 createdBy: firebaseUser?.uid ?? null,
+                allocations: builtAllocations.length > 0 ? builtAllocations : undefined,
             });
             setExpenses((prev) => [...prev, expense]);
             setAddOpen(false);
@@ -250,7 +287,7 @@ export default function GastosPage() {
                         {expenses.map((expense) => (
                             <div
                                 key={expense.id}
-                                className="flex items-center gap-3 rounded-xl border border-[#e8e7fb] bg-[#fafafe] px-3 py-3"
+                                className="flex items-start gap-3 rounded-xl border border-[#e8e7fb] bg-[#fafafe] px-3 py-3"
                             >
                                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f3f0ff]">
                                     <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#7c3aed]" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
@@ -263,6 +300,17 @@ export default function GastosPage() {
                                         <div className="truncate text-[11px] font-medium text-[#667085]">{expense.description}</div>
                                     ) : null}
                                     <div className="text-[10px] font-medium text-[#98a2b3]">{formatDate(expense.createdAt)}</div>
+                                    {expense.allocations && expense.allocations.length > 0 ? (
+                                        <div className="mt-1.5 flex flex-wrap gap-1">
+                                            {expense.allocations.map((a) => (
+                                                <span key={a.userId} className="inline-flex items-center gap-1 rounded-md border border-[#e8e7fb] bg-white px-1.5 py-0.5 text-[10px] font-semibold text-[#4f46e5]">
+                                                    {a.name} · {a.percentage}%
+                                                </span>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <span className="mt-1 inline-block text-[10px] font-medium text-[#98a2b3]">100% Superadmin</span>
+                                    )}
                                 </div>
                                 <div className="shrink-0 text-[14px] font-black text-[#172033]">{money(expense.amount)}</div>
                                 {canEdit ? (
@@ -319,6 +367,37 @@ export default function GastosPage() {
                             step="0.01"
                         />
                     </Field>
+
+                    {allParticipants.length > 0 ? (
+                        <div className="rounded-xl border border-[#e8e7fb] bg-[#fafafe] p-3">
+                            <div className="mb-2 flex items-center justify-between">
+                                <span className="text-[12px] font-black text-[#101936]">Reparto del gasto</span>
+                                <span className={`text-[11px] font-bold ${Math.round(allocTotal) === 100 ? "text-emerald-600" : allocTotal === 0 ? "text-[#98a2b3]" : "text-amber-600"}`}>
+                                    {allocTotal === 0 ? "Vacío = 100% Superadmin" : `${allocTotal.toFixed(0)}% / 100%`}
+                                </span>
+                            </div>
+                            <div className="space-y-2">
+                                {allParticipants.map((p) => (
+                                    <div key={p.id} className="flex items-center gap-2">
+                                        <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-[#344054]">{p.label}</span>
+                                        <div className="flex items-center gap-1">
+                                            <Input
+                                                type="number"
+                                                value={allocations[p.id] ?? ""}
+                                                onChange={(e) => setAllocations((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                                                placeholder="0"
+                                                min="0"
+                                                max="100"
+                                                step="1"
+                                                className="w-16 text-right"
+                                            />
+                                            <span className="shrink-0 text-[12px] font-bold text-[#667085]">%</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : null}
 
                     {err ? (
                         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-semibold text-red-600">

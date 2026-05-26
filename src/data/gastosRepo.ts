@@ -10,7 +10,7 @@ import {
     limit,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { WeeklyExpenseDoc } from "@/types/accounting";
+import type { ExpenseAllocation, WeeklyExpenseDoc } from "@/types/accounting";
 
 function safeNumber(value: unknown, fallback = 0) {
     const n = Number(value);
@@ -29,7 +29,19 @@ function record(value: unknown): Record<string, unknown> {
     return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 }
 
+function normalizeAllocation(value: unknown): ExpenseAllocation | null {
+    if (!value || typeof value !== "object") return null;
+    const v = value as Record<string, unknown>;
+    const userId = typeof v.userId === "string" ? v.userId.trim() : "";
+    const name = typeof v.name === "string" ? v.name.trim() : "";
+    const percentage = safeNumber(v.percentage, 0);
+    if (!userId || percentage <= 0) return null;
+    return { userId, name, percentage };
+}
+
 function normalizeExpense(id: string, data: Record<string, unknown>): WeeklyExpenseDoc {
+    const rawAllocations = Array.isArray(data.allocations) ? data.allocations : [];
+    const allocations = rawAllocations.map(normalizeAllocation).filter((a): a is ExpenseAllocation => a !== null);
     return {
         id,
         weekStartKey: text(data.weekStartKey),
@@ -38,6 +50,7 @@ function normalizeExpense(id: string, data: Record<string, unknown>): WeeklyExpe
         amount: clamp2(safeNumber(data.amount, 0)),
         createdAt: safeNumber(data.createdAt, 0),
         createdBy: typeof data.createdBy === "string" ? data.createdBy : null,
+        allocations: allocations.length > 0 ? allocations : undefined,
     };
 }
 
@@ -59,11 +72,14 @@ export async function createWeeklyExpense(input: {
     description?: string | null;
     amount: number;
     createdBy?: string | null;
+    allocations?: ExpenseAllocation[];
 }): Promise<WeeklyExpenseDoc> {
     const now = Date.now();
     const randomSuffix = Math.random().toString(36).slice(2, 8);
     const id = `expense_${now}_${randomSuffix}`;
     const ref = doc(db, "weeklyExpenses", id);
+
+    const cleanAllocations = (input.allocations ?? []).filter((a) => a.percentage > 0);
 
     const payload: Omit<WeeklyExpenseDoc, "id"> = {
         weekStartKey: input.weekStartKey,
@@ -72,6 +88,7 @@ export async function createWeeklyExpense(input: {
         amount: clamp2(safeNumber(input.amount, 0)),
         createdAt: now,
         createdBy: input.createdBy ?? null,
+        ...(cleanAllocations.length > 0 ? { allocations: cleanAllocations } : {}),
     };
 
     await setDoc(ref, payload);

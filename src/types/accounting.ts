@@ -162,6 +162,12 @@ export type AccountingSubscriptionSummaryRow = {
     createdAt?: number | null;
 };
 
+export type ExpenseAllocation = {
+    userId: string;
+    name: string;
+    percentage: number;
+};
+
 export type WeeklyExpenseDoc = {
     id: string;
     weekStartKey: string;
@@ -170,6 +176,7 @@ export type WeeklyExpenseDoc = {
     amount: number;
     createdAt: number;
     createdBy?: string | null;
+    allocations?: ExpenseAllocation[];
 };
 
 export type AccountingSummary = {
