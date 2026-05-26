@@ -384,6 +384,7 @@ function downloadReceiptAsImage({
     subscriptionInvestment,
     real,
     expensesTotal,
+    expenses,
     miGanancia,
 }: {
     adminName: string;
@@ -393,11 +394,14 @@ function downloadReceiptAsImage({
     subscriptionInvestment: number;
     real: number;
     expensesTotal: number;
+    expenses?: WeeklyExpenseDoc[];
     miGanancia: number;
 }) {
     const dpr = (typeof window !== "undefined" ? window.devicePixelRatio : 1) || 1;
     const W = 520;
-    const H = 340;
+    const expLines = expenses ?? [];
+    const extraH = expLines.length > 0 ? 22 + expLines.length * 22 + 28 : 0;
+    const H = 340 + extraH;
     const canvas = document.createElement("canvas");
     canvas.width = W * dpr;
     canvas.height = H * dpr;
@@ -438,8 +442,6 @@ function downloadReceiptAsImage({
     const summaryRows: { label: string; value: number; bold?: boolean; color?: string }[] = [
         { label: "Bruto total", value: gross },
         { label: "Inversion (suscripciones)", value: subscriptionInvestment },
-        { label: "Ganancia real", value: real, bold: true, color: real >= 0 ? "#047857" : "#dc2626" },
-        { label: "Gastos", value: expensesTotal, color: expensesTotal > 0 ? "#dc2626" : "#344054" },
     ];
 
     let y = 110;
@@ -454,6 +456,44 @@ function downloadReceiptAsImage({
         ctx.fillText(money(row.value), W - 28, y);
         y += 30;
     }
+
+    if (expLines.length > 0) {
+        ctx.fillStyle = "#98a2b3";
+        ctx.font = "10px Arial, sans-serif";
+        ctx.textAlign = "left";
+        ctx.fillText("GASTOS", 28, y);
+        y += 22;
+        for (const expense of expLines) {
+            const label = expense.name.length > 35 ? expense.name.slice(0, 35) + "…" : expense.name;
+            ctx.fillStyle = "#667085";
+            ctx.font = "11px Arial, sans-serif";
+            ctx.textAlign = "left";
+            ctx.fillText(label, 28, y);
+            ctx.fillStyle = "#dc2626";
+            ctx.font = "11px Arial, sans-serif";
+            ctx.textAlign = "right";
+            ctx.fillText(money(expense.amount), W - 28, y);
+            y += 22;
+        }
+        ctx.fillStyle = "#dc2626";
+        ctx.font = "bold 12px Arial, sans-serif";
+        ctx.textAlign = "left";
+        ctx.fillText("Total gastos", 28, y);
+        ctx.textAlign = "right";
+        ctx.fillText(money(expensesTotal), W - 28, y);
+        y += 28;
+    }
+
+    // Draw Ganancia real row
+    ctx.fillStyle = "#667085";
+    ctx.font = "13px Arial, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("Ganancia real", 28, y);
+    ctx.fillStyle = real >= 0 ? "#047857" : "#dc2626";
+    ctx.font = "bold 13px Arial, sans-serif";
+    ctx.textAlign = "right";
+    ctx.fillText(money(real), W - 28, y);
+    y += 30;
 
     y += 8;
     ctx.fillStyle = "#ecfdf5";
@@ -509,7 +549,61 @@ function getExpenseShareFor(
     }, 0);
 }
 
-function exportAccountingSheet(summary: AccountingSummary, miGanancia?: number | null, isSuperAdmin?: boolean) {
+function DownloadSheet({
+    open,
+    onClose,
+    onExcel,
+    receipts,
+}: {
+    open: boolean;
+    onClose: () => void;
+    onExcel: () => void;
+    receipts: { label: string; onClick: () => void }[];
+}) {
+    if (!open) return null;
+    return (
+        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-[#101936]/40 backdrop-blur-sm sm:items-center" onClick={onClose}>
+            <div
+                className="w-full max-w-sm rounded-t-3xl bg-white px-5 pb-8 pt-5 shadow-[0_-8px_40px_rgba(0,0,0,0.18)] sm:rounded-2xl"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="mx-auto mb-4 h-1 w-12 rounded-full bg-[#E8E7FB] sm:hidden" />
+                <h3 className="text-[16px] font-black text-[#101936]">Descargar</h3>
+                <p className="mt-1 mb-4 text-[13px] font-medium text-[#66739A]">Elige el formato.</p>
+                <div className="space-y-2">
+                    <button
+                        type="button"
+                        onClick={() => { onExcel(); onClose(); }}
+                        className="flex min-h-[48px] w-full items-center gap-3 rounded-[14px] border border-[#e4e7ec] bg-[#f9fafb] px-4 text-[14px] font-bold text-[#344054] transition hover:bg-[#f3f0ff]"
+                    >
+                        <svg viewBox="0 0 24 24" className="h-5 w-5 text-emerald-600" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
+                        </svg>
+                        Exportar Excel
+                    </button>
+                    {receipts.map((r) => (
+                        <button
+                            key={r.label}
+                            type="button"
+                            onClick={() => { r.onClick(); onClose(); }}
+                            className="flex min-h-[48px] w-full items-center gap-3 rounded-[14px] bg-[#7C3AED] px-4 text-[14px] font-bold text-white transition active:bg-violet-700"
+                        >
+                            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
+                            </svg>
+                            Recibo · {r.label}
+                        </button>
+                    ))}
+                    <button type="button" onClick={onClose} className="min-h-[44px] w-full rounded-[14px] border border-[#E8E7FB] bg-white text-[14px] font-bold text-[#66739A]">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function exportAccountingSheet(summary: AccountingSummary, miGanancia?: number | null, isSuperAdmin?: boolean, expenses?: WeeklyExpenseDoc[]) {
     const activeRows = summary.rows.filter((row) => {
         if (row.billingMode === "per_visit") return row.visited > 0;
         return row.subscriptionPaid === true;
@@ -594,6 +688,26 @@ function exportAccountingSheet(summary: AccountingSummary, miGanancia?: number |
                         <td class="label">Inversion suscripciones</td><td class="money">${excelMoney(summary.subscriptionInvestment)}</td>
                         ${isSuperAdmin ? `<td class="label">Inversion grupos</td><td class="money" colspan="3">${excelMoney(summary.groupInvestment)}</td>` : "<td colspan=\"4\"></td>"}
                     </tr>
+                    ${(expenses ?? []).length > 0 ? `
+<tr><td class="section" colspan="10">Gastos de mantenimiento</td></tr>
+<tr>
+    <th class="w-user">Nombre</th>
+    <th style="width:200px">Descripcion</th>
+    <th style="width:260px">Reparto</th>
+    <th class="money">Monto</th>
+    <th colspan="6"></th>
+</tr>
+${(expenses ?? []).map(e => `<tr>
+    <td class="text">${excelText(e.name)}</td>
+    <td class="text">${excelText(e.description || "")}</td>
+    <td class="text">${e.allocations && e.allocations.length > 0 ? e.allocations.map(a => excelText(a.name + " " + a.percentage + "%")).join(", ") : "100% Superadmin"}</td>
+    <td class="money">${excelMoney(e.amount)}</td>
+    <td colspan="6"></td>
+</tr>`).join("")}
+<tr>
+    <td class="label">Total gastos</td><td class="money negative">${excelMoney(summary.expensesTotal ?? 0)}</td>
+    <td colspan="8"></td>
+</tr>` : ""}
                     <tr><td class="section" colspan="10">Detalle por usuario</td></tr>
                     <tr>
                         <th class="w-user">Usuario</th>
@@ -666,6 +780,8 @@ export default function AccountingPage() {
     const [adminUsers, setAdminUsers] = useState<UserDoc[]>([]);
     const [closeOpen, setCloseOpen] = useState(false);
     const [reopenOpen, setReopenOpen] = useState(false);
+    const [downloadOpen, setDownloadOpen] = useState(false);
+    const [closeDownloadOpen, setCloseDownloadOpen] = useState(false);
     const [excludedUserIds, setExcludedUserIds] = useState<string[]>([]);
 
     const [loading, setLoading] = useState(true);
@@ -1206,7 +1322,7 @@ export default function AccountingPage() {
                     activeTab={activeTab}
                     setActiveTab={setActiveTab}
                     onRefresh={() => setRefreshNonce((value) => value + 1)}
-                    onExport={exportSummary ? () => exportAccountingSheet(exportSummary, snapMiGanancia, isSuperAdmin) : undefined}
+                    onDownload={() => setDownloadOpen(true)}
                     onCloseWeek={() => { setExcludedUserIds([]); setCloseOpen(true); }}
                     onReopenWeek={() => setReopenOpen(true)}
                     savingWeek={savingWeek}
@@ -1239,25 +1355,9 @@ export default function AccountingPage() {
                                 {summary ? (
                                     <IconButton
                                         icon="download"
-                                        label="Exportar Excel"
+                                        label="Descargar"
                                         variant="primary"
-                                        onClick={() => exportAccountingSheet(exportSummary ?? summary, snapMiGanancia, isSuperAdmin)}
-                                    />
-                                ) : null}
-                                {snapMiGanancia != null && profile ? (
-                                    <IconButton
-                                        icon="download"
-                                        label="Descargar Recibo"
-                                        onClick={() => downloadReceiptAsImage({
-                                            adminName: profile.name || profile.email || "Admin",
-                                            weekStartKey: week.startKey,
-                                            weekEndKey: week.endKey,
-                                            gross: (exportSummary ?? summary)?.gross ?? 0,
-                                            subscriptionInvestment: (exportSummary ?? summary)?.subscriptionInvestment ?? 0,
-                                            real: (exportSummary ?? summary)?.real ?? 0,
-                                            expensesTotal: (exportSummary ?? summary)?.expensesTotal ?? 0,
-                                            miGanancia: snapMiGanancia,
-                                        })}
+                                        onClick={() => setDownloadOpen(true)}
                                     />
                                 ) : null}
                                 {canInvestmentView && periodMode === "weekly" ? (
@@ -1384,6 +1484,8 @@ export default function AccountingPage() {
                                 isSuperAdmin={isSuperAdmin}
                                 exportSummary={exportSummary}
                                 snapMiGanancia={snapMiGanancia}
+                                expenses={expenses}
+                                onDownload={() => setDownloadOpen(true)}
                             />
                         ) : (
                             <InvestmentContent
@@ -1639,14 +1741,14 @@ export default function AccountingPage() {
                     <div className="flex flex-col-reverse gap-2 border-t border-[#eef1f5] pt-4 sm:flex-row sm:items-center sm:justify-between">
                         <button
                             type="button"
-                            onClick={() => adjustedCloseSummary && exportAccountingSheet(adjustedCloseSummary, closeMiGanancia, isSuperAdmin)}
+                            onClick={() => setCloseDownloadOpen(true)}
                             disabled={!adjustedCloseSummary}
                             className="flex h-9 items-center gap-2 rounded-xl border border-[#d9d2ff] bg-white px-3 text-[12px] font-bold text-[#4f46e5] shadow-sm transition hover:bg-[#f3f0ff] disabled:opacity-40"
                         >
                             <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
                             </svg>
-                            Descargar Excel
+                            Descargar
                         </button>
                         <div className="flex flex-col-reverse gap-2 sm:flex-row">
                             <Button
@@ -1667,6 +1769,41 @@ export default function AccountingPage() {
                     </div>
                 </div>
             </Modal>
+            <DownloadSheet
+                open={closeDownloadOpen}
+                onClose={() => setCloseDownloadOpen(false)}
+                onExcel={() => adjustedCloseSummary && exportAccountingSheet(adjustedCloseSummary, closeMiGanancia, isSuperAdmin, expenses)}
+                receipts={[
+                    ...(closeMiGanancia != null && profile ? [{
+                        label: isSuperAdmin ? (profile.name || "Superadmin") : (profile.name || profile.email || "Admin"),
+                        onClick: () => adjustedCloseSummary && downloadReceiptAsImage({
+                            adminName: profile.name || profile.email || "Admin",
+                            weekStartKey: week.startKey,
+                            weekEndKey: week.endKey,
+                            gross: adjustedCloseSummary.gross,
+                            subscriptionInvestment: adjustedCloseSummary.subscriptionInvestment,
+                            real: adjustedCloseSummary.real,
+                            expensesTotal: adjustedCloseSummary.expensesTotal ?? 0,
+                            expenses,
+                            miGanancia: closeMiGanancia,
+                        }),
+                    }] : []),
+                    ...closeMiGananciaPerAdmin.map(({ admin, gain }) => ({
+                        label: admin.name || admin.email || admin.id,
+                        onClick: () => adjustedCloseSummary && downloadReceiptAsImage({
+                            adminName: admin.name || admin.email || admin.id,
+                            weekStartKey: week.startKey,
+                            weekEndKey: week.endKey,
+                            gross: adjustedCloseSummary.gross,
+                            subscriptionInvestment: adjustedCloseSummary.subscriptionInvestment,
+                            real: adjustedCloseSummary.real,
+                            expensesTotal: adjustedCloseSummary.expensesTotal ?? 0,
+                            expenses,
+                            miGanancia: gain,
+                        }),
+                    })),
+                ]}
+            />
 
             <Modal
                 open={reopenOpen}
@@ -1697,6 +1834,41 @@ export default function AccountingPage() {
                     </div>
                 </div>
             </Modal>
+            <DownloadSheet
+                open={downloadOpen}
+                onClose={() => setDownloadOpen(false)}
+                onExcel={() => exportAccountingSheet(exportSummary ?? summary, snapMiGanancia, isSuperAdmin, expenses)}
+                receipts={[
+                    ...(snapMiGanancia != null && profile ? [{
+                        label: isSuperAdmin ? (profile.name || "Superadmin") : (profile.name || profile.email || "Admin"),
+                        onClick: () => summary && downloadReceiptAsImage({
+                            adminName: profile.name || profile.email || "Admin",
+                            weekStartKey: week.startKey,
+                            weekEndKey: week.endKey,
+                            gross: (exportSummary ?? summary).gross,
+                            subscriptionInvestment: (exportSummary ?? summary).subscriptionInvestment,
+                            real: (exportSummary ?? summary).real,
+                            expensesTotal: (exportSummary ?? summary).expensesTotal ?? 0,
+                            expenses,
+                            miGanancia: snapMiGanancia,
+                        }),
+                    }] : []),
+                    ...miGananciaPerAdmin.map(({ admin, gain }) => ({
+                        label: admin.name || admin.email || admin.id,
+                        onClick: () => summary && downloadReceiptAsImage({
+                            adminName: admin.name || admin.email || admin.id,
+                            weekStartKey: week.startKey,
+                            weekEndKey: week.endKey,
+                            gross: (exportSummary ?? summary).gross,
+                            subscriptionInvestment: (exportSummary ?? summary).subscriptionInvestment,
+                            real: (exportSummary ?? summary).real,
+                            expensesTotal: (exportSummary ?? summary).expensesTotal ?? 0,
+                            expenses,
+                            miGanancia: gain,
+                        }),
+                    })),
+                ]}
+            />
         </div>
     );
 }
@@ -1723,7 +1895,7 @@ function MobileAccountingPage({
     activeTab,
     setActiveTab,
     onRefresh,
-    onExport,
+    onDownload,
     onCloseWeek,
     onReopenWeek,
     savingWeek,
@@ -1757,7 +1929,7 @@ function MobileAccountingPage({
     activeTab: AccountingTab;
     setActiveTab: (tab: AccountingTab) => void;
     onRefresh: () => void;
-    onExport?: () => void;
+    onDownload?: () => void;
     onCloseWeek: () => void;
     onReopenWeek: () => void;
     savingWeek: boolean;
@@ -1777,7 +1949,6 @@ function MobileAccountingPage({
     const [rankingMetric, setRankingMetric] = useState<AccountingMetric>("real");
     const [usersOpen, setUsersOpen] = useState(false);
     const [eventsTooltipOpen, setEventsTooltipOpen] = useState(false);
-    const [confirmExportOpen, setConfirmExportOpen] = useState(false);
 
     useEffect(() => {
         if (activeTab !== "investment") return;
@@ -1849,8 +2020,8 @@ function MobileAccountingPage({
                         </p>
                     </div>
 
-                    {onExport ? (
-                        <MobileAccountingIconButton icon="download" label="Exportar" onClick={() => setConfirmExportOpen(true)} />
+                    {onDownload ? (
+                        <MobileAccountingIconButton icon="download" label="Descargar" onClick={() => onDownload()} />
                     ) : null}
 
                     {canInvestmentView && periodMode === "weekly" ? (
@@ -2082,6 +2253,7 @@ function MobileAccountingPage({
                                 mode={chartMode}
                                 maxValue={maxChartValue}
                             />
+
                         </div>
 
                         {/* ACTIVITY STATS */}
@@ -2173,34 +2345,6 @@ function MobileAccountingPage({
                 )}
             </div>
 
-            {confirmExportOpen ? (
-                <div className="fixed inset-0 z-50 flex items-end justify-center bg-[#101936]/30 backdrop-blur-sm">
-                    <div className="w-full max-w-lg rounded-t-3xl bg-white px-5 pb-8 pt-5 shadow-[0_-8px_40px_rgba(0,0,0,0.18)]">
-                        <div className="mx-auto mb-4 h-1 w-12 rounded-full bg-[#E8E7FB]" />
-                        <h3 className="text-[16px] font-black text-[#101936]">Descargar Excel</h3>
-                        <p className="mt-1 text-[13px] font-medium text-[#66739A]">
-                            Se descargará el resumen de contabilidad de esta semana como archivo Excel.
-                        </p>
-                        <div className="mt-4 grid gap-2">
-                            <button
-                                type="button"
-                                onClick={() => { setConfirmExportOpen(false); onExport?.(); }}
-                                className="flex min-h-[52px] items-center justify-center gap-2 rounded-[14px] bg-[#7C3AED] text-[14px] font-bold text-white transition active:bg-violet-700"
-                            >
-                                <MobileAccountingIcon name="download" />
-                                Descargar
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setConfirmExportOpen(false)}
-                                className="min-h-[48px] rounded-[14px] border border-[#E8E7FB] bg-[#f8f7ff] text-[14px] font-bold text-[#66739A] transition active:bg-[#f3f0ff]"
-                            >
-                                Cancelar
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            ) : null}
         </div>
     );
 }
@@ -3213,6 +3357,8 @@ function ClosedWeekPanel({
         ]
     ).filter(Boolean) as { label: string; value: number }[];
 
+    const [downloadOpen, setDownloadOpen] = useState(false);
+
     const snapExpenses = finalSummary.expenses ?? [];
 
     const snapMyGain: number | null = (() => {
@@ -3265,24 +3411,20 @@ function ClosedWeekPanel({
             <Badge tone={hasDrift ? "yellow" : "green"}>
                 {hasDrift ? "Diferencias" : "Snapshot vigente"}
             </Badge>
-            {!isSuperAdmin && snapMyGain != null ? (
-                <button
-                    type="button"
-                    title="Descargar recibo"
-                    className="flex h-8 w-8 items-center justify-center rounded-md border border-emerald-200 bg-emerald-50 text-emerald-600 transition hover:bg-emerald-100"
-                    onClick={() => downloadReceiptAsImage({
-                        ...receiptBase,
-                        adminName: profile?.name || profile?.email || "Admin",
-                        miGanancia: snapMyGain,
-                    })}
-                >
-                    <Icon name="download" />
-                </button>
-            ) : null}
+            <button
+                type="button"
+                onClick={() => setDownloadOpen(true)}
+                title="Descargar"
+                className="flex h-8 items-center gap-1.5 rounded-md border border-[#e4e7ec] bg-[#f9fafb] px-2 text-[12px] font-bold text-[#667085] transition hover:bg-[#f0edff] hover:text-[#7C3AED]"
+            >
+                <Icon name="download" />
+                Descargar
+            </button>
         </div>
     );
 
     return (
+        <>
         <Card className="overflow-hidden border-emerald-200">
             <CardHeader
                 title="Semana cerrada"
@@ -3307,41 +3449,13 @@ function ClosedWeekPanel({
                         {snapMyGain != null ? (
                             <div className="flex items-center justify-between gap-3">
                                 <span className="text-[12px] font-bold text-[#172033]">Mi ganancia (superadmin)</span>
-                                <div className="flex items-center gap-2">
-                                    <span className={`text-[12px] font-black ${snapMyGain >= 0 ? "text-emerald-600" : "text-red-500"}`}>{money(snapMyGain)}</span>
-                                    <button
-                                        type="button"
-                                        title="Descargar recibo"
-                                        className="flex h-7 w-7 items-center justify-center rounded-md border border-[#e4e7ec] bg-[#f9fafb] text-[#667085] transition hover:bg-[#f0edff] hover:text-[#7C3AED]"
-                                        onClick={() => downloadReceiptAsImage({
-                                            ...receiptBase,
-                                            adminName: profile?.name || profile?.email || "SuperAdmin",
-                                            miGanancia: snapMyGain,
-                                        })}
-                                    >
-                                        <Icon name="download" />
-                                    </button>
-                                </div>
+                                <span className={`text-[12px] font-black ${snapMyGain >= 0 ? "text-emerald-600" : "text-red-500"}`}>{money(snapMyGain)}</span>
                             </div>
                         ) : null}
                         {adminGains.map(({ admin, gain }) => (
                             <div key={admin.id} className="flex items-center justify-between gap-3">
                                 <span className="min-w-0 truncate text-[12px] font-semibold text-[#667085]">{admin.name || admin.email || admin.id}</span>
-                                <div className="flex items-center gap-2">
-                                    <span className={`shrink-0 text-[12px] font-black ${gain >= 0 ? "text-emerald-600" : "text-red-500"}`}>{money(gain)}</span>
-                                    <button
-                                        type="button"
-                                        title="Descargar recibo"
-                                        className="flex h-7 w-7 items-center justify-center rounded-md border border-[#e4e7ec] bg-[#f9fafb] text-[#667085] transition hover:bg-[#f0edff] hover:text-[#7C3AED]"
-                                        onClick={() => downloadReceiptAsImage({
-                                            ...receiptBase,
-                                            adminName: admin.name || admin.email || admin.id,
-                                            miGanancia: gain,
-                                        })}
-                                    >
-                                        <Icon name="download" />
-                                    </button>
-                                </div>
+                                <span className={`shrink-0 text-[12px] font-black ${gain >= 0 ? "text-emerald-600" : "text-red-500"}`}>{money(gain)}</span>
                             </div>
                         ))}
                     </div>
@@ -3436,6 +3550,64 @@ function ClosedWeekPanel({
                 </div>
             ) : null}
         </Card>
+        <DownloadSheet
+            open={downloadOpen}
+            onClose={() => setDownloadOpen(false)}
+            onExcel={() => {
+                const closedSummary: AccountingSummary = {
+                    startKey: weekStartKey,
+                    endKey: weekEndKey,
+                    visited: finalSummary.visited,
+                    rejected: finalSummary.rejected,
+                    assigned: finalSummary.assigned ?? 0,
+                    gross: dGross,
+                    grossVisits: finalSummary.grossVisits,
+                    grossSubscriptions: finalSummary.grossSubscriptions,
+                    subscriptionsPaid: finalSummary.subscriptionsPaid,
+                    investment: dCost,
+                    subscriptionInvestment: dSubCost,
+                    groupInvestment: finalSummary.groupInvestment,
+                    manualAdjustment: finalSummary.manualAdjustment,
+                    real: dReal,
+                    roi: dRoi,
+                    rows: finalSummary.rows ?? [],
+                    subscriptionRows: finalSummary.subscriptionRows ?? [],
+                    expenses: snapExpenses,
+                    expensesTotal: dExpenses,
+                };
+                exportAccountingSheet(closedSummary, snapMyGain, isSuperAdmin, snapExpenses);
+            }}
+            receipts={[
+                ...(snapMyGain != null && isSuperAdmin && profile ? [{
+                    label: profile.name || "Superadmin",
+                    onClick: () => downloadReceiptAsImage({
+                        ...receiptBase,
+                        adminName: profile.name || profile.email || "SuperAdmin",
+                        miGanancia: snapMyGain,
+                        expenses: snapExpenses,
+                    }),
+                }] : []),
+                ...(snapMyGain != null && !isSuperAdmin && profile ? [{
+                    label: profile.name || profile.email || "Admin",
+                    onClick: () => downloadReceiptAsImage({
+                        ...receiptBase,
+                        adminName: profile.name || profile.email || "Admin",
+                        miGanancia: snapMyGain,
+                        expenses: snapExpenses,
+                    }),
+                }] : []),
+                ...adminGains.map(({ admin, gain }) => ({
+                    label: admin.name || admin.email || admin.id,
+                    onClick: () => downloadReceiptAsImage({
+                        ...receiptBase,
+                        adminName: admin.name || admin.email || admin.id,
+                        miGanancia: gain,
+                        expenses: snapExpenses,
+                    }),
+                })),
+            ]}
+        />
+        </>
     );
 }
 
@@ -3943,6 +4115,8 @@ function DashboardContent({
     isSuperAdmin,
     exportSummary,
     snapMiGanancia,
+    expenses,
+    onDownload,
 }: {
     summary: AccountingSummary;
     events: DailyEventDoc[];
@@ -3954,6 +4128,8 @@ function DashboardContent({
     isSuperAdmin?: boolean;
     exportSummary?: AccountingSummary | null;
     snapMiGanancia?: number | null;
+    expenses?: WeeklyExpenseDoc[];
+    onDownload?: () => void;
 }) {
     const [rankingMetric, setRankingMetric] = useState<AccountingMetric>("real");
     const [chartMetric, setChartMetric] = useState<AccountingMetric>("real");
@@ -4032,7 +4208,13 @@ function DashboardContent({
                     />
 
                     <div className="border-t border-[#eef1f5] p-3 sm:p-4">
-                        <div className={`grid gap-2 sm:gap-3 ${miGanancia != null ? "grid-cols-4" : "grid-cols-3"}`}>
+                        <div className={`grid gap-2 sm:gap-3 ${
+                            miGanancia != null && (expenses ?? []).length > 0
+                                ? "grid-cols-5"
+                                : miGanancia != null || (expenses ?? []).length > 0
+                                    ? "grid-cols-4"
+                                    : "grid-cols-3"
+                        }`}>
                             <Metric label="Ganancia bruta" value={money(summary.gross)} delta="+ semana" tone="green" />
                             <Metric
                                 label="Inversion"
@@ -4056,6 +4238,14 @@ function DashboardContent({
                                     tone={miGanancia >= 0 ? "green" : "red"}
                                 />
                             ) : null}
+                            {(expenses ?? []).length > 0 ? (
+                                <Metric
+                                    label="Gastos"
+                                    value={money(summary.expensesTotal ?? 0)}
+                                    delta={`${expenses?.length ?? 0} concepto${(expenses?.length ?? 0) !== 1 ? "s" : ""}`}
+                                    tone="red"
+                                />
+                            ) : null}
                         </div>
 
                         <AccountingChart
@@ -4065,6 +4255,7 @@ function DashboardContent({
                             mode={chartMode}
                             maxValue={maxChartValue}
                         />
+
                     </div>
                 </Card>
 
@@ -4140,8 +4331,8 @@ function DashboardContent({
                     action={
                         <IconButton
                             icon="download"
-                            label="Exportar Excel"
-                            onClick={() => exportAccountingSheet(exportSummary ?? summary, snapMiGanancia ?? miGanancia, isSuperAdmin)}
+                            label="Descargar"
+                            onClick={() => onDownload?.()}
                         />
                     }
                 />
