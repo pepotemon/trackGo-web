@@ -549,6 +549,24 @@ function getExpenseShareFor(
     }, 0);
 }
 
+function portionExpenses(
+    expenses: WeeklyExpenseDoc[],
+    userId: string,
+    superadminDefault: boolean
+): WeeklyExpenseDoc[] {
+    return expenses.reduce<WeeklyExpenseDoc[]>((acc, e) => {
+        let amount: number;
+        if (!e.allocations || e.allocations.length === 0) {
+            amount = superadminDefault ? e.amount : 0;
+        } else {
+            const alloc = e.allocations.find((a) => a.userId === userId);
+            amount = Math.round(e.amount * ((alloc?.percentage ?? 0) / 100) * 100) / 100;
+        }
+        if (amount > 0) acc.push({ ...e, amount });
+        return acc;
+    }, []);
+}
+
 function DownloadSheet({
     open,
     onClose,
@@ -705,7 +723,7 @@ ${(expenses ?? []).map(e => `<tr>
     <td colspan="6"></td>
 </tr>`).join("")}
 <tr>
-    <td class="label">Total gastos</td><td class="money negative">${excelMoney(summary.expensesTotal ?? 0)}</td>
+    <td class="label">Total gastos</td><td class="money negative">${excelMoney((expenses ?? []).reduce((s, e) => s + e.amount, 0))}</td>
     <td colspan="8"></td>
 </tr>` : ""}
                     <tr><td class="section" colspan="10">Detalle por usuario</td></tr>
@@ -835,7 +853,7 @@ export default function AccountingPage() {
                         ? getWeeklyInvestment(week.startKey)
                         : Promise.all(weekRanges.map((item) => getWeeklyInvestment(item.startKey))),
                     listInvestmentGroups(),
-                    canGastos && periodMode === "weekly" ? listWeeklyExpenses(week.startKey) : Promise.resolve([] as WeeklyExpenseDoc[]),
+                    canAccounting && periodMode === "weekly" ? listWeeklyExpenses(week.startKey) : Promise.resolve([] as WeeklyExpenseDoc[]),
                     canGastos ? listAdminUsers() : Promise.resolve([] as UserDoc[]),
                 ]);
 
@@ -1057,6 +1075,11 @@ export default function AccountingPage() {
             })
             .filter(({ admin }) => myUsers.some((u) => u.sharedWith?.some((s) => s.adminId === admin.id)));
     }, [isSuperAdmin, summary, adminUsers, myUsers, expenses]);
+
+    const myExpenses = useMemo(
+        () => profile ? portionExpenses(expenses, profile.id, isSuperAdmin) : expenses,
+        [expenses, profile, isSuperAdmin]
+    );
 
     const adjustedCloseSummary = useMemo(() => {
         if (!summary || periodMode !== "weekly" || excludedUserIds.length === 0) return summary;
@@ -1484,7 +1507,7 @@ export default function AccountingPage() {
                                 isSuperAdmin={isSuperAdmin}
                                 exportSummary={exportSummary}
                                 snapMiGanancia={snapMiGanancia}
-                                expenses={expenses}
+                                expenses={myExpenses}
                                 onDownload={() => setDownloadOpen(true)}
                             />
                         ) : (
@@ -1635,7 +1658,8 @@ export default function AccountingPage() {
                                                             gross: adjustedCloseSummary.gross,
                                                             subscriptionInvestment: adjustedCloseSummary.subscriptionInvestment,
                                                             real: adjustedCloseSummary.real,
-                                                            expensesTotal: adjustedCloseSummary.expensesTotal ?? 0,
+                                                            expensesTotal: myExpenses.reduce((s, e) => s + e.amount, 0),
+                                                            expenses: myExpenses,
                                                             miGanancia: closeMiGanancia,
                                                         })}
                                                     >
@@ -1653,16 +1677,21 @@ export default function AccountingPage() {
                                                         type="button"
                                                         title="Descargar recibo"
                                                         className="flex h-7 w-7 items-center justify-center rounded-md border border-emerald-200 bg-white text-emerald-600 transition hover:bg-emerald-100"
-                                                        onClick={() => adjustedCloseSummary && downloadReceiptAsImage({
-                                                            adminName: admin.name || admin.email || admin.id,
-                                                            weekStartKey: week.startKey,
-                                                            weekEndKey: week.endKey,
-                                                            gross: adjustedCloseSummary.gross,
-                                                            subscriptionInvestment: adjustedCloseSummary.subscriptionInvestment,
-                                                            real: adjustedCloseSummary.real,
-                                                            expensesTotal: adjustedCloseSummary.expensesTotal ?? 0,
-                                                            miGanancia: gain,
-                                                        })}
+                                                        onClick={() => {
+                                                            if (!adjustedCloseSummary) return;
+                                                            const adminPortioned = portionExpenses(expenses, admin.id, false);
+                                                            downloadReceiptAsImage({
+                                                                adminName: admin.name || admin.email || admin.id,
+                                                                weekStartKey: week.startKey,
+                                                                weekEndKey: week.endKey,
+                                                                gross: adjustedCloseSummary.gross,
+                                                                subscriptionInvestment: adjustedCloseSummary.subscriptionInvestment,
+                                                                real: adjustedCloseSummary.real,
+                                                                expensesTotal: adminPortioned.reduce((s, e) => s + e.amount, 0),
+                                                                expenses: adminPortioned,
+                                                                miGanancia: gain,
+                                                            });
+                                                        }}
                                                     >
                                                         <Icon name="download" />
                                                     </button>
@@ -1772,7 +1801,7 @@ export default function AccountingPage() {
             <DownloadSheet
                 open={closeDownloadOpen}
                 onClose={() => setCloseDownloadOpen(false)}
-                onExcel={() => adjustedCloseSummary && exportAccountingSheet(adjustedCloseSummary, closeMiGanancia, isSuperAdmin, expenses)}
+                onExcel={() => adjustedCloseSummary && exportAccountingSheet(adjustedCloseSummary, closeMiGanancia, isSuperAdmin, myExpenses)}
                 receipts={[
                     ...(closeMiGanancia != null && profile ? [{
                         label: isSuperAdmin ? (profile.name || "Superadmin") : (profile.name || profile.email || "Admin"),
@@ -1783,25 +1812,28 @@ export default function AccountingPage() {
                             gross: adjustedCloseSummary.gross,
                             subscriptionInvestment: adjustedCloseSummary.subscriptionInvestment,
                             real: adjustedCloseSummary.real,
-                            expensesTotal: adjustedCloseSummary.expensesTotal ?? 0,
-                            expenses,
+                            expensesTotal: myExpenses.reduce((s, e) => s + e.amount, 0),
+                            expenses: myExpenses,
                             miGanancia: closeMiGanancia,
                         }),
                     }] : []),
-                    ...closeMiGananciaPerAdmin.map(({ admin, gain }) => ({
-                        label: admin.name || admin.email || admin.id,
-                        onClick: () => adjustedCloseSummary && downloadReceiptAsImage({
-                            adminName: admin.name || admin.email || admin.id,
-                            weekStartKey: week.startKey,
-                            weekEndKey: week.endKey,
-                            gross: adjustedCloseSummary.gross,
-                            subscriptionInvestment: adjustedCloseSummary.subscriptionInvestment,
-                            real: adjustedCloseSummary.real,
-                            expensesTotal: adjustedCloseSummary.expensesTotal ?? 0,
-                            expenses,
-                            miGanancia: gain,
-                        }),
-                    })),
+                    ...closeMiGananciaPerAdmin.map(({ admin, gain }) => {
+                        const adminPortioned = portionExpenses(expenses, admin.id, false);
+                        return {
+                            label: admin.name || admin.email || admin.id,
+                            onClick: () => adjustedCloseSummary && downloadReceiptAsImage({
+                                adminName: admin.name || admin.email || admin.id,
+                                weekStartKey: week.startKey,
+                                weekEndKey: week.endKey,
+                                gross: adjustedCloseSummary.gross,
+                                subscriptionInvestment: adjustedCloseSummary.subscriptionInvestment,
+                                real: adjustedCloseSummary.real,
+                                expensesTotal: adminPortioned.reduce((s, e) => s + e.amount, 0),
+                                expenses: adminPortioned,
+                                miGanancia: gain,
+                            }),
+                        };
+                    }),
                 ]}
             />
 
@@ -1837,7 +1869,7 @@ export default function AccountingPage() {
             <DownloadSheet
                 open={downloadOpen}
                 onClose={() => setDownloadOpen(false)}
-                onExcel={() => exportAccountingSheet(exportSummary ?? summary, snapMiGanancia, isSuperAdmin, expenses)}
+                onExcel={() => exportAccountingSheet(exportSummary ?? summary, snapMiGanancia, isSuperAdmin, myExpenses)}
                 receipts={[
                     ...(snapMiGanancia != null && profile ? [{
                         label: isSuperAdmin ? (profile.name || "Superadmin") : (profile.name || profile.email || "Admin"),
@@ -1848,25 +1880,28 @@ export default function AccountingPage() {
                             gross: (exportSummary ?? summary).gross,
                             subscriptionInvestment: (exportSummary ?? summary).subscriptionInvestment,
                             real: (exportSummary ?? summary).real,
-                            expensesTotal: (exportSummary ?? summary).expensesTotal ?? 0,
-                            expenses,
+                            expensesTotal: myExpenses.reduce((s, e) => s + e.amount, 0),
+                            expenses: myExpenses,
                             miGanancia: snapMiGanancia,
                         }),
                     }] : []),
-                    ...miGananciaPerAdmin.map(({ admin, gain }) => ({
-                        label: admin.name || admin.email || admin.id,
-                        onClick: () => summary && downloadReceiptAsImage({
-                            adminName: admin.name || admin.email || admin.id,
-                            weekStartKey: week.startKey,
-                            weekEndKey: week.endKey,
-                            gross: (exportSummary ?? summary).gross,
-                            subscriptionInvestment: (exportSummary ?? summary).subscriptionInvestment,
-                            real: (exportSummary ?? summary).real,
-                            expensesTotal: (exportSummary ?? summary).expensesTotal ?? 0,
-                            expenses,
-                            miGanancia: gain,
-                        }),
-                    })),
+                    ...miGananciaPerAdmin.map(({ admin, gain }) => {
+                        const adminPortioned = portionExpenses(expenses, admin.id, false);
+                        return {
+                            label: admin.name || admin.email || admin.id,
+                            onClick: () => summary && downloadReceiptAsImage({
+                                adminName: admin.name || admin.email || admin.id,
+                                weekStartKey: week.startKey,
+                                weekEndKey: week.endKey,
+                                gross: (exportSummary ?? summary).gross,
+                                subscriptionInvestment: (exportSummary ?? summary).subscriptionInvestment,
+                                real: (exportSummary ?? summary).real,
+                                expensesTotal: adminPortioned.reduce((s, e) => s + e.amount, 0),
+                                expenses: adminPortioned,
+                                miGanancia: gain,
+                            }),
+                        };
+                    }),
                 ]}
             />
         </div>
@@ -3554,6 +3589,7 @@ function ClosedWeekPanel({
             open={downloadOpen}
             onClose={() => setDownloadOpen(false)}
             onExcel={() => {
+                const snapMyExpenses = profile ? portionExpenses(snapExpenses, profile.id, isSuperAdmin) : snapExpenses;
                 const closedSummary: AccountingSummary = {
                     startKey: weekStartKey,
                     endKey: weekEndKey,
@@ -3572,39 +3608,51 @@ function ClosedWeekPanel({
                     roi: dRoi,
                     rows: finalSummary.rows ?? [],
                     subscriptionRows: finalSummary.subscriptionRows ?? [],
-                    expenses: snapExpenses,
-                    expensesTotal: dExpenses,
+                    expenses: snapMyExpenses,
+                    expensesTotal: snapMyExpenses.reduce((s, e) => s + e.amount, 0),
                 };
-                exportAccountingSheet(closedSummary, snapMyGain, isSuperAdmin, snapExpenses);
+                exportAccountingSheet(closedSummary, snapMyGain, isSuperAdmin, snapMyExpenses);
             }}
             receipts={[
                 ...(snapMyGain != null && isSuperAdmin && profile ? [{
                     label: profile.name || "Superadmin",
-                    onClick: () => downloadReceiptAsImage({
-                        ...receiptBase,
-                        adminName: profile.name || profile.email || "SuperAdmin",
-                        miGanancia: snapMyGain,
-                        expenses: snapExpenses,
-                    }),
+                    onClick: () => {
+                        const myPortioned = portionExpenses(snapExpenses, profile.id, true);
+                        downloadReceiptAsImage({
+                            ...receiptBase,
+                            expensesTotal: myPortioned.reduce((s, e) => s + e.amount, 0),
+                            adminName: profile.name || profile.email || "SuperAdmin",
+                            miGanancia: snapMyGain,
+                            expenses: myPortioned,
+                        });
+                    },
                 }] : []),
                 ...(snapMyGain != null && !isSuperAdmin && profile ? [{
                     label: profile.name || profile.email || "Admin",
-                    onClick: () => downloadReceiptAsImage({
-                        ...receiptBase,
-                        adminName: profile.name || profile.email || "Admin",
-                        miGanancia: snapMyGain,
-                        expenses: snapExpenses,
-                    }),
+                    onClick: () => {
+                        const myPortioned = portionExpenses(snapExpenses, profile.id, false);
+                        downloadReceiptAsImage({
+                            ...receiptBase,
+                            expensesTotal: myPortioned.reduce((s, e) => s + e.amount, 0),
+                            adminName: profile.name || profile.email || "Admin",
+                            miGanancia: snapMyGain,
+                            expenses: myPortioned,
+                        });
+                    },
                 }] : []),
-                ...adminGains.map(({ admin, gain }) => ({
-                    label: admin.name || admin.email || admin.id,
-                    onClick: () => downloadReceiptAsImage({
-                        ...receiptBase,
-                        adminName: admin.name || admin.email || admin.id,
-                        miGanancia: gain,
-                        expenses: snapExpenses,
-                    }),
-                })),
+                ...adminGains.map(({ admin, gain }) => {
+                    const adminPortioned = portionExpenses(snapExpenses, admin.id, false);
+                    return {
+                        label: admin.name || admin.email || admin.id,
+                        onClick: () => downloadReceiptAsImage({
+                            ...receiptBase,
+                            expensesTotal: adminPortioned.reduce((s, e) => s + e.amount, 0),
+                            adminName: admin.name || admin.email || admin.id,
+                            miGanancia: gain,
+                            expenses: adminPortioned,
+                        }),
+                    };
+                }),
             ]}
         />
         </>
@@ -4224,6 +4272,14 @@ function DashboardContent({
                                     : `${money(summary.subscriptionInvestment)} sub`}
                                 tone="neutral"
                             />
+                            {(expenses ?? []).length > 0 ? (
+                                <Metric
+                                    label="Gastos"
+                                    value={money((expenses ?? []).reduce((s, e) => s + e.amount, 0))}
+                                    delta={`${expenses?.length ?? 0} concepto${(expenses?.length ?? 0) !== 1 ? "s" : ""}`}
+                                    tone="red"
+                                />
+                            ) : null}
                             <Metric
                                 label="Ganancia real"
                                 value={money(summary.real)}
@@ -4236,14 +4292,6 @@ function DashboardContent({
                                     value={money(miGanancia)}
                                     delta="Tu parte"
                                     tone={miGanancia >= 0 ? "green" : "red"}
-                                />
-                            ) : null}
-                            {(expenses ?? []).length > 0 ? (
-                                <Metric
-                                    label="Gastos"
-                                    value={money(summary.expensesTotal ?? 0)}
-                                    delta={`${expenses?.length ?? 0} concepto${(expenses?.length ?? 0) !== 1 ? "s" : ""}`}
-                                    tone="red"
                                 />
                             ) : null}
                         </div>

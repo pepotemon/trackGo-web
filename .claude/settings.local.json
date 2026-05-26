@@ -34,7 +34,9 @@
       "Bash(cp C:/Users/helle/trackgo-web/.claude/worktrees/agent-ade4ef5949149778f/src/types/users.ts C:/Users/helle/trackgo-web/src/types/users.ts)",
       "Bash(cp C:/Users/helle/trackgo-web/.claude/worktrees/agent-ade4ef5949149778f/src/data/accountingRepo.ts C:/Users/helle/trackgo-web/src/data/accountingRepo.ts)",
       "Bash(cp C:/Users/helle/trackgo-web/.claude/worktrees/agent-ade4ef5949149778f/src/features/accounting/calcAccounting.ts C:/Users/helle/trackgo-web/src/features/accounting/calcAccounting.ts)",
-      "Bash(cp C:/Users/helle/trackgo-web/.claude/worktrees/agent-ade4ef5949149778f/src/app/admin/accounting/page.tsx C:/Users/helle/trackgo-web/src/app/admin/accounting/page.tsx)"
+      "Bash(cp C:/Users/helle/trackgo-web/.claude/worktrees/agent-ade4ef5949149778f/src/app/admin/accounting/page.tsx C:/Users/helle/trackgo-web/src/app/admin/accounting/page.tsx)",
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
+      "Bash(echo \"Exit code: $?\")"
     ]
   }
 }
