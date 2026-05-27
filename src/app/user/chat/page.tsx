@@ -205,6 +205,8 @@ export default function UserIncompleteClientsPage() {
     const [reviewNoteOpen, setReviewNoteOpen] = useState(false);
     const [reviewTouchStartX, setReviewTouchStartX] = useState<number | null>(null);
     const [confirmTakeOpen, setConfirmTakeOpen] = useState(false);
+    const [waTakeLead, setWaTakeLead] = useState<MetaLeadDoc | null>(null);
+    const [waTaking, setWaTaking] = useState(false);
     const copyToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // pagination
@@ -214,6 +216,10 @@ export default function UserIncompleteClientsPage() {
     const [waSent, setWaSent] = useState<Set<string>>(new Set());
     const [reviewed, setReviewed] = useState<Set<string>>(new Set());
     const { triggerWa, showModal: waLimitOpen, countAtWarning: waLimitCount, confirmWa, cancelWa } = useWhatsAppDailyLimit();
+
+    useEffect(() => {
+        localStorage.setItem('recuperar_last_visited_at', String(Date.now()));
+    }, []);
 
     useEffect(() => {
         const timer = window.setInterval(() => setRecoveryClock((value) => value + 1), 5 * 60 * 1000);
@@ -362,14 +368,53 @@ export default function UserIncompleteClientsPage() {
     }
 
     function openWhatsApp(lead: MetaLeadDoc) {
-        const msg = isSpanishPhone(lead.phone)
-            ? `¡Hola! Somos de Crédito Comercial. Usted nos contactó anteriormente sobre la liberación de crédito para su negocio. Nos gustaría saber si aún tiene interés. ¡Gracias y disculpe la molestia! 🙏`
-            : `Olá! Somos da Crédito Comercial. Você nos contatou anteriormente sobre a liberação de crédito para o seu comércio. Gostaríamos de saber se ainda tem interesse. Obrigado e desculpe o incômodo! 🙏`;
-        triggerWa(() => {
-            window.open(buildWALink(lead.phone, msg), "_blank");
-            markWhatsAppSent(lead.id);
-            setWaSent((prev) => new Set(prev).add(lead.id));
-        });
+        setWaTakeLead(lead);
+    }
+
+    function openMaps(lead: MetaLeadDoc) {
+        const url = lead.location?.mapsUrl || (
+            lead.location?.lat != null && lead.location?.lng != null
+                ? `https://maps.google.com/?q=${lead.location.lat},${lead.location.lng}`
+                : ""
+        );
+        if (url) window.open(url, "_blank");
+    }
+
+    async function confirmTakeAndWa() {
+        if (!waTakeLead || !userId) return;
+        setWaTaking(true);
+        const lead = waTakeLead;
+        try {
+            if (lead.verificationStatus === "not_suitable") {
+                await takeNotSuitableClient(lead.id, userId);
+            } else {
+                await takeIncompleteClient(lead.id, userId, {
+                    leadName: lead.name,
+                    leadPhone: lead.phone,
+                    leadBusiness: lead.business,
+                });
+            }
+            setWaTakeLead(null);
+            setWaTaking(false);
+            const msg = isSpanishPhone(lead.phone)
+                ? `¡Hola! Somos de Crédito Comercial. Usted nos contactó anteriormente sobre la liberación de crédito para su negocio. Nos gustaría saber si aún tiene interés. ¡Gracias y disculpe la molestia! 🙏`
+                : `Olá! Somos da Crédito Comercial. Você nos contatou anteriormente sobre a liberação de crédito para o seu comércio. Gostaríamos de saber se ainda tem interesse. Obrigado e desculpe o incômodo! 🙏`;
+            triggerWa(() => {
+                window.open(buildWALink(lead.phone, msg), "_blank");
+                markWhatsAppSent(lead.id);
+                setWaSent((prev) => new Set(prev).add(lead.id));
+            });
+            setToast("Cliente tomado. Lo encontrarás en Prospectos para completar sus datos.");
+            window.setTimeout(() => setToast(""), 2600);
+        } catch (error) {
+            setWaTakeLead(null);
+            setWaTaking(false);
+            const message = error instanceof Error && error.message === "client_already_taken"
+                ? "Este cliente ya fue tomado por otro usuario."
+                : "No se pudo tomar este cliente. Intenta nuevamente.";
+            setToast(message);
+            window.setTimeout(() => setToast(""), 2800);
+        }
     }
 
     function openNotSuitable(lead: MetaLeadDoc) { setActionLead(lead); setActionType("not_suitable"); }
@@ -400,6 +445,7 @@ export default function UserIncompleteClientsPage() {
     useBackButtonDismiss(infoOpen, () => setInfoOpen(false));
     useBackButtonDismiss(filtersOpen, () => setFiltersOpen(false));
     useBackButtonDismiss(Boolean(actionType), closeAction);
+    useBackButtonDismiss(Boolean(waTakeLead), () => setWaTakeLead(null));
 
     async function confirmNotSuitable() {
         if (!actionLead) return;
@@ -657,6 +703,7 @@ export default function UserIncompleteClientsPage() {
                                     onNotSuitable={() => openNotSuitable(lead)}
                                     onReview={() => openReview(lead)}
                                     onWhatsApp={() => openWhatsApp(lead)}
+                                    onMaps={() => openMaps(lead)}
                                     onCopy={() => copyLead(lead)}
                                 />
                             ))}
@@ -708,6 +755,7 @@ export default function UserIncompleteClientsPage() {
                                         onNotSuitable={() => { openNotSuitable(lead); setSearchOpen(false); }}
                                         onReview={() => { openReview(lead); setSearchOpen(false); }}
                                         onWhatsApp={() => { openWhatsApp(lead); setSearchOpen(false); }}
+                                        onMaps={() => openMaps(lead)}
                                         onCopy={() => copyLead(lead)}
                                     />
                                 ))}
@@ -1018,6 +1066,31 @@ export default function UserIncompleteClientsPage() {
                 </BottomSheet>
             ) : null}
 
+            {waTakeLead ? (
+                <BottomSheet onClose={() => setWaTakeLead(null)}>
+                    <div className="mb-4">
+                        <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-700">CONTACTAR</span>
+                        <p className="mt-2 text-[17px] font-black text-[#101936]">{displayName(waTakeLead)}</p>
+                        <p className="mt-0.5 text-[12px] font-semibold text-[#66739A]">{waTakeLead.phone}</p>
+                    </div>
+                    <div className="mb-4 rounded-[14px] border border-emerald-100 bg-emerald-50 px-3 py-3 text-[12px] font-semibold text-emerald-800">
+                        <p className="font-black">Para contactar, primero debes tomar el cliente</p>
+                        <p className="mt-1">Al tomarlo pasará a tus Prospectos y ningún otro vendedor podrá tomarlo. Una vez tomado, WhatsApp se abrirá automáticamente.</p>
+                    </div>
+                    <div className="flex gap-2">
+                        <button type="button" onClick={() => setWaTakeLead(null)} className="flex-1 rounded-[14px] border border-[#E8E7FB] py-3 text-[13px] font-black text-[#66739A]">Cancelar</button>
+                        <button
+                            type="button"
+                            onClick={() => void confirmTakeAndWa()}
+                            disabled={waTaking}
+                            className="flex-1 rounded-[14px] bg-emerald-600 py-3 text-[13px] font-black text-white disabled:opacity-60"
+                        >
+                            {waTaking ? "Tomando..." : "Tomar y contactar"}
+                        </button>
+                    </div>
+                </BottomSheet>
+            ) : null}
+
             {actionType === "not_suitable" && actionLead ? (
                 <BottomSheet onClose={closeAction}>
                     <div className="mb-4">
@@ -1050,7 +1123,7 @@ export default function UserIncompleteClientsPage() {
 
 function ClientCard({
     lead, note, tab, waSent, reviewed, copied,
-    onNote, onNotSuitable, onReview, onWhatsApp, onCopy,
+    onNote, onNotSuitable, onReview, onWhatsApp, onMaps, onCopy,
 }: {
     lead: MetaLeadDoc;
     note?: string;
@@ -1062,6 +1135,7 @@ function ClientCard({
     onNotSuitable: () => void;
     onReview: () => void;
     onWhatsApp: () => void;
+    onMaps: () => void;
     onCopy: () => void;
 }) {
     const ddd = extractDDD(lead.phone);
@@ -1172,6 +1246,9 @@ function ClientCard({
                     <ActionBtn onClick={onWhatsApp} tone={waSent ? "sent" : "green"} title={waSent ? "Enviado" : "WhatsApp"}>
                         <WspIcon />
                     </ActionBtn>
+                    {(lead.location?.mapsUrl || lead.location?.lat) ? (
+                        <ActionBtn onClick={onMaps} tone="blue" title="Maps"><MapsIcon /></ActionBtn>
+                    ) : null}
                     <div className="flex-1" />
                     {tab === "incomplete" ? (
                         <ActionBtn onClick={onNotSuitable} tone="gray" title="Marcar no apto"><BanIcon /></ActionBtn>
@@ -1234,12 +1311,13 @@ function CountPill({ active, hasMore, children }: { active: boolean; hasMore?: b
         ].join(" ")}>{children}</span>
     );
 }
-function ActionBtn({ onClick, tone, title, children }: { onClick: () => void; tone: "green" | "violet" | "gray" | "sent"; title: string; children: React.ReactNode }) {
+function ActionBtn({ onClick, tone, title, children }: { onClick: () => void; tone: "green" | "violet" | "gray" | "sent" | "blue"; title: string; children: React.ReactNode }) {
     const cls: Record<string, string> = {
         green: "border-emerald-200 bg-emerald-50 text-emerald-700",
         violet: "border-violet-200 bg-violet-50 text-violet-700",
         gray: "border-[#E8E7FB] bg-white text-[#66739A]",
         sent: "border-[#7C3AED] bg-[#7C3AED] text-white",
+        blue: "border-blue-200 bg-blue-50 text-blue-700",
     };
     return <button type="button" onClick={onClick} title={title} className={`flex h-8 w-8 items-center justify-center rounded-[11px] border transition active:opacity-70 ${cls[tone]}`}>{children}</button>;
 }
@@ -1313,3 +1391,4 @@ function ArrowLeftIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.
 function ArrowRightIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="m9 18 6-6-6-6" /></svg>; }
 function ClientsIcon({ className }: { className?: string }) { return <svg viewBox="0 0 24 24" className={className} {...ic}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>; }
 function WspIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/></svg>; }
+function MapsIcon() { return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M9 18 3 21V6l6-3 6 3 6-3v15l-6 3-6-3Z" /><path d="M9 3v15M15 6v15" /></svg>; }

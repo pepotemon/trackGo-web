@@ -10,6 +10,7 @@ import {
     subscribeUserDailyEvents,
     subscribeUserLeads,
 } from "@/data/userLeadsRepo";
+import { subscribeIncompleteClients } from "@/data/incompleteClientsRepo";
 import type { MetaLeadDoc } from "@/types/leads";
 import type { DailyEventDoc } from "@/types/accounting";
 import {
@@ -116,7 +117,7 @@ function saveNote(leadId: string, note: string) {
 }
 
 export default function UserLeadsPage() {
-    const { firebaseUser, profile, userPermissions } = useAuth();
+    const { firebaseUser, profile, userPermissions, phoneCodes } = useAuth();
     const [leads, setLeads] = useState<MetaLeadDoc[]>([]);
     const [events, setEvents] = useState<DailyEventDoc[]>([]);
     const [loading, setLoading] = useState(true);
@@ -140,6 +141,8 @@ export default function UserLeadsPage() {
     const [saving, setSaving] = useState(false);
 
     const { triggerWa, showModal: waLimitOpen, countAtWarning: waLimitCount, confirmWa, cancelWa } = useWhatsAppDailyLimit();
+    const [recuperarAlert, setRecuperarAlert] = useState(false);
+    const [recuperarCount, setRecuperarCount] = useState(0);
 
     const userId = firebaseUser?.uid ?? "";
     const userName = profile?.name?.split(" ")[0] ?? "Vendedor";
@@ -172,6 +175,30 @@ export default function UserLeadsPage() {
         const unsub = subscribeUserDailyEvents(userId, startKey, endKey, setEvents);
         return unsub;
     }, [activeWeek, userId]);
+
+    useEffect(() => {
+        if (!phoneCodes.length || !userId) return;
+
+        const VISITED_KEY = 'recuperar_last_visited_at';
+        const SNOOZE_KEY = 'recuperar_snooze_until';
+        const now = Date.now();
+
+        const snoozeUntil = parseInt(localStorage.getItem(SNOOZE_KEY) ?? '0', 10);
+        if (snoozeUntil > now) return;
+
+        const lastVisited = parseInt(localStorage.getItem(VISITED_KEY) ?? '0', 10);
+        if (now - lastVisited < 2 * 24 * 60 * 60 * 1000) return;
+
+        const unsub = subscribeIncompleteClients(phoneCodes, (clients) => {
+            unsub();
+            if (clients.length >= 5) {
+                setRecuperarCount(clients.length);
+                setRecuperarAlert(true);
+            }
+        });
+
+        return unsub;
+    }, [phoneCodes, userId]);
 
     const stats = useMemo<UserLeadStats>(() => {
         const today = todayKey();
@@ -688,6 +715,48 @@ export default function UserLeadsPage() {
             {waLimitOpen ? (
                 <WhatsAppLimitModal count={waLimitCount} onConfirm={confirmWa} onCancel={cancelWa} />
             ) : null}
+
+            {recuperarAlert ? (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
+                    <button type="button" className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => setRecuperarAlert(false)} />
+                    <div className="relative w-full max-w-sm rounded-[24px] bg-white p-5 shadow-2xl">
+                        <div className="mb-4 flex items-start gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] bg-amber-100">
+                                <AlertTriangleIcon />
+                            </div>
+                            <div className="min-w-0">
+                                <p className="text-[16px] font-black text-[#101936]">Clientes por recuperar</p>
+                                <p className="mt-0.5 text-[12px] font-semibold text-[#66739A]">{recuperarCount} clientes sin atención por más de 2 días</p>
+                            </div>
+                        </div>
+                        <p className="mb-5 rounded-[14px] border border-amber-100 bg-amber-50 px-3 py-2.5 text-[12px] font-semibold text-amber-800">
+                            Hay clientes esperando contacto. ¡Revísalos antes de que se enfríen!
+                        </p>
+                        <div className="flex gap-2">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    localStorage.setItem('recuperar_snooze_until', String(Date.now() + 24 * 60 * 60 * 1000));
+                                    setRecuperarAlert(false);
+                                }}
+                                className="flex-1 rounded-[14px] border border-[#E8E7FB] py-3 text-[13px] font-black text-[#66739A]"
+                            >
+                                Más tarde
+                            </button>
+                            <Link
+                                href="/user/chat"
+                                onClick={() => {
+                                    localStorage.setItem('recuperar_last_visited_at', String(Date.now()));
+                                    setRecuperarAlert(false);
+                                }}
+                                className="flex flex-1 items-center justify-center rounded-[14px] bg-amber-500 py-3 text-[13px] font-black text-white"
+                            >
+                                Ver ahora
+                            </Link>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
         </div>
     );
 }
@@ -1028,4 +1097,7 @@ function WACheckIcon() {
 }
 function InboxIcon() {
     return <svg viewBox="0 0 24 24" className="h-7 w-7 text-[#7C3AED]" {...ic}><path d="M4 4h16l-2 9H6L4 4Z" /><path d="M6 13v5a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-5" /></svg>;
+}
+function AlertTriangleIcon() {
+    return <svg viewBox="0 0 24 24" className="h-5 w-5 text-amber-600" {...ic}><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" /><path d="M12 9v4M12 17h.01" /></svg>;
 }
