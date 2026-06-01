@@ -142,28 +142,33 @@ export default function SubscriptionsAdminPage() {
     const [manualForm, setManualForm] = useState<ManualSubscriptionForm>(defaultManualForm);
     const [manualSaving, setManualSaving] = useState(false);
     const [manualError, setManualError] = useState("");
+    const [spendRefreshing, setSpendRefreshing] = useState(false);
+    const [noteBusyId, setNoteBusyId] = useState("");
 
     const canView = permissions.subscriptionsView || permissions.subscriptionsEdit;
     const canManage = permissions.subscriptionsEdit || isSuperAdmin;
+
+    async function fetchOverviewData(): Promise<Overview> {
+        const token = await getAuthToken();
+        const response = await fetch("/api/subscriptions/overview", {
+            cache: "no-store",
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.message || "No se pudo cargar suscripciones.");
+        return {
+            settings: data.settings || { adsShare: 0.5, cycleDays: 5 },
+            cities: data.cities || [],
+            subscriptions: data.subscriptions || [],
+            checkouts: data.checkouts || [],
+        };
+    }
 
     const loadOverview = useCallback(async () => {
         setLoading(true);
         setError("");
         try {
-            const token = await getAuthToken();
-            const response = await fetch("/api/subscriptions/overview", {
-                cache: "no-store",
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            const data = await response.json();
-            if (!response.ok || !data.ok) throw new Error(data.message || "No se pudo cargar suscripciones.");
-
-            const next: Overview = {
-                settings: data.settings || { adsShare: 0.5, cycleDays: 5 },
-                cities: data.cities || [],
-                subscriptions: data.subscriptions || [],
-                checkouts: data.checkouts || [],
-            };
+            const next = await fetchOverviewData();
             setOverview(next);
             setSettingsDraft(next.settings);
         } catch (err) {
@@ -172,6 +177,39 @@ export default function SubscriptionsAdminPage() {
             setLoading(false);
         }
     }, []);
+
+    async function refreshCampaignSpend() {
+        setSpendRefreshing(true);
+        try {
+            const next = await fetchOverviewData();
+            setOverview(next);
+        } catch {
+            // silencioso — datos anteriores siguen visibles
+        } finally {
+            setSpendRefreshing(false);
+        }
+    }
+
+    async function saveNote(cityId: string, note: string | null) {
+        setNoteBusyId(cityId);
+        try {
+            const token = await getAuthToken();
+            const response = await fetch("/api/subscriptions/city-note", {
+                method: "PATCH",
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ cityId, note }),
+            });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.message);
+            setOverview((prev) =>
+                prev ? { ...prev, cities: prev.cities.map((c) => c.id === cityId ? { ...c, note } : c) } : prev,
+            );
+        } catch {
+            // silencioso
+        } finally {
+            setNoteBusyId("");
+        }
+    }
 
     useEffect(() => {
         const timer = window.setTimeout(() => {
@@ -573,7 +611,10 @@ export default function SubscriptionsAdminPage() {
                                         key={city.id}
                                         city={city}
                                         subscription={activeSubscriptions.find((item) => item.cityId === city.id)}
+                                        canManage={canManage}
+                                        noteSaving={noteBusyId === city.id}
                                         onSheet={() => setSheetCityId(city.id)}
+                                        onSaveNote={(note) => void saveNote(city.id, note)}
                                     />
                                 ))}
                                 {overview?.cities.length === 0 ? <EmptyInline text="Aun no hay ciudades configuradas." /> : null}
@@ -589,7 +630,7 @@ export default function SubscriptionsAdminPage() {
                         </Card>
                     </section>
 
-                    <CampaignSpendPanel subscriptions={activeSubscriptions} cities={overview?.cities ?? []} onRefresh={loadOverview} loading={loading} />
+                    <CampaignSpendPanel subscriptions={activeSubscriptions} cities={overview?.cities ?? []} onRefresh={refreshCampaignSpend} loading={spendRefreshing} />
 
                     <Card>
                         <CardHeader title="Pagos recientes" subtitle="Pix, reservas, activaciones y errores de operacion." />
@@ -687,11 +728,17 @@ export default function SubscriptionsAdminPage() {
 function CityCard({
     city,
     subscription,
+    canManage,
+    noteSaving,
     onSheet,
+    onSaveNote,
 }: {
     city: SubscriptionCity;
     subscription?: OverviewSubscription;
+    canManage: boolean;
+    noteSaving: boolean;
     onSheet: () => void;
+    onSaveNote: (note: string | null) => void;
 }) {
     const dotColor =
         city.status === "available"
@@ -700,38 +747,113 @@ function CityCard({
               ? "bg-amber-400"
               : "bg-rose-400";
     return (
-        <div className="flex items-center gap-3 rounded-[16px] border border-[#eef1f5] bg-white p-3 transition hover:border-[#ded8ff] hover:bg-[#fbfaff]">
-            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${dotColor}`} />
-            <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-1.5">
-                    <p className="truncate text-[14px] font-black text-[#101936]">{city.name}</p>
-                    <StatusPill status={city.status} />
-                    {city.campaignDeliveryStatus === "paused" && city.status === "occupied" ? (
-                        <StatusPill status="campaign_paused" />
+        <div className="rounded-[16px] border border-[#eef1f5] bg-white p-3 transition hover:border-[#ded8ff] hover:bg-[#fbfaff]">
+            <div className="flex items-center gap-3">
+                <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${dotColor}`} />
+                <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                        <p className="truncate text-[14px] font-black text-[#101936]">{city.name}</p>
+                        <StatusPill status={city.status} />
+                        {city.campaignDeliveryStatus === "paused" && city.status === "occupied" ? (
+                            <StatusPill status="campaign_paused" />
+                        ) : null}
+                    </div>
+                    <p className="mt-0.5 text-[11px] font-semibold text-[#66739a]">
+                        {[city.state, city.country].filter(Boolean).join(" · ") || "Sin region"}
+                    </p>
+                    {subscription ? (
+                        <p className="mt-1 text-[11px] font-bold text-[#6d28d9]">
+                            {subscription.userName} · fin {formatDate(subscription.endDate)}
+                            {formatCountdown(subscription.endDate) ? (
+                                <span className="ml-1.5 rounded-full bg-[#f4f0ff] px-1.5 py-0.5 text-[9px] font-black text-[#7c3aed]">
+                                    {formatCountdown(subscription.endDate)}
+                                </span>
+                            ) : null}
+                        </p>
                     ) : null}
                 </div>
-                <p className="mt-0.5 text-[11px] font-semibold text-[#66739a]">
-                    {[city.state, city.country].filter(Boolean).join(" · ") || "Sin region"}
+                <button
+                    type="button"
+                    onClick={onSheet}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-[#e8e7fb] bg-[#f8f7ff] transition active:bg-[#f3f0ff]"
+                >
+                    <AppIcon name="more" tone="slate" size="sm" plain className="h-4 w-4 text-[#66739a]" />
+                </button>
+            </div>
+            <CityNoteInline note={city.note} canEdit={canManage} saving={noteSaving} onSave={onSaveNote} />
+        </div>
+    );
+}
+
+function CityNoteInline({
+    note,
+    canEdit,
+    saving,
+    onSave,
+}: {
+    note?: string | null;
+    canEdit: boolean;
+    saving: boolean;
+    onSave: (note: string | null) => void;
+}) {
+    const [editing, setEditing] = useState(false);
+    const [draft, setDraft] = useState("");
+
+    function startEdit() {
+        setDraft(note || "");
+        setEditing(true);
+    }
+
+    function commit() {
+        setEditing(false);
+        const trimmed = draft.trim();
+        if (trimmed !== (note || "")) onSave(trimmed || null);
+    }
+
+    if (editing) {
+        return (
+            <input
+                autoFocus
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onBlur={commit}
+                onKeyDown={(e) => {
+                    if (e.key === "Enter") e.currentTarget.blur();
+                    if (e.key === "Escape") setEditing(false);
+                }}
+                maxLength={200}
+                placeholder="Escribe una nota..."
+                className="mt-2 w-full rounded-xl border border-[#ded8ff] bg-[#f8f7ff] px-2.5 py-1.5 text-[11px] font-semibold text-[#101936] outline-none focus:border-[#8b5cf6] focus:ring-2 focus:ring-[#ede9fe]"
+            />
+        );
+    }
+
+    if (note) {
+        return (
+            <div className="mt-2 flex items-center gap-1.5 rounded-xl bg-[#faf9ff] px-2.5 py-1.5">
+                <p className="min-w-0 flex-1 truncate text-[10px] font-semibold italic text-[#66739a]">
+                    {saving ? "Guardando..." : note}
                 </p>
-                {subscription ? (
-                    <p className="mt-1 text-[11px] font-bold text-[#6d28d9]">
-                        {subscription.userName} · fin {formatDate(subscription.endDate)}
-                        {formatCountdown(subscription.endDate) ? (
-                            <span className="ml-1.5 rounded-full bg-[#f4f0ff] px-1.5 py-0.5 text-[9px] font-black text-[#7c3aed]">
-                                {formatCountdown(subscription.endDate)}
-                            </span>
-                        ) : null}
-                    </p>
+                {canEdit ? (
+                    <>
+                        <button type="button" onClick={startEdit} className="shrink-0 text-[10px] text-[#c4b5fd] transition hover:text-[#7c3aed]">✏</button>
+                        <button type="button" onClick={() => onSave(null)} className="shrink-0 text-[10px] text-[#c4b5fd] transition hover:text-red-400">✕</button>
+                    </>
                 ) : null}
             </div>
-            <button
-                type="button"
-                onClick={onSheet}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border border-[#e8e7fb] bg-[#f8f7ff] transition active:bg-[#f3f0ff]"
-            >
-                <AppIcon name="more" tone="slate" size="sm" plain className="h-4 w-4 text-[#66739a]" />
-            </button>
-        </div>
+        );
+    }
+
+    if (!canEdit) return null;
+
+    return (
+        <button
+            type="button"
+            onClick={startEdit}
+            className="mt-2 block text-[10px] font-semibold text-[#c4b5fd] transition hover:text-[#7c3aed]"
+        >
+            + nota
+        </button>
     );
 }
 

@@ -508,6 +508,17 @@ export async function saveSubscriptionCity(input: {
     };
 }
 
+export async function saveCityNote(cityId: string, note: string | null) {
+    const id = cityId.trim();
+    if (!id) throw new ResponseError("city_required", "Indica la ciudad.");
+    const cityRef = adminDb.collection("cities").doc(id);
+    const clean = note ? note.trim().slice(0, 500) : null;
+    await cityRef.set(
+        { note: clean ?? FieldValue.delete(), updatedAt: nowMs() },
+        { merge: true },
+    );
+}
+
 export async function deleteSubscriptionCity(cityId: string) {
     const cleanCityId = cityId.trim();
     if (!cleanCityId) {
