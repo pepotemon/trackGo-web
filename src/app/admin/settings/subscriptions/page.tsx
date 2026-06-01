@@ -589,7 +589,7 @@ export default function SubscriptionsAdminPage() {
                         </Card>
                     </section>
 
-                    <CampaignSpendPanel subscriptions={activeSubscriptions} onRefresh={loadOverview} loading={loading} />
+                    <CampaignSpendPanel subscriptions={activeSubscriptions} cities={overview?.cities ?? []} onRefresh={loadOverview} loading={loading} />
 
                     <Card>
                         <CardHeader title="Pagos recientes" subtitle="Pix, reservas, activaciones y errores de operacion." />
@@ -706,6 +706,9 @@ function CityCard({
                 <div className="flex flex-wrap items-center gap-1.5">
                     <p className="truncate text-[14px] font-black text-[#101936]">{city.name}</p>
                     <StatusPill status={city.status} />
+                    {city.campaignDeliveryStatus === "paused" && city.status === "occupied" ? (
+                        <StatusPill status="campaign_paused" />
+                    ) : null}
                 </div>
                 <p className="mt-0.5 text-[11px] font-semibold text-[#66739a]">
                     {[city.state, city.country].filter(Boolean).join(" · ") || "Sin region"}
@@ -875,10 +878,12 @@ function SubscriptionRow({ item }: { item: OverviewSubscription }) {
 
 function CampaignSpendPanel({
     subscriptions,
+    cities,
     onRefresh,
     loading,
 }: {
     subscriptions: OverviewSubscription[];
+    cities: SubscriptionCity[];
     onRefresh: () => void;
     loading: boolean;
 }) {
@@ -948,11 +953,20 @@ function CampaignSpendPanel({
                         const cycle = Number(item.cycleSpend || 0);
                         const pct = target > 0 ? Math.min(100, Math.round((cycle / target) * 100)) : 0;
                         const status = item.spendStatus === "live" ? "En vivo" : item.spendStatus === "error" ? "Sin lectura" : "Guardado";
+                        const cityDelivery = cities.find((c) => c.id === item.cityId)?.campaignDeliveryStatus;
+                        const isCampaignPaused = cityDelivery === "paused";
                         return (
-                            <div key={item.id} className="rounded-2xl border border-[#e8e7fb] bg-white p-3">
+                            <div key={item.id} className={`rounded-2xl border p-3 ${isCampaignPaused ? "border-amber-200 bg-amber-50/30" : "border-[#e8e7fb] bg-white"}`}>
                                 <div className="flex items-start justify-between gap-3">
                                     <div className="min-w-0">
-                                        <p className="truncate text-[13px] font-black text-[#101936]">{item.city || item.cityId}</p>
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                            <p className="truncate text-[13px] font-black text-[#101936]">{item.city || item.cityId}</p>
+                                            {isCampaignPaused ? (
+                                                <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-amber-700 ring-1 ring-amber-200">
+                                                    Pausada
+                                                </span>
+                                            ) : null}
+                                        </div>
                                         <p className="mt-0.5 truncate text-[11px] font-bold text-[#66739a]">
                                             {item.sharedPool && item.participantCount > 1
                                                 ? `${item.participantCount} vendedores compartiendo bolsa`

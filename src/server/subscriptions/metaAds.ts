@@ -2,6 +2,8 @@ import { ResponseError } from "@/server/auth";
 import { calculateAdsBudgetAllocation, calculateCycleEnd } from "@/server/subscriptions/plans";
 
 const GRAPH_VERSION = "v19.0";
+const META_RATE_LIMIT_CODES = new Set([17, 613, 80004]);
+const META_RETRY_DELAYS_MS = [2000, 5000, 10000];
 
 function metaConfig() {
     const token = process.env.META_ACCESS_TOKEN?.trim();
@@ -18,40 +20,76 @@ function metaConfig() {
     return { token, adAccountId };
 }
 
-async function graphPost<T>(path: string, body: Record<string, string | number | boolean>) {
-    const { token } = metaConfig();
-    const params = new URLSearchParams();
-    Object.entries(body).forEach(([key, value]) => params.set(key, String(value)));
-    params.set("access_token", token);
+function isMetaRateLimit(error?: { code?: number }) {
+    return Boolean(error?.code && META_RATE_LIMIT_CODES.has(error.code));
+}
 
-    const response = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${path}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: params,
-    });
-
-    const data = (await response.json()) as T & { error?: { message?: string; code?: number } };
-    if (!response.ok || data.error) {
-        console.error("[meta:post]", path, data);
-        throw new ResponseError("meta_api_error", formatMetaError(data.error) || "Meta no pudo completar la operacion.", 502);
+async function withMetaRetry<T>(fn: () => Promise<T>): Promise<T> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= META_RETRY_DELAYS_MS.length; attempt++) {
+        try {
+            return await fn();
+        } catch (err) {
+            lastError = err;
+            const code = (err as { code?: number })?.code;
+            const isRateLimit = typeof code === "number" && META_RATE_LIMIT_CODES.has(code);
+            if (!isRateLimit || attempt === META_RETRY_DELAYS_MS.length) break;
+            const delay = META_RETRY_DELAYS_MS[attempt];
+            console.warn(`[meta:rate_limit] intento ${attempt + 1}, esperando ${delay}ms`);
+            await new Promise((res) => setTimeout(res, delay));
+        }
     }
+    throw lastError;
+}
 
-    return data;
+async function graphPost<T>(path: string, body: Record<string, string | number | boolean>) {
+    return withMetaRetry(async () => {
+        const { token } = metaConfig();
+        const params = new URLSearchParams();
+        Object.entries(body).forEach(([key, value]) => params.set(key, String(value)));
+        params.set("access_token", token);
+
+        const response = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${path}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: params,
+        });
+
+        const data = (await response.json()) as T & { error?: { message?: string; code?: number } };
+        if (!response.ok || data.error) {
+            console.error("[meta:post]", path, data);
+            if (isMetaRateLimit(data.error)) {
+                const err = new Error(formatMetaError(data.error)) as Error & { code?: number };
+                err.code = data.error?.code;
+                throw err;
+            }
+            throw new ResponseError("meta_api_error", formatMetaError(data.error) || "Meta no pudo completar la operacion.", 502);
+        }
+
+        return data;
+    });
 }
 
 async function graphGet<T>(path: string, query?: Record<string, string>) {
-    const { token } = metaConfig();
-    const params = new URLSearchParams(query);
-    params.set("access_token", token);
+    return withMetaRetry(async () => {
+        const { token } = metaConfig();
+        const params = new URLSearchParams(query);
+        params.set("access_token", token);
 
-    const response = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${path}?${params.toString()}`);
-    const data = (await response.json()) as T & { error?: { message?: string; code?: number } };
-    if (!response.ok || data.error) {
-        console.error("[meta:get]", path, data);
-        throw new ResponseError("meta_api_error", formatMetaError(data.error) || "Meta no pudo consultar datos.", 502);
-    }
+        const response = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${path}?${params.toString()}`);
+        const data = (await response.json()) as T & { error?: { message?: string; code?: number } };
+        if (!response.ok || data.error) {
+            console.error("[meta:get]", path, data);
+            if (isMetaRateLimit(data.error)) {
+                const err = new Error(formatMetaError(data.error)) as Error & { code?: number };
+                err.code = data.error?.code;
+                throw err;
+            }
+            throw new ResponseError("meta_api_error", formatMetaError(data.error) || "Meta no pudo consultar datos.", 502);
+        }
 
-    return data;
+        return data;
+    });
 }
 
 function formatMetaError(error?: {
