@@ -44,6 +44,7 @@ export async function listSubscriptionCities() {
             campaignDeliveryStatus: data.campaignDeliveryStatus || null,
             reservedByCheckoutId: isExpiredReservation ? null : data.reservedByCheckoutId || null,
             reservationExpiresAt: isExpiredReservation ? null : reservationExpiresAt,
+            note: typeof data.note === "string" && data.note ? data.note : null,
             updatedAt: Number(data.updatedAt || 0) || null,
         };
     });
