@@ -8,6 +8,14 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ## 2026-06-07
 
+### feat(accounting): mostrar gastos sociedad | mi parte en imagen y Excel
+- **Módulo:** `src/app/admin/accounting/page.tsx`
+- **Cambios:**
+  - `downloadReceiptAsImage`: nuevo parámetro `societyExpensesTotal`. Si difiere de `expensesTotal` (mi parte), agrega una línea extra bajo "Total gastos" con `sociedad | mi parte` y los dos valores
+  - `exportAccountingSheet`: nuevo parámetro `allExpenses`. Si difiere de `expenses` (portioned), agrega columnas "Sociedad | Mi parte" con ambos totales en la fila de gastos del Excel
+  - Todos los call sites actualizados (desktop + mobile, 6 imagen + 3 Excel)
+  - La línea solo aparece cuando los valores difieren (evita mostrar duplicado cuando el admin tiene 100% de gastos)
+
 ### fix(accounting): corregir ganancia bruta/real ajena en descargas de contabilidad
 - **Módulo:** `src/app/admin/accounting/page.tsx`
 - **Problema:** Admins regulares veían gross/real del total global en descargas; recibos por-admin del superadmin también mostraban totales globales

@@ -386,6 +386,7 @@ function downloadReceiptAsImage({
     expensesTotal,
     expenses,
     miGanancia,
+    societyExpensesTotal,
 }: {
     adminName: string;
     weekStartKey: string;
@@ -396,11 +397,13 @@ function downloadReceiptAsImage({
     expensesTotal: number;
     expenses?: WeeklyExpenseDoc[];
     miGanancia: number;
+    societyExpensesTotal?: number;
 }) {
     const dpr = (typeof window !== "undefined" ? window.devicePixelRatio : 1) || 1;
     const W = 520;
     const expLines = expenses ?? [];
-    const extraH = expLines.length > 0 ? 22 + expLines.length * 22 + 28 : 0;
+    const showSocietySplit = societyExpensesTotal != null && Math.round(societyExpensesTotal * 100) !== Math.round(expensesTotal * 100);
+    const extraH = expLines.length > 0 ? 22 + expLines.length * 22 + 28 + (showSocietySplit ? 16 : 0) : 0;
     const H = 340 + extraH;
     const canvas = document.createElement("canvas");
     canvas.width = W * dpr;
@@ -482,6 +485,15 @@ function downloadReceiptAsImage({
         ctx.textAlign = "right";
         ctx.fillText(money(expensesTotal), W - 28, y);
         y += 28;
+        if (showSocietySplit) {
+            ctx.fillStyle = "#98a2b3";
+            ctx.font = "10px Arial, sans-serif";
+            ctx.textAlign = "left";
+            ctx.fillText("sociedad  |  mi parte", 28, y);
+            ctx.textAlign = "right";
+            ctx.fillText(`${money(societyExpensesTotal!)}  |  ${money(expensesTotal)}`, W - 28, y);
+            y += 16;
+        }
     }
 
     // Draw Ganancia real row
@@ -621,7 +633,7 @@ function DownloadSheet({
     );
 }
 
-function exportAccountingSheet(summary: AccountingSummary, miGanancia?: number | null, isSuperAdmin?: boolean, expenses?: WeeklyExpenseDoc[]) {
+function exportAccountingSheet(summary: AccountingSummary, miGanancia?: number | null, isSuperAdmin?: boolean, expenses?: WeeklyExpenseDoc[], allExpenses?: WeeklyExpenseDoc[]) {
     const activeRows = summary.rows.filter((row) => {
         if (row.billingMode === "per_visit") return row.visited > 0;
         return row.subscriptionPaid === true;
@@ -655,6 +667,10 @@ function exportAccountingSheet(summary: AccountingSummary, miGanancia?: number |
             `;
         })
         .join("");
+
+    const expMyTotal = (expenses ?? []).reduce((s, e) => s + e.amount, 0);
+    const expSocietyTotal = (allExpenses ?? []).reduce((s, e) => s + e.amount, 0);
+    const expSocietySplit = allExpenses != null && Math.round(expSocietyTotal * 100) !== Math.round(expMyTotal * 100);
 
     const html = `
         <html>
@@ -723,8 +739,9 @@ ${(expenses ?? []).map(e => `<tr>
     <td colspan="6"></td>
 </tr>`).join("")}
 <tr>
-    <td class="label">Total gastos</td><td class="money negative">${excelMoney((expenses ?? []).reduce((s, e) => s + e.amount, 0))}</td>
-    <td colspan="8"></td>
+    <td class="label">Total gastos</td>
+    <td class="money negative">${excelMoney((expenses ?? []).reduce((s, e) => s + e.amount, 0))}</td>
+    ${expSocietySplit ? `<td class="label" style="padding-left:16px">Sociedad&nbsp;|&nbsp;Mi&nbsp;parte</td><td class="money negative" colspan="2">${excelMoney(expSocietyTotal)}&nbsp;&nbsp;|&nbsp;&nbsp;${excelMoney(expMyTotal)}</td><td colspan="5"></td>` : `<td colspan="8"></td>`}
 </tr>` : ""}
                     <tr><td class="section" colspan="10">Detalle por usuario</td></tr>
                     <tr>
@@ -1687,6 +1704,7 @@ export default function AccountingPage() {
                                                             expensesTotal: myExpenses.reduce((s, e) => s + e.amount, 0),
                                                             expenses: myExpenses,
                                                             miGanancia: closeMiGanancia,
+                                                            societyExpensesTotal: expenses.reduce((s, e) => s + e.amount, 0),
                                                         })}
                                                     >
                                                         <Icon name="download" />
@@ -1716,6 +1734,7 @@ export default function AccountingPage() {
                                                                 expensesTotal: adminPortioned.reduce((s, e) => s + e.amount, 0),
                                                                 expenses: adminPortioned,
                                                                 miGanancia: gain,
+                                                                societyExpensesTotal: expenses.reduce((s, e) => s + e.amount, 0),
                                                             });
                                                         }}
                                                     >
@@ -1827,7 +1846,7 @@ export default function AccountingPage() {
             <DownloadSheet
                 open={closeDownloadOpen}
                 onClose={() => setCloseDownloadOpen(false)}
-                onExcel={() => adjustedCloseSummary && exportAccountingSheet(adjustedCloseSummary, closeMiGanancia, isSuperAdmin, myExpenses)}
+                onExcel={() => adjustedCloseSummary && exportAccountingSheet(adjustedCloseSummary, closeMiGanancia, isSuperAdmin, myExpenses, expenses)}
                 receipts={[
                     ...(closeMiGanancia != null && profile ? [{
                         label: isSuperAdmin ? (profile.name || "Superadmin") : (profile.name || profile.email || "Admin"),
@@ -1841,6 +1860,7 @@ export default function AccountingPage() {
                             expensesTotal: myExpenses.reduce((s, e) => s + e.amount, 0),
                             expenses: myExpenses,
                             miGanancia: closeMiGanancia,
+                            societyExpensesTotal: expenses.reduce((s, e) => s + e.amount, 0),
                         }),
                     }] : []),
                     ...closeMiGananciaPerAdmin.map(({ admin, gain, gross: adminGross, subscriptionInvestment: adminSubInv, real: adminReal }) => {
@@ -1857,6 +1877,7 @@ export default function AccountingPage() {
                                 expensesTotal: adminPortioned.reduce((s, e) => s + e.amount, 0),
                                 expenses: adminPortioned,
                                 miGanancia: gain,
+                                societyExpensesTotal: expenses.reduce((s, e) => s + e.amount, 0),
                             }),
                         };
                     }),
@@ -1895,7 +1916,7 @@ export default function AccountingPage() {
             <DownloadSheet
                 open={downloadOpen}
                 onClose={() => setDownloadOpen(false)}
-                onExcel={() => exportAccountingSheet(exportSummary ?? summary, snapMiGanancia, isSuperAdmin, myExpenses)}
+                onExcel={() => exportAccountingSheet(exportSummary ?? summary, snapMiGanancia, isSuperAdmin, myExpenses, expenses)}
                 receipts={[
                     ...(snapMiGanancia != null && profile ? [{
                         label: isSuperAdmin ? (profile.name || "Superadmin") : (profile.name || profile.email || "Admin"),
@@ -1909,6 +1930,7 @@ export default function AccountingPage() {
                             expensesTotal: myExpenses.reduce((s, e) => s + e.amount, 0),
                             expenses: myExpenses,
                             miGanancia: snapMiGanancia,
+                            societyExpensesTotal: expenses.reduce((s, e) => s + e.amount, 0),
                         }),
                     }] : []),
                     ...miGananciaPerAdmin.map(({ admin, gain, gross: adminGross, subscriptionInvestment: adminSubInv, real: adminReal }) => {
@@ -1925,6 +1947,7 @@ export default function AccountingPage() {
                                 expensesTotal: adminPortioned.reduce((s, e) => s + e.amount, 0),
                                 expenses: adminPortioned,
                                 miGanancia: gain,
+                                societyExpensesTotal: expenses.reduce((s, e) => s + e.amount, 0),
                             }),
                         };
                     }),
@@ -3637,7 +3660,7 @@ function ClosedWeekPanel({
                     expenses: snapMyExpenses,
                     expensesTotal: snapMyExpenses.reduce((s, e) => s + e.amount, 0),
                 };
-                exportAccountingSheet(closedSummary, snapMyGain, isSuperAdmin, snapMyExpenses);
+                exportAccountingSheet(closedSummary, snapMyGain, isSuperAdmin, snapMyExpenses, snapExpenses);
             }}
             receipts={[
                 ...(snapMyGain != null && isSuperAdmin && profile ? [{
@@ -3650,6 +3673,7 @@ function ClosedWeekPanel({
                             adminName: profile.name || profile.email || "SuperAdmin",
                             miGanancia: snapMyGain,
                             expenses: myPortioned,
+                            societyExpensesTotal: snapExpenses.reduce((s, e) => s + e.amount, 0),
                         });
                     },
                 }] : []),
@@ -3663,6 +3687,7 @@ function ClosedWeekPanel({
                             adminName: profile.name || profile.email || "Admin",
                             miGanancia: snapMyGain,
                             expenses: myPortioned,
+                            societyExpensesTotal: snapExpenses.reduce((s, e) => s + e.amount, 0),
                         });
                     },
                 }] : []),
@@ -3676,6 +3701,7 @@ function ClosedWeekPanel({
                             adminName: admin.name || admin.email || admin.id,
                             miGanancia: gain,
                             expenses: adminPortioned,
+                            societyExpensesTotal: snapExpenses.reduce((s, e) => s + e.amount, 0),
                         }),
                     };
                 }),
