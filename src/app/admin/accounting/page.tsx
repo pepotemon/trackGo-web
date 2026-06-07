@@ -1061,17 +1061,30 @@ export default function AccountingPage() {
     }, [summary, myUsers, isSuperAdmin, profile, periodMode, weeklySummariesForMonth, expenses]);
 
     const miGananciaPerAdmin = useMemo(() => {
-        if (!isSuperAdmin || !summary) return [] as { admin: UserDoc; gain: number }[];
+        if (!isSuperAdmin || !summary) return [] as { admin: UserDoc; gain: number; gross: number; subscriptionInvestment: number; real: number }[];
         return adminUsers
             .map((admin) => {
-                const revenueShare = summary.rows.reduce((acc, row) => {
-                    const user = myUsers.find((u) => u.id === row.userId);
-                    const share = user?.sharedWith?.find((s) => s.adminId === admin.id);
-                    if (!share) return acc;
-                    return acc + (row.real * share.percentage / 100);
-                }, 0);
                 const adminExpenseShare = getExpenseShareFor(expenses, admin.id, false);
-                return { admin, gain: revenueShare - adminExpenseShare };
+                const totals = summary.rows.reduce(
+                    (acc, row) => {
+                        const user = myUsers.find((u) => u.id === row.userId);
+                        const share = user?.sharedWith?.find((s) => s.adminId === admin.id);
+                        if (!share) return acc;
+                        return {
+                            revenueShare: acc.revenueShare + (row.real * share.percentage / 100),
+                            gross: acc.gross + row.gross,
+                            cost: acc.cost + row.cost,
+                        };
+                    },
+                    { revenueShare: 0, gross: 0, cost: 0 },
+                );
+                return {
+                    admin,
+                    gain: totals.revenueShare - adminExpenseShare,
+                    gross: totals.gross,
+                    subscriptionInvestment: totals.cost,
+                    real: totals.gross - totals.cost - adminExpenseShare,
+                };
             })
             .filter(({ admin }) => myUsers.some((u) => u.sharedWith?.some((s) => s.adminId === admin.id)));
     }, [isSuperAdmin, summary, adminUsers, myUsers, expenses]);
@@ -1134,17 +1147,30 @@ export default function AccountingPage() {
     }, [adjustedCloseSummary, myUsers, isSuperAdmin, profile, expenses]);
 
     const closeMiGananciaPerAdmin = useMemo(() => {
-        if (!isSuperAdmin || !adjustedCloseSummary) return [] as { admin: UserDoc; gain: number }[];
+        if (!isSuperAdmin || !adjustedCloseSummary) return [] as { admin: UserDoc; gain: number; gross: number; subscriptionInvestment: number; real: number }[];
         return adminUsers
             .map((admin) => {
-                const revenueShare = adjustedCloseSummary.rows.reduce((acc, row) => {
-                    const user = myUsers.find((u) => u.id === row.userId);
-                    const share = user?.sharedWith?.find((s) => s.adminId === admin.id);
-                    if (!share) return acc;
-                    return acc + (row.real * share.percentage / 100);
-                }, 0);
                 const adminExpenseShare = getExpenseShareFor(expenses, admin.id, false);
-                return { admin, gain: revenueShare - adminExpenseShare };
+                const totals = adjustedCloseSummary.rows.reduce(
+                    (acc, row) => {
+                        const user = myUsers.find((u) => u.id === row.userId);
+                        const share = user?.sharedWith?.find((s) => s.adminId === admin.id);
+                        if (!share) return acc;
+                        return {
+                            revenueShare: acc.revenueShare + (row.real * share.percentage / 100),
+                            gross: acc.gross + row.gross,
+                            cost: acc.cost + row.cost,
+                        };
+                    },
+                    { revenueShare: 0, gross: 0, cost: 0 },
+                );
+                return {
+                    admin,
+                    gain: totals.revenueShare - adminExpenseShare,
+                    gross: totals.gross,
+                    subscriptionInvestment: totals.cost,
+                    real: totals.gross - totals.cost - adminExpenseShare,
+                };
             })
             .filter(({ admin }) => myUsers.some((u) => u.sharedWith?.some((s) => s.adminId === admin.id)));
     }, [isSuperAdmin, adjustedCloseSummary, adminUsers, myUsers, expenses]);
@@ -1154,7 +1180,7 @@ export default function AccountingPage() {
 
     const exportSummary = useMemo((): AccountingSummary | null => {
         if (!summary) return null;
-        const fs = isClosed ? investment?.finalSummary : null;
+        const fs = (isClosed && isSuperAdmin) ? investment?.finalSummary : null;
         if (!fs) return summary;
         return {
             ...summary,
@@ -1176,7 +1202,7 @@ export default function AccountingPage() {
             expenses: fs.expenses ?? summary.expenses,
             expensesTotal: fs.expensesTotal ?? summary.expensesTotal,
         };
-    }, [isClosed, investment, summary]);
+    }, [isClosed, isSuperAdmin, investment, summary]);
 
     const snapMiGanancia = useMemo(() => {
         if (!isClosed || !exportSummary) return miGanancia;
@@ -1668,7 +1694,7 @@ export default function AccountingPage() {
                                                 </div>
                                             </div>
                                         ) : null}
-                                        {closeMiGananciaPerAdmin.map(({ admin, gain }) => (
+                                        {closeMiGananciaPerAdmin.map(({ admin, gain, gross: adminGross, subscriptionInvestment: adminSubInv, real: adminReal }) => (
                                             <div key={admin.id} className="flex items-center justify-between gap-3">
                                                 <span className="min-w-0 truncate text-[12px] font-semibold text-emerald-700">{admin.name || admin.email || admin.id}</span>
                                                 <div className="flex items-center gap-2">
@@ -1684,9 +1710,9 @@ export default function AccountingPage() {
                                                                 adminName: admin.name || admin.email || admin.id,
                                                                 weekStartKey: week.startKey,
                                                                 weekEndKey: week.endKey,
-                                                                gross: adjustedCloseSummary.gross,
-                                                                subscriptionInvestment: adjustedCloseSummary.subscriptionInvestment,
-                                                                real: adjustedCloseSummary.real,
+                                                                gross: adminGross,
+                                                                subscriptionInvestment: adminSubInv,
+                                                                real: adminReal,
                                                                 expensesTotal: adminPortioned.reduce((s, e) => s + e.amount, 0),
                                                                 expenses: adminPortioned,
                                                                 miGanancia: gain,
@@ -1817,7 +1843,7 @@ export default function AccountingPage() {
                             miGanancia: closeMiGanancia,
                         }),
                     }] : []),
-                    ...closeMiGananciaPerAdmin.map(({ admin, gain }) => {
+                    ...closeMiGananciaPerAdmin.map(({ admin, gain, gross: adminGross, subscriptionInvestment: adminSubInv, real: adminReal }) => {
                         const adminPortioned = portionExpenses(expenses, admin.id, false);
                         return {
                             label: admin.name || admin.email || admin.id,
@@ -1825,9 +1851,9 @@ export default function AccountingPage() {
                                 adminName: admin.name || admin.email || admin.id,
                                 weekStartKey: week.startKey,
                                 weekEndKey: week.endKey,
-                                gross: adjustedCloseSummary.gross,
-                                subscriptionInvestment: adjustedCloseSummary.subscriptionInvestment,
-                                real: adjustedCloseSummary.real,
+                                gross: adminGross,
+                                subscriptionInvestment: adminSubInv,
+                                real: adminReal,
                                 expensesTotal: adminPortioned.reduce((s, e) => s + e.amount, 0),
                                 expenses: adminPortioned,
                                 miGanancia: gain,
@@ -1885,7 +1911,7 @@ export default function AccountingPage() {
                             miGanancia: snapMiGanancia,
                         }),
                     }] : []),
-                    ...miGananciaPerAdmin.map(({ admin, gain }) => {
+                    ...miGananciaPerAdmin.map(({ admin, gain, gross: adminGross, subscriptionInvestment: adminSubInv, real: adminReal }) => {
                         const adminPortioned = portionExpenses(expenses, admin.id, false);
                         return {
                             label: admin.name || admin.email || admin.id,
@@ -1893,9 +1919,9 @@ export default function AccountingPage() {
                                 adminName: admin.name || admin.email || admin.id,
                                 weekStartKey: week.startKey,
                                 weekEndKey: week.endKey,
-                                gross: (exportSummary ?? summary).gross,
-                                subscriptionInvestment: (exportSummary ?? summary).subscriptionInvestment,
-                                real: (exportSummary ?? summary).real,
+                                gross: adminGross,
+                                subscriptionInvestment: adminSubInv,
+                                real: adminReal,
                                 expensesTotal: adminPortioned.reduce((s, e) => s + e.amount, 0),
                                 expenses: adminPortioned,
                                 miGanancia: gain,
