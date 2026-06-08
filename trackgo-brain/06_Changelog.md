@@ -8,10 +8,10 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ## 2026-06-08
 
-### feat(users): píldora "Suscripción" en verde si la suscripción está activa
-- **Módulo:** `src/app/admin/settings/users/page.tsx`
-- **What changed:** La badge de billing en la tabla de usuarios (desktop y mobile) ahora usa `tone="green"` cuando `billingMode === "weekly_subscription" && weeklySubscriptionActive === true`. En cualquier otro caso sigue en gris.
-- **Why:** Permitir al superadmin/admin identificar de un vistazo qué usuarios tienen su suscripción activa sin entrar al perfil.
+### feat(users): píldora "Suscripción" en verde si la campaña está activa en Firestore
+- **Módulo:** `src/app/admin/settings/users/page.tsx`, `src/server/subscriptions/subscriptionService.ts`, `src/app/api/subscriptions/active-user-ids/route.ts`
+- **What changed:** La badge de billing en la tabla de usuarios (desktop y mobile) muestra `tone="green"` cuando el usuario tiene una suscripción con `status === "active"` en la colección `subscriptions` de Firestore. Se añadió `getActiveSubscriptionUserIds` en el service (con scoping por admin/superadmin) y un nuevo endpoint `GET /api/subscriptions/active-user-ids`. La pantalla de usuarios carga los IDs activos en paralelo al cargar los usuarios.
+- **Why:** El flag `weeklySubscriptionActive` es manual; el usuario quería reflejar el estado real de la campaña (colección `subscriptions`).
 
 ---
 

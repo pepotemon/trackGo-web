@@ -210,6 +210,27 @@ export async function getSubscriptionsOverview(scope?: { adminId?: string; isSup
     };
 }
 
+export async function getActiveSubscriptionUserIds(scope?: { adminId?: string; isSuperAdmin?: boolean }) {
+    if (scope?.isSuperAdmin !== false || !scope?.adminId) {
+        const snap = await adminDb.collection("subscriptions").where("status", "==", "active").get();
+        return snap.docs.map((doc) => String(doc.data().userId || "")).filter(Boolean);
+    }
+
+    const usersSnap = await adminDb.collection("users").get();
+    const scopedUserIds = getScopedSubscriptionUserIds(usersSnap.docs, scope);
+    if (!scopedUserIds || scopedUserIds.length === 0) return [];
+
+    const chunks: string[][] = [];
+    for (let i = 0; i < scopedUserIds.length; i += 30) chunks.push(scopedUserIds.slice(i, i + 30));
+
+    const snaps = await Promise.all(
+        chunks.map((chunk) =>
+            adminDb.collection("subscriptions").where("userId", "in", chunk).where("status", "==", "active").get(),
+        ),
+    );
+    return snaps.flatMap((s) => s.docs).map((doc) => String(doc.data().userId || "")).filter(Boolean);
+}
+
 function getScopedSubscriptionUserIds(
     userDocs: Array<FirebaseFirestore.QueryDocumentSnapshot<FirebaseFirestore.DocumentData>>,
     scope?: { adminId?: string; isSuperAdmin?: boolean },

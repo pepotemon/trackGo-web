@@ -1,6 +1,8 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { onAuthStateChanged, type User } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 import { useCan } from "@/features/auth/usePermissions";
 import { useAuth } from "@/features/auth/AuthProvider";
 import {
@@ -103,6 +105,19 @@ function safeNumber(value: unknown, fallback = 0) {
 
 function norm(text: unknown) {
     return String(text ?? "").toLowerCase().trim();
+}
+
+function getAuthToken() {
+    if (auth.currentUser) return auth.currentUser.getIdToken();
+    return new Promise<string>((resolve, reject) => {
+        const timeout = window.setTimeout(() => { unsubscribe(); reject(new Error("No se pudo confirmar la sesion activa.")); }, 8000);
+        const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
+            if (!user) return;
+            window.clearTimeout(timeout);
+            unsubscribe();
+            user.getIdToken().then(resolve, reject);
+        });
+    });
 }
 
 function selectClassName(extra = "") {
@@ -301,6 +316,7 @@ export default function UsersPage() {
     const canEdit = useCan("usersEdit");
     const { profile, isSuperAdmin } = useAuth();
     const [users, setUsers] = useState<UserDoc[]>([]);
+    const [activeSubIds, setActiveSubIds] = useState<Set<string>>(new Set());
     const [loading, setLoading] = useState(true);
     const [savingId, setSavingId] = useState<string | null>(null);
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -364,8 +380,16 @@ export default function UsersPage() {
         setErr(null);
 
         try {
-            const data = await listAdminUsers();
+            const [data, token] = await Promise.all([listAdminUsers(), getAuthToken()]);
             setUsers(data);
+            const res = await fetch("/api/subscriptions/active-user-ids", {
+                cache: "no-store",
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+                const json = await res.json() as { ok: boolean; userIds?: string[] };
+                if (json.ok && Array.isArray(json.userIds)) setActiveSubIds(new Set(json.userIds));
+            }
         } catch (e: unknown) {
             setErr(e instanceof Error ? e.message : "No se pudieron cargar los usuarios.");
         } finally {
@@ -433,6 +457,7 @@ export default function UsersPage() {
                     search={search}
                     loading={loading}
                     selectedUserId={selectedUserId}
+                    activeSubIds={activeSubIds}
                     roleFilter={roleFilter}
                     autoFilter={autoFilter}
                     billingFilter={billingFilter}
@@ -561,6 +586,7 @@ export default function UsersPage() {
                         users={filteredUsers}
                         loading={loading}
                         selectedUserId={selectedUserId}
+                        activeSubIds={activeSubIds}
                         onSelectUser={canEdit ? setSelectedUserId : undefined}
                     />
                 </Card>
@@ -596,6 +622,7 @@ function MobileUsersView({
     search,
     loading,
     selectedUserId,
+    activeSubIds,
     roleFilter,
     autoFilter,
     billingFilter,
@@ -617,6 +644,7 @@ function MobileUsersView({
     search: string;
     loading: boolean;
     selectedUserId: string | null;
+    activeSubIds: Set<string>;
     roleFilter: RoleFilter;
     autoFilter: AutoFilter;
     billingFilter: BillingFilter;
@@ -727,6 +755,7 @@ function MobileUsersView({
                                 key={user.id}
                                 user={user}
                                 selected={selectedUserId === user.id}
+                                hasActiveSub={activeSubIds.has(user.id)}
                                 onSelect={onSelectUser ? () => onSelectUser(user.id) : undefined}
                             />
                         ))
@@ -833,11 +862,13 @@ function UsersTable({
     users,
     loading,
     selectedUserId,
+    activeSubIds,
     onSelectUser,
 }: {
     users: UserDoc[];
     loading: boolean;
     selectedUserId: string | null;
+    activeSubIds: Set<string>;
     onSelectUser?: (id: string) => void;
 }) {
     return (
@@ -921,7 +952,7 @@ function UsersTable({
                                         </td>
 
                                         <td className="px-3 py-2.5">
-                                            <Badge tone={u.billingMode === "weekly_subscription" && u.weeklySubscriptionActive ? "green" : "gray"}>
+                                            <Badge tone={u.billingMode === "weekly_subscription" && activeSubIds.has(u.id) ? "green" : "gray"}>
                                                 {u.billingMode === "weekly_subscription"
                                                     ? "Suscripción"
                                                     : "Por visita"}
@@ -1010,10 +1041,12 @@ function UsersTableState({
 function UserMobileCard({
     user,
     selected,
+    hasActiveSub,
     onSelect,
 }: {
     user: UserDoc;
     selected: boolean;
+    hasActiveSub: boolean;
     onSelect?: () => void;
 }) {
     const autoEnabled = user.autoAssignEnabled === true;
@@ -1050,7 +1083,7 @@ function UserMobileCard({
                     <Badge tone={user.role === "admin" ? "blue" : "gray"}>
                         {user.role === "admin" ? "Admin" : "Vendedor"}
                     </Badge>
-                    <Badge tone={user.billingMode === "weekly_subscription" && user.weeklySubscriptionActive ? "green" : "gray"}>
+                    <Badge tone={user.billingMode === "weekly_subscription" && hasActiveSub ? "green" : "gray"}>
                         {user.billingMode === "weekly_subscription" ? "Suscripción" : "Por visita"}
                     </Badge>
                     <Badge tone={autoEnabled ? "green" : "gray"}>
