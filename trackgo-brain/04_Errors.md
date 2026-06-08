@@ -148,6 +148,21 @@ Registro de bugs, errores resueltos, y patrones problemáticos. Sirve para no re
 
 ---
 
+## ERR-011: Liberar ciudad con dos usuarios falla (read-after-write en transacción Firestore)
+
+**Estado:** Resuelto  
+**Fecha:** 2026-06-08
+
+**Problema:** Al intentar liberar una ciudad con `activeParticipantsCount > 1` (shared pool), la operación fallaba con un error de Firestore. La transacción en `releaseSubscriptionCity` iteraba sobre `subscriptionIdsToRelease` haciendo `tx.get(subRef)` seguido de `tx.set(subRef, ...)` en la misma iteración. En la segunda iteración, el `tx.get(subRef2)` ocurría después de los `tx.set()` de la primera — violando la regla del Admin SDK de "todas las lecturas antes de todas las escrituras" en una transacción.
+
+**Solución:** Separar lecturas de escrituras: primero `Promise.all(subscriptionRefs.map(ref => tx.get(ref)))` para leer todos los docs, luego el loop de escrituras.
+
+**Archivos afectados:** `src/server/subscriptions/subscriptionService.ts` → función `releaseSubscriptionCity`
+
+**Lección:** En transacciones de Firestore Admin SDK, nunca interleaves `tx.get()` y `tx.set()` dentro de un loop. Separar siempre: batch de lecturas → batch de escrituras.
+
+---
+
 ## Patrones problemáticos a evitar
 
 ### No usar `leads` en UI

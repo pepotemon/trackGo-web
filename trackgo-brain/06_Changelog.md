@@ -8,6 +8,12 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ## 2026-06-08
 
+### fix(subscriptions): liberar ciudad con dos usuarios (ERR-011)
+- **Módulo:** `src/server/subscriptions/subscriptionService.ts`
+- **What changed:** En `releaseSubscriptionCity`, la transacción Firestore ahora lee todos los documentos de suscripción en paralelo (`Promise.all`) antes de escribir, evitando el error "read after write" del Admin SDK que bloqueaba ciudades con `activeParticipantsCount > 1`.
+- **Why:** Firestore Admin SDK requiere que todas las lecturas ocurran antes de cualquier escritura en la misma transacción. Con un solo usuario (1 iteración) no había problema; con dos usuarios la segunda lectura ocurría después de las escrituras de la primera iteración.
+- **See:** [[04_Errors#ERR-011]]
+
 ### feat(bot): IA activa desde el primer reply post-intro
 - **Módulo:** `functions/src/bot/aiLeadAssistant.js`
 - **What changed:** `shouldTryAiLeadAssistant` simplificado — la IA se activa en todos los mensajes después del intro mientras falten datos (hasBusiness || hasMaps). Antes solo se activaba como rescate. Prompt mejorado: instrucción de preguntar una sola cosa por mensaje, flujo paso a paso (negocio primero, luego Maps), tono más natural, reglas de calificación más explícitas, hasBusiness/hasMaps añadidos al estado del lead. Bug fix: textos PT-BR en buildAutomationLimitReply tenían encoding corrupto (Mojibake).

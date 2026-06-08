@@ -1736,10 +1736,15 @@ export async function releaseSubscriptionCity(cityId: string) {
         const subscriptionIdsToRelease = Array.from(new Set([...activeSubscriptionIds, freshSubscriptionId].filter(Boolean)));
         const freshReservedCheckoutId = String(freshCity.reservedByCheckoutId || reservedCheckoutId || "");
 
-        for (const subscriptionId of subscriptionIdsToRelease) {
-            const subscriptionRef = adminDb.collection("subscriptions").doc(subscriptionId);
-            const subscriptionSnap = await tx.get(subscriptionRef);
-            const checkoutId = String(subscriptionSnap.data()?.checkoutId || "");
+        // Reads must all happen before any writes in a Firestore transaction.
+        const subscriptionRefs = subscriptionIdsToRelease.map((id) =>
+            adminDb.collection("subscriptions").doc(id),
+        );
+        const subscriptionSnaps = await Promise.all(subscriptionRefs.map((ref) => tx.get(ref)));
+
+        for (let i = 0; i < subscriptionIdsToRelease.length; i++) {
+            const subscriptionRef = subscriptionRefs[i];
+            const checkoutId = String(subscriptionSnaps[i].data()?.checkoutId || "");
             tx.set(
                 subscriptionRef,
                 {
