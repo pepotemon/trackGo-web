@@ -6,6 +6,15 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ---
 
+## 2026-06-08
+
+### feat(users): píldora "Suscripción" en verde si la suscripción está activa
+- **Módulo:** `src/app/admin/settings/users/page.tsx`
+- **What changed:** La badge de billing en la tabla de usuarios (desktop y mobile) ahora usa `tone="green"` cuando `billingMode === "weekly_subscription" && weeklySubscriptionActive === true`. En cualquier otro caso sigue en gris.
+- **Why:** Permitir al superadmin/admin identificar de un vistazo qué usuarios tienen su suscripción activa sin entrar al perfil.
+
+---
+
 ## 2026-06-07
 
 ### feat(accounting): mostrar gastos sociedad | mi parte en imagen y Excel

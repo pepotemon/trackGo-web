@@ -921,7 +921,7 @@ function UsersTable({
                                         </td>
 
                                         <td className="px-3 py-2.5">
-                                            <Badge tone="gray">
+                                            <Badge tone={u.billingMode === "weekly_subscription" && u.weeklySubscriptionActive ? "green" : "gray"}>
                                                 {u.billingMode === "weekly_subscription"
                                                     ? "Suscripción"
                                                     : "Por visita"}
@@ -1050,7 +1050,7 @@ function UserMobileCard({
                     <Badge tone={user.role === "admin" ? "blue" : "gray"}>
                         {user.role === "admin" ? "Admin" : "Vendedor"}
                     </Badge>
-                    <Badge tone="gray">
+                    <Badge tone={user.billingMode === "weekly_subscription" && user.weeklySubscriptionActive ? "green" : "gray"}>
                         {user.billingMode === "weekly_subscription" ? "Suscripción" : "Por visita"}
                     </Badge>
                     <Badge tone={autoEnabled ? "green" : "gray"}>
