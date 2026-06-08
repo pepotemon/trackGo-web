@@ -13,18 +13,11 @@ const {
 
 function buildIntroMessagePtBr() {
     return [
-        "Olá 👋 Obrigado pelo contato.",
+        "Olá, obrigado pelo contato.",
         "",
-        "Trabalhamos com microcrédito comercial para lojistas e donos de comércio ativo.",
+        "Trabalhamos com microcrédito comercial para donos de negócio ativo.",
         "",
-        "Para continuar sua análise, envie por favor:",
-        "1️⃣ Tipo de comércio",
-        "2️⃣ Localização do comércio no Google Maps",
-        "3️⃣ Nome completo (opcional)",
-        "",
-        "⚠️ No momento não atendemos aposentados, pensionistas, assalariados, motoristas de aplicativo ou pessoas sem comércio ativo.",
-        "",
-        "Assim que você enviar essas informações, encaminhamos para o responsável da sua região.",
+        "Você tem um negócio próprio ativo?",
     ].join("\n");
 }
 
@@ -98,8 +91,8 @@ function buildShortMissingMapsReply(messageType) {
     return [
         buildShortAckPrefix(messageType),
         "",
-        "Agora só falta a localização do comércio no Google Maps.",
-        "Pode ser a localização fixa da residência ou do ponto de trabalho.",
+        "Agora me envie a localização do comércio no Google Maps.",
+        "Abra o Google Maps, encontre seu comércio, toque em \"Compartilhar\" e me envie o link aqui.",
     ].join("\n");
 }
 
@@ -107,7 +100,8 @@ function buildShortMissingBothReply(messageType) {
     return [
         buildShortAckPrefix(messageType),
         "",
-        "Para continuar, ainda preciso do tipo de comércio e da localização no Google Maps.",
+        "Que tipo de comércio você tem?",
+        "Por exemplo: loja, restaurante, oficina, salão ou outro negócio ativo.",
     ].join("\n");
 }
 

@@ -17,14 +17,7 @@ function buildIntroMessageEsPa() {
         "",
         "Trabajamos con microcredito comercial para duenos de negocios activos.",
         "",
-        "Para continuar tu analisis, enviame por favor:",
-        "1. Tipo de negocio",
-        "2. Ubicacion del negocio en Google Maps",
-        "3. Nombre completo (opcional)",
-        "",
-        "Por ahora no atendemos jubilados, pensionados, asalariados, conductores de app o personas sin negocio activo.",
-        "",
-        "Cuando envies esos datos, los pasamos al responsable de tu region.",
+        "¿Cuentas con un negocio propio activo?",
     ].join("\n");
 }
 
@@ -89,8 +82,8 @@ function buildShortMissingMapsReply(messageType) {
     return [
         buildShortAckPrefix(messageType),
         "",
-        "Ahora solo falta la ubicacion del negocio en Google Maps.",
-        "Puede ser la ubicacion fija de la residencia o del punto de trabajo.",
+        "Ahora enviame la ubicacion del negocio en Google Maps.",
+        "Abre Google Maps, busca tu negocio, toca \"Compartir\" y enviame el enlace aqui.",
     ].join("\n");
 }
 
@@ -98,7 +91,8 @@ function buildShortMissingBothReply(messageType) {
     return [
         buildShortAckPrefix(messageType),
         "",
-        "Para continuar, todavia necesito el tipo de negocio y la ubicacion en Google Maps.",
+        "¿Qué tipo de negocio tienes?",
+        "Por ejemplo: tienda, restaurante, taller, ferreteria, salon u otro negocio activo.",
     ].join("\n");
 }
 

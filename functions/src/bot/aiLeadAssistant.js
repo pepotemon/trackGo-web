@@ -25,30 +25,21 @@ function shouldTryAiLeadAssistant({ client, reply }) {
     const lastText = safeString(client?.lastInboundText || "");
     const hasBusiness = !!safeString(client?.business || client?.businessRaw || "");
     const hasMaps = !!safeString(client?.mapsUrl || "") || safeNumber(client?.currentLeadMapsConfirmedAt, 0) > 0;
-    const isQuestionLike =
-        lastText.includes("?") ||
-        /\b(onde|como|quanto|qual|quais|porque|por que|atiende|atienden|donde|como|cuanto|cual|sirve|serve|atende|atendem)\b/i.test(lastText);
+    const introAlreadySent = safeNumber(client?.initialIntroSentAt, 0) > 0;
 
     if (!lastText) return false;
     if (safeString(client?.aiDisabled || "") === "true") return false;
     if (safeString(client?.leadQuality || "") === "not_suitable") return false;
     if (stage === "final" || stage === "final:not_suitable") return false;
 
+    // Involve AI for every reply after the intro until data is complete
+    if (introAlreadySent && !(hasBusiness && hasMaps)) return true;
+
+    // Keep AI active near or past the reply limit (rescue mode)
     const botReplyCount = safeNumber(client?.botReplyCount, 0);
     if (botReplyCount >= MAX_BOT_REPLIES_PER_LEAD) return true;
 
-    if (stage.includes("maps") && countStage(client, "maps") >= MAX_MISSING_MAPS_REPLIES) return true;
-    if (stage.includes("business") && countStage(client, "business") >= MAX_MISSING_BUSINESS_REPLIES) return true;
-    if (!(hasBusiness && hasMaps) && isQuestionLike) return true;
-
-    return (
-        stage.includes("fallback") ||
-        stage.includes("generic_question") ||
-        stage.includes("amount") ||
-        stage.includes("coverage") ||
-        stage.includes("written_address") ||
-        safeString(client?.businessQuality || "") === "review"
-    );
+    return false;
 }
 
 function shouldStopAutomatedConversation(client) {
@@ -100,19 +91,19 @@ function buildAutomationLimitReply({ client, channel }) {
     }
 
     if (safeString(client?.botReactivationActive || "") === "true" || client?.botReactivationActive === true) {
-        return "Obrigado por voltar a escrever. Para nÃ£o insistir demais, vou deixar sua conversa pendente para uma pessoa da equipe revisar.";
+        return "Obrigado por voltar a escrever. Para não insistir demais, vou deixar sua conversa pendente para uma pessoa da equipe revisar.";
     }
 
     if (!hasBusiness && !hasMaps) {
-        return "Obrigado pelo seu tempo. Para evitar insistir demais, vou deixar sua conversa pendente para revisÃ£o. Se quiser continuar, envie o tipo de comÃ©rcio e a localizaÃ§Ã£o no Google Maps.";
+        return "Obrigado pelo seu tempo. Para evitar insistir demais, vou deixar sua conversa pendente para revisão. Se quiser continuar, envie o tipo de comércio e a localização no Google Maps.";
     }
     if (!hasBusiness) {
-        return "Obrigado pelo seu tempo. Vou deixar sua conversa pendente para revisÃ£o. Se quiser continuar, envie o tipo de comÃ©rcio.";
+        return "Obrigado pelo seu tempo. Vou deixar sua conversa pendente para revisão. Se quiser continuar, envie o tipo de comércio.";
     }
     if (!hasMaps) {
-        return "Obrigado pelo seu tempo. Vou deixar sua conversa pendente para revisÃ£o. Se quiser continuar, envie a localizaÃ§Ã£o do comÃ©rcio no Google Maps.";
+        return "Obrigado pelo seu tempo. Vou deixar sua conversa pendente para revisão. Se quiser continuar, envie a localização do comércio no Google Maps.";
     }
-    return "Obrigado pelas informaÃ§Ãµes. Vou deixar sua conversa para uma pessoa da equipe revisar.";
+    return "Obrigado pelas informações. Vou deixar sua conversa para uma pessoa da equipe revisar.";
 }
 
 function languageName(language) {
@@ -121,18 +112,27 @@ function languageName(language) {
 
 function buildPrompt({ client, channel, reply }) {
     const targetLanguage = languageName(channel?.language);
+    const hasBusiness = !!safeString(client?.business || client?.businessRaw || "");
+    const hasMaps = !!safeString(client?.mapsUrl || "") || safeNumber(client?.currentLeadMapsConfirmedAt, 0) > 0;
+
     return [
-        `You are TrackGo's controlled assistant for microcredit leads. Reply in ${targetLanguage}.`,
-        "TrackGo captures WhatsApp leads from Meta campaigns and needs business type plus Google Maps location before assigning to a seller.",
-        "You must be brief and helpful.",
-        "Mention you are an automatic assistant only if the client asks, if this is the first bot reply, or if you are explaining why information is needed.",
-        "Do not repeat that you are an automatic assistant in every message.",
-        "Never promise approval, exact values, interest rates, or document requirements.",
-        "Do not ask for sensitive documents.",
-        "Delivery, home-based commerce, informal stands, food trucks, and small shops can continue if they have active commerce.",
-        "If the client is not interested or asks to stop, close politely.",
-        "If information is missing, ask only for the most important next missing item.",
-        "Prefer Google Maps location over written address; if they sent only written address, ask for Google Maps location.",
+        `You are a friendly WhatsApp assistant for TrackGo, a commercial microcredit company. Reply in ${targetLanguage}.`,
+        "",
+        "Our product: commercial microcredit exclusively for active business owners.",
+        "Goal: confirm the person has an active business, collect the business type, then collect their Google Maps location — then hand off to a human agent.",
+        "",
+        "Conversation rules:",
+        "- Ask only ONE thing per message. Never list multiple requests at once.",
+        "- Keep messages short (1-3 lines). This is WhatsApp, not email.",
+        "- Be warm and natural — not robotic, not overly formal.",
+        "- Collect business type FIRST. Only ask for Maps location after you have the business type.",
+        "- If they send a written address instead of a Maps link: ask them to open Google Maps, find their business, tap Share, and send the link here.",
+        "- Never promise approval, loan amounts, interest rates, or required documents.",
+        "- Do not ask for ID, bank statements, or any sensitive document.",
+        "- Delivery, home-based shops, informal stands, food trucks, and small stores qualify.",
+        "- Retired people, pensioners, salaried employees, and app drivers (Uber, iFood, Rappi, inDriver) do NOT qualify — close warmly and briefly.",
+        "- If the person says they are not interested or asks to stop: close warmly.",
+        "- Only mention you are an automatic assistant if directly asked.",
         "",
         "Current lead state:",
         JSON.stringify({
@@ -150,6 +150,8 @@ function buildPrompt({ client, channel, reply }) {
             botReplyCount: safeNumber(client?.botReplyCount, 0),
             mapsRequests: countStage(client, "maps"),
             businessRequests: countStage(client, "business"),
+            hasBusiness,
+            hasMaps,
         }),
         "",
         "Return only valid JSON with this shape:",
@@ -164,7 +166,7 @@ function buildPrompt({ client, channel, reply }) {
             nextState: "asking_business | asking_location | answering_question | ready_to_assign | closed_not_interested | human_needed",
             shouldUseAiReply: true,
             shouldClose: false,
-            reply: "short WhatsApp-ready message",
+            reply: "short WhatsApp-ready message in the correct language",
         }),
     ].join("\n");
 }

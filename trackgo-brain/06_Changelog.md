@@ -8,6 +8,16 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ## 2026-06-08
 
+### feat(bot): IA activa desde el primer reply post-intro
+- **Módulo:** `functions/src/bot/aiLeadAssistant.js`
+- **What changed:** `shouldTryAiLeadAssistant` simplificado — la IA se activa en todos los mensajes después del intro mientras falten datos (hasBusiness || hasMaps). Antes solo se activaba como rescate. Prompt mejorado: instrucción de preguntar una sola cosa por mensaje, flujo paso a paso (negocio primero, luego Maps), tono más natural, reglas de calificación más explícitas, hasBusiness/hasMaps añadidos al estado del lead. Bug fix: textos PT-BR en buildAutomationLimitReply tenían encoding corrupto (Mojibake).
+- **Why:** Mejorar la experiencia conversacional. La IA maneja mejor descripciones informales, detecta perfiles no aptos más temprano y responde preguntas sin caer en fallback.
+
+### feat(bot): flujo de recolección paso a paso en intro (ES-PA y PT-BR)
+- **Módulo:** `functions/src/bot/replies.js`, `functions/src/bot/repliesEsPa.js`
+- **What changed:** Mensaje de intro simplificado a una sola pregunta ("¿Cuentas con un negocio propio activo?"). Flujo de recolección cambiado de pedir tipo+maps en un solo mensaje a pedir primero tipo de negocio, y solo después de recibirlo pedir la ubicación en Google Maps. Se mejoró el mensaje de Maps con instrucciones de cómo compartir el enlace.
+- **Why:** Reducir fricción en el primer contacto. Lista de exclusiones y múltiples campos de golpe generaban abandono.
+
 ### feat(users): píldora "Suscripción" en verde si la campaña está activa en Firestore
 - **Módulo:** `src/app/admin/settings/users/page.tsx`, `src/server/subscriptions/subscriptionService.ts`, `src/app/api/subscriptions/active-user-ids/route.ts`
 - **What changed:** La badge de billing en la tabla de usuarios (desktop y mobile) muestra `tone="green"` cuando el usuario tiene una suscripción con `status === "active"` en la colección `subscriptions` de Firestore. Se añadió `getActiveSubscriptionUserIds` en el service (con scoping por admin/superadmin) y un nuevo endpoint `GET /api/subscriptions/active-user-ids`. La pantalla de usuarios carga los IDs activos en paralelo al cargar los usuarios.
