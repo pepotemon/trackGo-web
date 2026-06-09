@@ -570,11 +570,20 @@ service cloud.firestore {
             "updatedAt",
             "rejectedReason",
             "rejectedReasonText",
-            "note"
+            "note",
+            "takenFromIncompleteAt"
           ])
 
         && validClientStatusValue(request.resource.data.status)
         && request.resource.data.updatedAt is int
+
+        && (
+          !request.resource.data.diff(resource.data).changedKeys().hasAny(["takenFromIncompleteAt"])
+          || (
+            request.resource.data.takenFromIncompleteAt is int
+            && (!("takenFromIncompleteAt" in resource.data) || resource.data.takenFromIncompleteAt == null)
+          )
+        )
 
         && validOptionalNote(request.resource.data)
         && validOptionalRejectedReason(request.resource.data)

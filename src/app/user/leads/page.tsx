@@ -143,6 +143,7 @@ export default function UserLeadsPage() {
 
     const [actionLead, setActionLead] = useState<MetaLeadDoc | null>(null);
     const [actionType, setActionType] = useState<"visit" | "reject" | "note" | "manage" | null>(null);
+    const [actionFromNoVerificados, setActionFromNoVerificados] = useState(false);
     const [noteText, setNoteText] = useState("");
     const [rejectStep, setRejectStep] = useState<1 | 2>(1);
     const [rejectReason, setRejectReason] = useState<RejectedReason | null>(null);
@@ -359,7 +360,7 @@ export default function UserLeadsPage() {
         setNoteText(notes[lead.id] ?? "");
         setActionType("note");
     }
-    function closeAction() { setActionLead(null); setActionType(null); setSaving(false); }
+    function closeAction() { setActionLead(null); setActionType(null); setSaving(false); setActionFromNoVerificados(false); }
     useBackButtonDismiss(searchOpen, () => setSearchOpen(false));
     useBackButtonDismiss(filtersOpen, () => setFiltersOpen(false));
     useBackButtonDismiss(Boolean(waConfirmLead), () => setWaConfirmLead(null));
@@ -451,27 +452,10 @@ export default function UserLeadsPage() {
         setNotSuitableSaving(false);
     }
 
-    async function openCampaignManage(lead: MetaLeadDoc) {
-        if (!userId) return;
-        setCampaignManaging(lead.id);
-        try {
-            await takeIncompleteClient(lead.id, userId, {
-                leadName: lead.name,
-                leadPhone: lead.phone,
-                leadBusiness: lead.business,
-            });
-        } catch (error) {
-            setCampaignManaging(null);
-            showToast(
-                error instanceof Error && error.message === "client_already_taken"
-                    ? "Este cliente ya fue tomado por otro usuario."
-                    : "No se pudo procesar este cliente."
-            );
-            return;
-        }
-        setCampaignManaging(null);
+    function openCampaignManage(lead: MetaLeadDoc) {
         setActionLead(lead);
         setActionType("manage");
+        setActionFromNoVerificados(true);
     }
 
     async function openCampaignWhatsApp(lead: MetaLeadDoc) {
@@ -591,7 +575,8 @@ export default function UserLeadsPage() {
     async function confirmVisit() {
         if (!actionLead || !userId) return;
         setSaving(true);
-        try { await markLeadVisited(actionLead, userId); closeAction(); }
+        const stamp = actionFromNoVerificados && !actionLead.takenFromIncompleteAt ? Date.now() : undefined;
+        try { await markLeadVisited(actionLead, userId, stamp); closeAction(); }
         catch { setSaving(false); }
     }
 
@@ -603,7 +588,8 @@ export default function UserLeadsPage() {
     async function confirmReject() {
         if (!actionLead || !rejectReason || !userId) return;
         setSaving(true);
-        try { await markLeadRejected(actionLead, userId, rejectReason, rejectText); closeAction(); }
+        const stamp = actionFromNoVerificados && !actionLead.takenFromIncompleteAt ? Date.now() : undefined;
+        try { await markLeadRejected(actionLead, userId, rejectReason, rejectText, stamp); closeAction(); }
         catch { setSaving(false); }
     }
 
@@ -838,7 +824,7 @@ export default function UserLeadsPage() {
                                     waSent={incWaSent.has(lead.id)}
                                     copied={incCopiedId === lead.id}
                                     managing={campaignManaging === lead.id}
-                                    onManage={() => void openCampaignManage(lead)}
+                                    onManage={() => openCampaignManage(lead)}
                                     onReview={() => setReviewIncLead(lead)}
                                     onNotSuitable={() => setNotSuitableLead(lead)}
                                     onWhatsApp={() => void openCampaignWhatsApp(lead)}
@@ -925,7 +911,7 @@ export default function UserLeadsPage() {
                                             waSent={incWaSent.has(lead.id)}
                                             copied={incCopiedId === lead.id}
                                             managing={campaignManaging === lead.id}
-                                            onManage={() => { void openCampaignManage(lead); setSearchOpen(false); }}
+                                            onManage={() => { openCampaignManage(lead); setSearchOpen(false); }}
                                             onReview={() => { setReviewIncLead(lead); setSearchOpen(false); }}
                                             onNotSuitable={() => { setNotSuitableLead(lead); setSearchOpen(false); }}
                                             onWhatsApp={() => { void openCampaignWhatsApp(lead); setSearchOpen(false); }}

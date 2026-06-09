@@ -171,7 +171,7 @@ function eventId(dayKey: string, leadId: string): string {
 }
 
 /** Mark a lead as visited and write the dailyEvent record. */
-export async function markLeadVisited(lead: MetaLeadDoc, userId: string): Promise<void> {
+export async function markLeadVisited(lead: MetaLeadDoc, userId: string, takenFromIncompleteAt?: number): Promise<void> {
     const day = todayKey();
     const now = Date.now();
 
@@ -180,6 +180,7 @@ export async function markLeadVisited(lead: MetaLeadDoc, userId: string): Promis
         statusBy: userId,
         statusAt: now,
         updatedAt: now,
+        ...(takenFromIncompleteAt != null ? { takenFromIncompleteAt } : {}),
     });
 
     await setDoc(doc(db, "dailyEvents", eventId(day, lead.id)), {
@@ -204,7 +205,8 @@ export async function markLeadRejected(
     lead: MetaLeadDoc,
     userId: string,
     reason: RejectedReason,
-    reasonText: string
+    reasonText: string,
+    takenFromIncompleteAt?: number
 ): Promise<void> {
     const day = todayKey();
     const now = Date.now();
@@ -216,6 +218,7 @@ export async function markLeadRejected(
         rejectedReason: reason,
         rejectedReasonText: reason === "otro" ? reasonText : null,
         updatedAt: now,
+        ...(takenFromIncompleteAt != null ? { takenFromIncompleteAt } : {}),
     });
 
     await setDoc(doc(db, "dailyEvents", eventId(day, lead.id)), {

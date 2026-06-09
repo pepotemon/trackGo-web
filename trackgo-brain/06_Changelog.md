@@ -8,6 +8,12 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ## 2026-06-09
 
+### fix(leads): "Gestionar" ya no mueve leads a Verificados hasta que el vendor actúa
+- **Módulo:** `src/app/user/leads/page.tsx`, `src/data/userLeadsRepo.ts`, `firestore.rules`
+- **What changed:** `openCampaignManage` ya no llama `takeIncompleteClient` (que seteaba `takenFromIncompleteAt` prematuramente). Ahora sólo abre el modal. `takenFromIncompleteAt` se sella sólo cuando el vendor confirma Visitado o Rechazado (`confirmVisit`/`confirmReject` con flag `actionFromNoVerificados`). Regla Firestore actualizada: `takenFromIncompleteAt` ahora es campo permitido en el `allow update` de visited/rejected (validando que sea int y que el valor anterior fuera null).
+- **Why:** Presionar "Gestionar" movía el lead a "Verificados" sin que el vendor hubiera hecho nada. "Verificados" debe contener sólo leads con al menos ubicación/maps — la acción real (visita o rechazo) es la que cambia el estado.
+- **See:** [[04_Errors#ERR-012]]
+
 ### fix(leads): permitir Gestionar en leads de campaña pre-asignados por autoAssignLead
 - **Módulo:** `src/data/incompleteClientsRepo.ts`, `firestore.rules`
 - **What changed:** `takeIncompleteClient` ya no lanza `client_already_taken` si `assignedTo === userId` (el mismo vendor). Se agrega regla Firestore para permitir al vendor confirmar un lead que `autoAssignLead` pre-asignó (condición: `assignedTo == auth.uid && takenFromIncompleteAt == null`).
