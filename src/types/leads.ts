@@ -7,7 +7,7 @@ export type LeadReviewStatus =
 export type LeadParseStatus = "empty" | "partial" | "ready";
 export type LeadHistoryBucket = "incomplete" | "not_suitable";
 export type LeadAutoAssignmentFilter = "all" | "auto" | "manual";
-export type LeadAutoAssignMatchType = "city" | "hub_city" | "state" | "country";
+export type LeadAutoAssignMatchType = "city" | "hub_city" | "state" | "country" | "campaign";
 export type LeadQueueCityField =
     | "geoAdminCityNormalized"
     | "geoCityNormalized"

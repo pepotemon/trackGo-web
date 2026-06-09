@@ -8,6 +8,12 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ## 2026-06-09
 
+### feat(assignments): auto-asignación por campaña en autoAssignLead
+- **Módulo:** `functions/src/assignments/autoAssignLead.js`, `src/types/leads.ts`, `src/app/admin/leads/assignments/page.tsx`, `src/app/admin/page.tsx`
+- **What changed:** Antes del matcher geográfico, `autoAssignLead` ahora comprueba si el lead tiene `leadAcquisitionCampaignId`. Si existe, busca en `subscriptionCities` el doc con `activeCampaignId == valor` (fallback a `campaignId`) y `status == "occupied"`, y asigna directamente al `ownerUserId`. Se registra con `autoAssignMatchType: "campaign"` y `assignmentMode: "campaign_auto"`. Si no hay match en campaña, cae al matcher geográfico normal. Se agregó `"campaign"` a `LeadAutoAssignMatchType` y a los labels/tones del admin.
+- **Why:** Los clientes de campaña son exclusivos de un vendor — no tiene sentido que compitan con otros vendors en el pool geográfico.
+- **See:** [[03_Decisions#ADR-014]]
+
 ### feat(leads): botones Visitar y Rechazar en CampaignLeadCard
 - **Módulo:** `src/app/user/leads/page.tsx`
 - **What changed:** `CampaignLeadCard` reemplaza el botón "Gestionar" por dos botones directos: "Visitar" (verde) y "Rechazar" (rojo). Ambos auto-asignan al vendor (`takeIncompleteClient`) en silencio antes de abrir el modal correspondiente (`actionType = "visit"` / `"reject"`). Se añadió tono `"red"` a `ActionBtn`. Se crearon `openCampaignVisit` y `openCampaignReject` siguiendo el mismo patrón que `openCampaignManage`.

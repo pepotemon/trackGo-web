@@ -235,4 +235,25 @@ Registro de decisiones de arquitectura y diseño. Cada ADR explica el contexto, 
 
 ---
 
+## ADR-014: Auto-asignación de clientes de campaña en el bot
+
+**Estado:** Activo
+**Fecha:** 2026-06-09
+
+**Contexto:** Los clientes que llegan con `leadAcquisitionCampaignId` son exclusivos de un vendor (via `subscriptionCities.ownerUserId`). Sin embargo, `autoAssignLead` los procesaba con el matcher geográfico junto al resto, pudiendo asignárselos a cualquier vendor con cobertura en la zona.
+
+**Decisión:**
+- En `autoAssignLead.js`, antes del matcher geográfico, verificar si `lead.leadAcquisitionCampaignId` tiene valor
+- Si tiene valor, buscar en `subscriptionCities` donde `activeCampaignId == valor` y `status == "occupied"` (fallback a campo `campaignId`)
+- Si hay match, asignar al `ownerUserId` directamente con `assignmentMode: "campaign_auto"` y `autoAssignMatchType: "campaign"`
+- Si no hay match en campaña, continuar con el matcher geográfico normal
+
+**Consecuencias:**
+- Los clientes de campaña siempre van al vendor dueño de esa campaña cuando tienen `parseStatus: "ready"` y `verificationStatus: "pending_review"/"verified"`
+- Los clientes aún `incomplete` (bot en progreso) permanecen sin asignar en "No verificados" hasta completar el flujo
+- `autoAssignEnabled` no es requerido para recibir clientes de campaña propia
+- `LeadAutoAssignMatchType` extendido con `"campaign"`; labels y tones actualizados en admin
+
+---
+
 *Ver [[06_Changelog]] para cuándo se tomaron estas decisiones.*

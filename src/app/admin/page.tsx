@@ -45,6 +45,7 @@ const matchLabel: Record<LeadAutoAssignMatchType, string> = {
     hub_city: "Hub",
     state: "Estado",
     country: "Pais",
+    campaign: "Campaña",
 };
 
 const matchTone: Record<LeadAutoAssignMatchType, "green" | "purple" | "yellow" | "blue"> = {
@@ -52,6 +53,7 @@ const matchTone: Record<LeadAutoAssignMatchType, "green" | "purple" | "yellow" |
     hub_city: "purple",
     state: "yellow",
     country: "blue",
+    campaign: "purple",
 };
 
 function formatDate(value?: number | null) {

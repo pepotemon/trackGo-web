@@ -53,6 +53,80 @@ async function autoAssignLead(lead) {
             return;
         }
 
+        // Campaign-based assignment: if the lead came from a specific campaign,
+        // assign directly to the vendor who owns that campaign via subscriptionCities.
+        const campaignId = s(lead.leadAcquisitionCampaignId || "");
+        if (campaignId) {
+            let ownerDoc = null;
+
+            const snap1 = await admin.firestore()
+                .collection("subscriptionCities")
+                .where("activeCampaignId", "==", campaignId)
+                .where("status", "==", "occupied")
+                .limit(1)
+                .get();
+            if (!snap1.empty) ownerDoc = snap1.docs[0];
+
+            if (!ownerDoc) {
+                const snap2 = await admin.firestore()
+                    .collection("subscriptionCities")
+                    .where("campaignId", "==", campaignId)
+                    .where("status", "==", "occupied")
+                    .limit(1)
+                    .get();
+                if (!snap2.empty) ownerDoc = snap2.docs[0];
+            }
+
+            if (ownerDoc) {
+                const ownerUserId = s(ownerDoc.data()?.ownerUserId || "");
+                if (ownerUserId) {
+                    const now = Date.now();
+                    const dayKey = dayKeyFromMs(now);
+                    const coverageKey = `campaign:${campaignId}`;
+
+                    await admin.firestore().collection("clients").doc(lead.id).update({
+                        assignedTo: ownerUserId,
+                        assignedAt: now,
+                        assignedDayKey: dayKey,
+                        status: "pending",
+                        statusBy: null,
+                        statusAt: null,
+                        rejectedReason: null,
+                        rejectedReasonText: null,
+                        note: null,
+                        autoAssignedAt: now,
+                        autoAssignMatchType: "campaign",
+                        autoAssignCoverageKey: coverageKey,
+                        assignmentMode: "campaign_auto",
+                        updatedAt: now,
+                    });
+
+                    await logAutoAssign({
+                        lead,
+                        user: { id: ownerUserId, ...ownerDoc.data() },
+                        matchType: "campaign",
+                        coverageKey,
+                        coverageItem: ownerDoc.data(),
+                        createdAt: now,
+                        dayKey,
+                    });
+
+                    console.log("[AUTO ASSIGN] campaign-assigned:", {
+                        clientId: lead.id,
+                        userId: ownerUserId,
+                        campaignId,
+                        coverageKey,
+                    });
+                    return;
+                }
+            }
+
+            console.log("[AUTO ASSIGN] campaign not matched, falling through to geo:", {
+                clientId: lead.id,
+                campaignId,
+            });
+        }
+
         const selected = await selectAutoAssignUser(lead);
 
         if (!selected) {
