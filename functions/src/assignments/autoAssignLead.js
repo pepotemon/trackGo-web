@@ -22,6 +22,15 @@ async function autoAssignLead(lead) {
             return;
         }
 
+        const leadStatus = s(lead.status);
+        if (leadStatus === "rejected" || leadStatus === "visited") {
+            console.log("[AUTO ASSIGN] skipped: lead already actioned", {
+                clientId: lead.id,
+                status: leadStatus,
+            });
+            return;
+        }
+
         const parseStatus = s(lead.parseStatus);
         const verificationStatus = s(lead.verificationStatus);
 

@@ -27,15 +27,12 @@ function hasRequiredMapsForFlow(client) {
     const mapsUrl = !!safeString(client?.mapsUrl || "");
     const lat = safeNumber(client?.lat, null);
     const lng = safeNumber(client?.lng, null);
-    const currentLeadMapsConfirmedAt = safeNumber(client?.currentLeadMapsConfirmedAt, 0);
-
-    const hasStoredMaps = mapsUrl || (lat !== null && lng !== null);
-    const hasConfirmedCurrentLeadMaps = currentLeadMapsConfirmedAt > 0;
-
-    return hasStoredMaps && hasConfirmedCurrentLeadMaps;
+    return mapsUrl || (lat !== null && lng !== null);
 }
 
 function getMissingInfoType(client) {
+    if (safeString(client?.parseStatus || "") === "ready") return "";
+
     const hasBusiness = hasUsefulBusiness(client);
     const hasMaps = hasRequiredMapsForFlow(client);
 
@@ -170,6 +167,7 @@ function shouldSkipReminder(
     const source = safeString(client?.source || "");
     const leadQuality = safeString(client?.leadQuality || "");
     const verificationStatus = safeString(client?.verificationStatus || "");
+    const leadStatus = safeString(client?.status || "");
     const introSentAt = safeNumber(client?.initialIntroSentAt, 0);
     const lastInboundMessageAt = safeNumber(client?.lastInboundMessageAt, 0);
     const lastMissingInfoReminderAt = safeNumber(client?.lastMissingInfoReminderAt, 0);
@@ -180,6 +178,10 @@ function shouldSkipReminder(
 
     if (source !== "whatsapp_meta") {
         return { skip: true, reason: "not_whatsapp_meta" };
+    }
+
+    if (leadStatus === "rejected" || leadStatus === "visited") {
+        return { skip: true, reason: "lead_already_actioned" };
     }
 
     if (!introSentAt) {
