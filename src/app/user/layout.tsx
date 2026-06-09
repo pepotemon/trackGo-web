@@ -23,7 +23,7 @@ const BASE_NAV: { href: string; label: string; icon: NavIconName; permKey?: Vend
     { href: "/user/leads", label: "Prospectos", icon: "leads" },
     { href: "/user/commercial-directory", label: "Directorio", icon: "database", permKey: "canSeeCommercialDirectory" },
     { href: "/user/map", label: "Mapa", icon: "map", permKey: "canSeeMap" },
-    { href: "/user/chat", label: "Recup.", icon: "chat", permKey: "canSeeChat" },
+    { href: "/user/chat", label: "No Aptos", icon: "chat", permKey: "canSeeChat" },
     { href: "/user/settings", label: "Config.", icon: "settings" },
 ];
 
