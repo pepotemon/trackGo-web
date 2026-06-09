@@ -575,9 +575,25 @@ export default function UserLeadsPage() {
     async function confirmVisit() {
         if (!actionLead || !userId) return;
         setSaving(true);
-        const stamp = actionFromNoVerificados && !actionLead.takenFromIncompleteAt ? Date.now() : undefined;
-        try { await markLeadVisited(actionLead, userId, stamp); closeAction(); }
-        catch { setSaving(false); }
+        try {
+            let stamp: number | undefined;
+            if (actionFromNoVerificados && !actionLead.takenFromIncompleteAt) {
+                if (actionLead.assignedTo !== userId) {
+                    await takeIncompleteClient(actionLead.id, userId, {
+                        leadName: actionLead.name,
+                        leadPhone: actionLead.phone,
+                        leadBusiness: actionLead.business,
+                    });
+                } else {
+                    stamp = Date.now();
+                }
+            }
+            await markLeadVisited(actionLead, userId, stamp);
+            closeAction();
+        } catch (error) {
+            if (error instanceof Error && error.message === "client_already_taken") showToast("Este cliente ya fue tomado por otro usuario.");
+            setSaving(false);
+        }
     }
 
     function selectReason(r: RejectedReason) {
@@ -588,9 +604,25 @@ export default function UserLeadsPage() {
     async function confirmReject() {
         if (!actionLead || !rejectReason || !userId) return;
         setSaving(true);
-        const stamp = actionFromNoVerificados && !actionLead.takenFromIncompleteAt ? Date.now() : undefined;
-        try { await markLeadRejected(actionLead, userId, rejectReason, rejectText, stamp); closeAction(); }
-        catch { setSaving(false); }
+        try {
+            let stamp: number | undefined;
+            if (actionFromNoVerificados && !actionLead.takenFromIncompleteAt) {
+                if (actionLead.assignedTo !== userId) {
+                    await takeIncompleteClient(actionLead.id, userId, {
+                        leadName: actionLead.name,
+                        leadPhone: actionLead.phone,
+                        leadBusiness: actionLead.business,
+                    });
+                } else {
+                    stamp = Date.now();
+                }
+            }
+            await markLeadRejected(actionLead, userId, rejectReason, rejectText, stamp);
+            closeAction();
+        } catch (error) {
+            if (error instanceof Error && error.message === "client_already_taken") showToast("Este cliente ya fue tomado por otro usuario.");
+            setSaving(false);
+        }
     }
 
     async function handleUndo(lead: MetaLeadDoc) {

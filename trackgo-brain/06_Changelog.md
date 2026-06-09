@@ -8,6 +8,12 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ## 2026-06-09
 
+### fix(leads): rechazar/visitar desde Gestionar falla para leads incompletos no asignados
+- **Módulo:** `src/app/user/leads/page.tsx`
+- **What changed:** `confirmVisit`/`confirmReject` ahora detectan si el lead de campaña no tiene `assignedTo = userId` (caso `verificationStatus = "incomplete"` donde `autoAssignLead` no corre). En ese caso, llaman `takeIncompleteClient` primero (asigna y sella `takenFromIncompleteAt`), luego `markLeadVisited`/`markLeadRejected` sin stamp extra. Para leads ya asignados (`autoAssignLead` corrió, `pending_review`), siguen usando el stamp en un solo write.
+- **Why:** `autoAssignLead` omite leads con `verificationStatus = "incomplete"` (líneas 45-53). Esos leads llegaban a "No verificados" con `assignedTo = null`. La regla Firestore de visited/rejected exige `assignedTo == auth.uid` → write fallaba silenciosamente y "no hacía nada."
+- **See:** [[04_Errors#ERR-012]]
+
 ### fix(leads): "Gestionar" ya no mueve leads a Verificados hasta que el vendor actúa
 - **Módulo:** `src/app/user/leads/page.tsx`, `src/data/userLeadsRepo.ts`, `firestore.rules`
 - **What changed:** `openCampaignManage` ya no llama `takeIncompleteClient` (que seteaba `takenFromIncompleteAt` prematuramente). Ahora sólo abre el modal. `takenFromIncompleteAt` se sella sólo cuando el vendor confirma Visitado o Rechazado (`confirmVisit`/`confirmReject` con flag `actionFromNoVerificados`). Regla Firestore actualizada: `takenFromIncompleteAt` ahora es campo permitido en el `allow update` de visited/rejected (validando que sea int y que el valor anterior fuera null).
