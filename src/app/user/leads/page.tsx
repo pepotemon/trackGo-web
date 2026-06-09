@@ -121,6 +121,10 @@ function saveNote(leadId: string, note: string) {
         : localStorage.removeItem(`lead_note_${leadId}`);
 }
 
+function isCampaignClient(lead: MetaLeadDoc, campaignIds: string[]): boolean {
+    return campaignIds.length > 0 && !!lead.leadAcquisitionCampaignId && campaignIds.includes(lead.leadAcquisitionCampaignId);
+}
+
 export default function UserLeadsPage() {
     const { firebaseUser, profile, userPermissions, phoneCodes } = useAuth();
     const [leads, setLeads] = useState<MetaLeadDoc[]>([]);
@@ -166,6 +170,7 @@ export default function UserLeadsPage() {
     const [incVisibleCount, setIncVisibleCount] = useState(INC_PAGE_SIZE);
     const [notSuitableLead, setNotSuitableLead] = useState<MetaLeadDoc | null>(null);
     const [notSuitableSaving, setNotSuitableSaving] = useState(false);
+    const [campaignManaging, setCampaignManaging] = useState<string | null>(null);
     const [toast, setToast] = useState("");
     const [showNoVerifAnnouncement, setShowNoVerifAnnouncement] = useState(false);
     const [reviewIncLead, setReviewIncLead] = useState<MetaLeadDoc | null>(null);
@@ -428,6 +433,65 @@ export default function UserLeadsPage() {
         setNotSuitableSaving(false);
     }
 
+    async function openCampaignManage(lead: MetaLeadDoc) {
+        if (!userId) return;
+        setCampaignManaging(lead.id);
+        try {
+            await takeIncompleteClient(lead.id, userId, {
+                leadName: lead.name,
+                leadPhone: lead.phone,
+                leadBusiness: lead.business,
+            });
+        } catch (error) {
+            setCampaignManaging(null);
+            showToast(
+                error instanceof Error && error.message === "client_already_taken"
+                    ? "Este cliente ya fue tomado por otro usuario."
+                    : "No se pudo procesar este cliente."
+            );
+            return;
+        }
+        setCampaignManaging(null);
+        setActionLead(lead);
+        setActionType("manage");
+    }
+
+    async function openCampaignWhatsApp(lead: MetaLeadDoc) {
+        if (!userId) return;
+        setCampaignManaging(lead.id);
+        try {
+            await takeIncompleteClient(lead.id, userId, {
+                leadName: lead.name,
+                leadPhone: lead.phone,
+                leadBusiness: lead.business,
+            });
+        } catch (error) {
+            setCampaignManaging(null);
+            showToast(
+                error instanceof Error && error.message === "client_already_taken"
+                    ? "Este cliente ya fue tomado por otro usuario."
+                    : "No se pudo procesar este cliente."
+            );
+            return;
+        }
+        setCampaignManaging(null);
+        const msg = isSpanishPhone(lead.phone)
+            ? `¡Hola! Somos de Crédito Comercial. Usted nos contactó anteriormente sobre la liberación de crédito para su negocio. Nos gustaría saber si aún tiene interés. ¡Gracias y disculpe la molestia! 🙏`
+            : `Olá! Somos da Crédito Comercial. Você nos contatou anteriormente sobre a liberação de crédito para o seu comércio. Gostaríamos de saber se ainda tem interesse. Obrigado e desculpe o incômodo! 🙏`;
+        triggerWa(() => {
+            window.open(buildWALink(lead.phone, msg), "_blank");
+            markWhatsAppSent(lead.id);
+            setIncWaSent((prev) => new Set(prev).add(lead.id));
+        });
+        showToast("Cliente añadido a Verificados.");
+    }
+
+    function openCampaignNoteAction(lead: MetaLeadDoc) {
+        setActionLead(lead);
+        setNoteText(incNotes[lead.id] ?? getNote(lead.id));
+        setActionType("note");
+    }
+
     async function copyIncLead(lead: MetaLeadDoc) {
         const mapsUrl = lead.location?.mapsUrl || (
             lead.location?.lat != null && lead.location?.lng != null
@@ -454,6 +518,7 @@ export default function UserLeadsPage() {
         if (!actionLead) return;
         saveNote(actionLead.id, noteText);
         setNotes((prev) => ({ ...prev, [actionLead.id]: noteText.trim() }));
+        setIncNotes((prev) => ({ ...prev, [actionLead.id]: noteText.trim() }));
         closeAction();
     }
 
@@ -697,24 +762,40 @@ export default function UserLeadsPage() {
                         </div>
                     ) :
                     <div className="grid gap-2.5">
-                        {incVisible.slice(0, incVisibleCount).map((lead) => (
-                            <RecoveryCard
-                                key={lead.id}
-                                lead={lead}
-                                note={incNotes[lead.id]}
-                                waSent={incWaSent.has(lead.id)}
-                                copied={incCopiedId === lead.id}
-                                onTake={() => setConfirmTakeLead(lead)}
-                                onReview={() => setReviewIncLead(lead)}
-                                onNotSuitable={() => setNotSuitableLead(lead)}
-                                onWhatsApp={() => setWaTakeLead(lead)}
-                                onMaps={() => {
-                                    const url = lead.location?.mapsUrl || (lead.location?.lat != null ? `https://maps.google.com/?q=${lead.location.lat},${lead.location.lng}` : "");
-                                    if (url) window.open(url, "_blank");
-                                }}
-                                onCopy={() => void copyIncLead(lead)}
-                            />
-                        ))}
+                        {incVisible.slice(0, incVisibleCount).map((lead) => {
+                            const mapsUrl = lead.location?.mapsUrl || (lead.location?.lat != null ? `https://maps.google.com/?q=${lead.location.lat},${lead.location.lng}` : "");
+                            return isCampaignClient(lead, campaignIds) ? (
+                                <CampaignLeadCard
+                                    key={lead.id}
+                                    lead={lead}
+                                    note={incNotes[lead.id]}
+                                    waSent={incWaSent.has(lead.id)}
+                                    copied={incCopiedId === lead.id}
+                                    managing={campaignManaging === lead.id}
+                                    onManage={() => void openCampaignManage(lead)}
+                                    onReview={() => setReviewIncLead(lead)}
+                                    onNotSuitable={() => setNotSuitableLead(lead)}
+                                    onWhatsApp={() => void openCampaignWhatsApp(lead)}
+                                    onMaps={mapsUrl ? () => window.open(mapsUrl, "_blank") : undefined}
+                                    onCopy={() => void copyIncLead(lead)}
+                                    onNote={() => openCampaignNoteAction(lead)}
+                                />
+                            ) : (
+                                <RecoveryCard
+                                    key={lead.id}
+                                    lead={lead}
+                                    note={incNotes[lead.id]}
+                                    waSent={incWaSent.has(lead.id)}
+                                    copied={incCopiedId === lead.id}
+                                    onTake={() => setConfirmTakeLead(lead)}
+                                    onReview={() => setReviewIncLead(lead)}
+                                    onNotSuitable={() => setNotSuitableLead(lead)}
+                                    onWhatsApp={() => setWaTakeLead(lead)}
+                                    onMaps={mapsUrl ? () => window.open(mapsUrl, "_blank") : () => {}}
+                                    onCopy={() => void copyIncLead(lead)}
+                                />
+                            );
+                        })}
                         {incVisible.length > incVisibleCount ? (
                             <button
                                 type="button"
@@ -771,24 +852,40 @@ export default function UserLeadsPage() {
                                         onNote={() => { openNoteAction(lead); setSearchOpen(false); }}
                                         canChatWithProspects={userPermissions.canChatWithProspects}
                                     />
-                                )) : searchList.map((lead) => (
-                                    <RecoveryCard
-                                        key={lead.id}
-                                        lead={lead}
-                                        note={incNotes[lead.id]}
-                                        waSent={incWaSent.has(lead.id)}
-                                        copied={incCopiedId === lead.id}
-                                        onTake={() => { setConfirmTakeLead(lead); setSearchOpen(false); }}
-                                        onReview={() => { setReviewIncLead(lead); setSearchOpen(false); }}
-                                        onNotSuitable={() => { setNotSuitableLead(lead); setSearchOpen(false); }}
-                                        onWhatsApp={() => { setWaTakeLead(lead); setSearchOpen(false); }}
-                                        onMaps={() => {
-                                            const url = lead.location?.mapsUrl || (lead.location?.lat != null ? `https://maps.google.com/?q=${lead.location.lat},${lead.location.lng}` : "");
-                                            if (url) window.open(url, "_blank");
-                                        }}
-                                        onCopy={() => void copyIncLead(lead)}
-                                    />
-                                ))}
+                                )) : searchList.map((lead) => {
+                                    const mapsUrl = lead.location?.mapsUrl || (lead.location?.lat != null ? `https://maps.google.com/?q=${lead.location.lat},${lead.location.lng}` : "");
+                                    return isCampaignClient(lead, campaignIds) ? (
+                                        <CampaignLeadCard
+                                            key={lead.id}
+                                            lead={lead}
+                                            note={incNotes[lead.id]}
+                                            waSent={incWaSent.has(lead.id)}
+                                            copied={incCopiedId === lead.id}
+                                            managing={campaignManaging === lead.id}
+                                            onManage={() => { void openCampaignManage(lead); setSearchOpen(false); }}
+                                            onReview={() => { setReviewIncLead(lead); setSearchOpen(false); }}
+                                            onNotSuitable={() => { setNotSuitableLead(lead); setSearchOpen(false); }}
+                                            onWhatsApp={() => { void openCampaignWhatsApp(lead); setSearchOpen(false); }}
+                                            onMaps={mapsUrl ? () => window.open(mapsUrl, "_blank") : undefined}
+                                            onCopy={() => void copyIncLead(lead)}
+                                            onNote={() => { openCampaignNoteAction(lead); setSearchOpen(false); }}
+                                        />
+                                    ) : (
+                                        <RecoveryCard
+                                            key={lead.id}
+                                            lead={lead}
+                                            note={incNotes[lead.id]}
+                                            waSent={incWaSent.has(lead.id)}
+                                            copied={incCopiedId === lead.id}
+                                            onTake={() => { setConfirmTakeLead(lead); setSearchOpen(false); }}
+                                            onReview={() => { setReviewIncLead(lead); setSearchOpen(false); }}
+                                            onNotSuitable={() => { setNotSuitableLead(lead); setSearchOpen(false); }}
+                                            onWhatsApp={() => { setWaTakeLead(lead); setSearchOpen(false); }}
+                                            onMaps={mapsUrl ? () => window.open(mapsUrl, "_blank") : () => {}}
+                                            onCopy={() => void copyIncLead(lead)}
+                                        />
+                                    );
+                                })}
                             </div>
                         )}
                     </div>
@@ -1552,6 +1649,129 @@ function RecoveryCard({
                     {hasLocation ? (
                         <ActionBtn onClick={onMaps} title="Maps" tone="blue"><MapsIcon /></ActionBtn>
                     ) : null}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ── CAMPAIGN LEAD CARD ───────────────────────────────────────────────────────
+
+function CampaignLeadCard({
+    lead, note, waSent, copied, managing,
+    onManage, onReview, onNotSuitable, onWhatsApp, onMaps, onCopy, onNote,
+}: {
+    lead: MetaLeadDoc;
+    note?: string;
+    waSent: boolean;
+    copied: boolean;
+    managing: boolean;
+    onManage: () => void;
+    onReview: () => void;
+    onNotSuitable: () => void;
+    onWhatsApp: () => void;
+    onMaps?: () => void;
+    onCopy: () => void;
+    onNote: () => void;
+}) {
+    const hasLocation = !!lead.location?.lat || !!lead.location?.mapsUrl;
+
+    return (
+        <div className="overflow-hidden rounded-[18px] border border-amber-100 bg-white shadow-[0_2px_12px_rgba(91,33,255,0.05)]">
+            <div className="p-3">
+                {/* Header */}
+                <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                        <p className="truncate text-[14px] font-black text-[#101936]">
+                            {lead.business || lead.name || lead.phone || "Sin nombre"}
+                        </p>
+                        {lead.name && lead.business ? (
+                            <p className="truncate text-[11px] font-semibold text-[#66739A]">{lead.name}</p>
+                        ) : null}
+                    </div>
+                    <span className="shrink-0 inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700">Sin verificar</span>
+                </div>
+
+                {/* Details */}
+                <div className="mt-1.5 space-y-1">
+                    {lead.phone ? (
+                        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#66739A]">
+                            <PhoneIcon /> <span className="truncate">{lead.phone}</span>
+                        </div>
+                    ) : null}
+                    {lead.location?.address ? (
+                        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#66739A]">
+                            <PinIcon /> <span className="truncate">{lead.location.address}</span>
+                        </div>
+                    ) : lead.leadAcquisitionCityLabel ? (
+                        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#66739A]">
+                            <PinIcon /> <span className="truncate">{lead.leadAcquisitionCityLabel}</span>
+                        </div>
+                    ) : null}
+                </div>
+
+                {/* Missing data badges */}
+                {(!hasLocation || !lead.business) ? (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                        {!hasLocation ? (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+                                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />Falta: ubicación
+                            </span>
+                        ) : null}
+                        {!lead.business ? (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700">
+                                <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />Falta: negocio
+                            </span>
+                        ) : null}
+                    </div>
+                ) : null}
+
+                {/* Last message snippet */}
+                {lead.lastInboundText ? (
+                    <p className="mt-2 line-clamp-2 rounded-[10px] border border-[#F2F0FF] bg-[#f8f7ff] px-2.5 py-1.5 text-[11px] font-semibold text-[#66739A]">
+                        {lead.lastInboundText}
+                    </p>
+                ) : null}
+
+                {/* Note */}
+                {note ? (
+                    <div className="mt-2 flex items-start gap-1.5 rounded-[10px] border border-violet-100 bg-violet-50 px-2.5 py-1.5">
+                        <NoteIcon />
+                        <p className="text-[11px] font-semibold text-[#5B21FF]">{note}</p>
+                    </div>
+                ) : null}
+
+                {/* Actions */}
+                <div className="mt-3 flex items-center gap-1.5 border-t border-[#F2F0FF] pt-2.5">
+                    <ActionBtn onClick={onReview} tone="violet" title="Ver chat"><ChatIcon /></ActionBtn>
+                    <ActionBtn onClick={onWhatsApp} tone={waSent ? "sent" : "green"} title={waSent ? "Enviado" : "WhatsApp"}>
+                        {waSent ? <WACheckIcon /> : <WAIcon />}
+                    </ActionBtn>
+                    {onMaps ? <ActionBtn onClick={onMaps} title="Maps" tone="blue"><MapsIcon /></ActionBtn> : null}
+                    <div className="relative">
+                        <ActionBtn onClick={onCopy} title={copied ? "Copiado" : "Copiar"} tone={copied ? "sent" : "violet"}>
+                            {copied ? <CheckIcon /> : <CopyIcon />}
+                        </ActionBtn>
+                        {copied ? (
+                            <span className="pointer-events-none absolute -top-7 left-1/2 -translate-x-1/2 rounded-full border border-emerald-200 bg-white px-2 py-1 text-[9px] font-black text-emerald-700 shadow-[0_8px_22px_rgba(16,185,129,0.16)]">
+                                Copiado
+                            </span>
+                        ) : null}
+                    </div>
+                    <ActionBtn onClick={onNote} title="Nota" tone="violet"><NoteIcon /></ActionBtn>
+                    <ActionBtn onClick={onNotSuitable} tone="orange" title="No Apto"><BanIcon /></ActionBtn>
+                    <div className="flex-1" />
+                    <button
+                        type="button"
+                        onClick={onManage}
+                        disabled={managing}
+                        className="flex h-7 items-center gap-1.5 rounded-[10px] border border-[#E8E7FB] bg-white px-2.5 text-[10px] font-black text-[#7C3AED] shadow-sm transition active:bg-[#f3f0ff] disabled:opacity-50"
+                    >
+                        {managing ? (
+                            <svg className="tg-spin h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 12a9 9 0 1 1-3.1-6.8" /></svg>
+                        ) : null}
+                        Gestionar
+                    </button>
                 </div>
             </div>
         </div>
