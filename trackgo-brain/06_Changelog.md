@@ -8,6 +8,11 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ## 2026-06-09
 
+### fix(leads): permitir Gestionar en leads de campaña pre-asignados por autoAssignLead
+- **Módulo:** `src/data/incompleteClientsRepo.ts`, `firestore.rules`
+- **What changed:** `takeIncompleteClient` ya no lanza `client_already_taken` si `assignedTo === userId` (el mismo vendor). Se agrega regla Firestore para permitir al vendor confirmar un lead que `autoAssignLead` pre-asignó (condición: `assignedTo == auth.uid && takenFromIncompleteAt == null`).
+- **Why:** `autoAssignLead` deja `assignedTo = vendorId` antes de que el vendor actúe. Al presionar "Gestionar", `takeIncompleteClient` fallaba con `client_already_taken` bloqueando el flujo.
+
 ### feat(leads): simplificar UX de "No verificados" — Gestionar modal + Revisar fusionado
 - **Módulo:** `src/app/user/leads/page.tsx`
 - **What changed:** `CampaignLeadCard`: botones Visitar/Rechazar reemplazados por un único botón "Gestionar" que abre el modal con opciones Visitado/Rechazado. `RecoveryCard`: eliminados botones WA standalone y Verificar standalone; el botón principal pasa a ser "Revisar" (full-width, abre el chat) con ícono de chat. Dentro del modal de review, el botón "Tomar" renombrado a "Verificar" y oculto para leads de campaña (estos usan el flujo Gestionar).

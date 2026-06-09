@@ -506,6 +506,29 @@ service cloud.firestore {
         && request.resource.data.takenFromIncompleteAt is int
         && request.resource.data.updatedAt is int;
 
+      // Vendor confirms a campaign lead that autoAssignLead pre-assigned to them
+      // (assignedTo already set to this vendor, takenFromIncompleteAt not yet stamped)
+      allow update: if isUser()
+        && resource.data.assignedTo == request.auth.uid
+        && resource.data.verificationStatus in ["pending_review", "incomplete"]
+        && (
+          !("takenFromIncompleteAt" in resource.data)
+          || resource.data.takenFromIncompleteAt == null
+        )
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          "assignedTo", "assignedAt", "assignedDayKey",
+          "status", "statusBy", "statusAt",
+          "rejectedReason", "rejectedReasonText", "note",
+          "leadHistoryArchivedAt", "leadHistoryBucket",
+          "verificationStatus", "leadQuality", "verificationStatusChangedAt",
+          "takenFromIncompleteAt", "updatedAt"
+        ])
+        && request.resource.data.assignedTo == request.auth.uid
+        && request.resource.data.status == "pending"
+        && request.resource.data.verificationStatus == "pending_review"
+        && request.resource.data.takenFromIncompleteAt is int
+        && request.resource.data.updatedAt is int;
+
       // Vendor can take a not_suitable client from their coverage and move it into Prospectos.
       allow update: if isUser()
         && resource.data.verificationStatus == "not_suitable"

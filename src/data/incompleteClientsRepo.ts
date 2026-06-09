@@ -369,7 +369,9 @@ export async function takeIncompleteClient(clientId: string, userId: string, met
         const assignedTo = typeof data.assignedTo === "string" ? data.assignedTo.trim() : "";
         const verificationStatus = typeof data.verificationStatus === "string" ? data.verificationStatus : "";
 
-        if (assignedTo) throw new Error("client_already_taken");
+        // If already assigned to this same vendor (e.g. by autoAssignLead), allow taking —
+        // just stamp takenFromIncompleteAt so it moves out of "No verificados".
+        if (assignedTo && assignedTo !== userId) throw new Error("client_already_taken");
         if (!INCOMPLETE_STATUSES.includes(verificationStatus as (typeof INCOMPLETE_STATUSES)[number])) {
             throw new Error("client_not_available");
         }
