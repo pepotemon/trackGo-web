@@ -11,8 +11,9 @@ import {
     subscribeUserLeads,
 } from "@/data/userLeadsRepo";
 import { takeIncompleteClient, subscribeIncompleteClients, dddCity, extractDDD } from "@/data/incompleteClientsRepo";
-import type { MetaLeadDoc } from "@/types/leads";
+import type { MetaLeadDoc, LeadMessageDoc } from "@/types/leads";
 import type { DailyEventDoc } from "@/types/accounting";
+import { subscribeLeadMessages } from "@/data/leadChatRepo";
 import {
     REJECTED_REASON_LABELS,
     type RejectedReason,
@@ -161,6 +162,10 @@ export default function UserLeadsPage() {
     const [takeSaving, setTakeSaving] = useState(false);
     const [incRecoveryClock, setIncRecoveryClock] = useState(0);
     const [toast, setToast] = useState("");
+    const [reviewIncLead, setReviewIncLead] = useState<MetaLeadDoc | null>(null);
+    const [reviewIncMessages, setReviewIncMessages] = useState<LeadMessageDoc[]>([]);
+    const [reviewIncLoading, setReviewIncLoading] = useState(false);
+    const [reviewIncError, setReviewIncError] = useState("");
 
     const userId = firebaseUser?.uid ?? "";
     const userName = profile?.name?.split(" ")[0] ?? "Vendedor";
@@ -219,6 +224,22 @@ export default function UserLeadsPage() {
         const timer = window.setInterval(() => setIncRecoveryClock((c) => c + 1), 5 * 60 * 1000);
         return () => window.clearInterval(timer);
     }, []);
+
+    useEffect(() => {
+        if (!reviewIncLead) {
+            setReviewIncMessages([]);
+            setReviewIncError("");
+            setReviewIncLoading(false);
+            return;
+        }
+        setReviewIncLoading(true);
+        setReviewIncError("");
+        return subscribeLeadMessages(
+            reviewIncLead.id,
+            (messages) => { setReviewIncMessages(messages); setReviewIncLoading(false); },
+            (msg) => { setReviewIncError(msg); setReviewIncLoading(false); }
+        );
+    }, [reviewIncLead]);
 
     const stats = useMemo<UserLeadStats>(() => {
         const today = todayKey();
@@ -310,6 +331,7 @@ export default function UserLeadsPage() {
     useBackButtonDismiss(Boolean(actionType), closeAction);
     useBackButtonDismiss(Boolean(waTakeLead), () => setWaTakeLead(null));
     useBackButtonDismiss(Boolean(confirmTakeLead), () => setConfirmTakeLead(null));
+    useBackButtonDismiss(Boolean(reviewIncLead), () => setReviewIncLead(null));
 
     // Tab change: reset search and ddd filter
     useEffect(() => {
@@ -651,6 +673,7 @@ export default function UserLeadsPage() {
                                 waSent={incWaSent.has(lead.id)}
                                 copied={incCopiedId === lead.id}
                                 onTake={() => setConfirmTakeLead(lead)}
+                                onReview={() => setReviewIncLead(lead)}
                                 onWhatsApp={() => setWaTakeLead(lead)}
                                 onMaps={() => {
                                     const url = lead.location?.mapsUrl || (lead.location?.lat != null ? `https://maps.google.com/?q=${lead.location.lat},${lead.location.lng}` : "");
@@ -714,6 +737,7 @@ export default function UserLeadsPage() {
                                         waSent={incWaSent.has(lead.id)}
                                         copied={incCopiedId === lead.id}
                                         onTake={() => { setConfirmTakeLead(lead); setSearchOpen(false); }}
+                                        onReview={() => { setReviewIncLead(lead); setSearchOpen(false); }}
                                         onWhatsApp={() => { setWaTakeLead(lead); setSearchOpen(false); }}
                                         onMaps={() => {
                                             const url = lead.location?.mapsUrl || (lead.location?.lat != null ? `https://maps.google.com/?q=${lead.location.lat},${lead.location.lng}` : "");
@@ -990,6 +1014,47 @@ export default function UserLeadsPage() {
                 </BottomSheet>
             ) : null}
 
+            {/* VER CHAT (read-only) for No verificados */}
+            {reviewIncLead ? (
+                <BottomSheet onClose={() => setReviewIncLead(null)} tall>
+                    <div className="mb-3 flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                            <span className="inline-flex items-center rounded-full bg-[#f3f0ff] px-2 py-0.5 text-[9px] font-black text-[#7C3AED]">CHAT</span>
+                            <p className="mt-1.5 truncate text-[15px] font-black text-[#101936]">
+                                {reviewIncLead.business || reviewIncLead.name || reviewIncLead.phone || "Sin nombre"}
+                            </p>
+                            <p className="text-[11px] font-semibold text-[#66739A]">{reviewIncLead.phone}</p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => { const lead = reviewIncLead; setReviewIncLead(null); setConfirmTakeLead(lead); }}
+                            className="shrink-0 rounded-[11px] bg-emerald-600 px-3 py-2 text-[11px] font-black text-white"
+                        >
+                            Tomar
+                        </button>
+                    </div>
+                    <div className="min-h-[260px] overflow-y-auto rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 py-3">
+                        {reviewIncLoading ? (
+                            <div className="flex justify-center py-8">
+                                <svg className="tg-spin h-6 w-6 text-[#7C3AED]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                                    <path d="M21 12a9 9 0 1 1-3.1-6.8" />
+                                </svg>
+                            </div>
+                        ) : reviewIncError ? (
+                            <p className="py-6 text-center text-[12px] font-bold text-red-600">{reviewIncError}</p>
+                        ) : reviewIncMessages.length === 0 ? (
+                            <p className="py-6 text-center text-[12px] font-semibold text-[#98A2B3]">Sin mensajes guardados.</p>
+                        ) : (
+                            <div className="space-y-2 pb-4">
+                                {reviewIncMessages.map((message) => (
+                                    <IncMessageBubble key={message.id} message={message} />
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </BottomSheet>
+            ) : null}
+
             {/* TOAST */}
             {toast ? (
                 <div className="fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom)+84px)] z-[60] rounded-[16px] border border-[#E8E7FB] bg-white px-4 py-3 text-center text-[12px] font-black text-[#101936] shadow-[0_16px_42px_rgba(91,33,255,0.16)]">
@@ -1260,13 +1325,14 @@ function EmptyState({ filter, search }: { filter: StatusFilter; search: string }
 
 function RecoveryCard({
     lead, note, waSent, copied,
-    onTake, onWhatsApp, onMaps, onCopy,
+    onTake, onReview, onWhatsApp, onMaps, onCopy,
 }: {
     lead: MetaLeadDoc;
     note?: string;
     waSent: boolean;
     copied: boolean;
     onTake: () => void;
+    onReview: () => void;
     onWhatsApp: () => void;
     onMaps: () => void;
     onCopy: () => void;
@@ -1359,6 +1425,7 @@ function RecoveryCard({
                 ) : null}
 
                 <div className="mt-3 flex items-center gap-1.5 border-t border-[#F2F0FF] pt-2.5">
+                    <ActionBtn onClick={onReview} tone="violet" title="Ver chat"><ChatIcon /></ActionBtn>
                     <button
                         type="button"
                         onClick={onTake}
@@ -1471,4 +1538,31 @@ function WACheckIcon() {
 }
 function InboxIcon() {
     return <svg viewBox="0 0 24 24" className="h-7 w-7 text-[#7C3AED]" {...ic}><path d="M4 4h16l-2 9H6L4 4Z" /><path d="M6 13v5a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-5" /></svg>;
+}
+function ChatIcon() {
+    return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z" /><path d="M8 9h8M8 13h5" /></svg>;
+}
+
+// ── MESSAGE BUBBLE (for read-only chat in No verificados) ─────────────────────
+
+function formatMessageTime(ts: number | null | undefined): string {
+    if (!ts) return "";
+    return new Intl.DateTimeFormat("es", { hour: "2-digit", minute: "2-digit" }).format(new Date(ts));
+}
+
+function IncMessageBubble({ message }: { message: LeadMessageDoc }) {
+    const outbound = message.direction === "outbound";
+    const sender = message.senderType === "bot" ? "Bot" : message.senderType === "admin" ? "Admin" : "Cliente";
+    return (
+        <div className={["flex", outbound ? "justify-end" : "justify-start"].join(" ")}>
+            <div className={[
+                "max-w-[82%] rounded-[15px] px-3 py-2",
+                outbound ? "rounded-br-[4px] bg-[#7C3AED] text-white" : "rounded-bl-[4px] border border-[#E8E7FB] bg-white text-[#101936]",
+            ].join(" ")}>
+                <p className={["mb-0.5 text-[9px] font-black uppercase tracking-wide", outbound ? "text-violet-200" : "text-[#98A2B3]"].join(" ")}>{sender}</p>
+                <p className="whitespace-pre-wrap text-[12px] font-semibold leading-relaxed">{message.text}</p>
+                <p className={["mt-1 text-right text-[9px] font-semibold", outbound ? "text-violet-200" : "text-[#98A2B3]"].join(" ")}>{formatMessageTime(message.createdAt)}</p>
+            </div>
+        </div>
+    );
 }
