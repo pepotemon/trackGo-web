@@ -163,6 +163,22 @@ Registro de bugs, errores resueltos, y patrones problemáticos. Sirve para no re
 
 ---
 
+## ERR-013: Auto-asignación por campaña nunca funcionó — colección inexistente
+
+**Estado:** Resuelto  
+**Fecha:** 2026-06-09
+
+**Problema:** `autoAssignLead` y `useUserCampaignIds` consultaban la colección `subscriptionCities`, que no existe en Firestore. Ningún servidor escribía en ella. El servidor escribe en `cities` (con `ownerUserId`, `activeCampaignId`, `status: "occupied"`). Resultado: `campaignIds` siempre vacío en el cliente, `autoAssignLead` nunca encontraba owner por campaña y caía al matcher geográfico.
+
+**Solución:**
+- `autoAssignLead.js`: `subscriptionCities` → `cities`
+- `useUserCampaignIds.ts`: `subscriptionCities` → `subscriptions` (accesible por cliente, tiene regla `userId == auth.uid`). Campo usado: `campaignId` + `city`.
+- `firestore.indexes.json`: índice compuesto `(userId ASC, status ASC)` en `subscriptions`.
+
+**Lección:** Al escribir código que lee de Firestore, verificar siempre que la colección referenciada sea la misma que el servidor escribe. Nunca asumir que una colección existe sin buscar `collection("nombre")` en el codebase.
+
+---
+
 ## ERR-012: Leads de campaña auto-asignados desaparecen de "No verificados"
 
 **Estado:** Resuelto  

@@ -54,13 +54,13 @@ async function autoAssignLead(lead) {
         }
 
         // Campaign-based assignment: if the lead came from a specific campaign,
-        // assign directly to the vendor who owns that campaign via subscriptionCities.
+        // assign directly to the vendor who owns that campaign via the cities collection.
         const campaignId = s(lead.leadAcquisitionCampaignId || "");
         if (campaignId) {
             let ownerDoc = null;
 
             const snap1 = await admin.firestore()
-                .collection("subscriptionCities")
+                .collection("cities")
                 .where("activeCampaignId", "==", campaignId)
                 .where("status", "==", "occupied")
                 .limit(1)
@@ -69,7 +69,7 @@ async function autoAssignLead(lead) {
 
             if (!ownerDoc) {
                 const snap2 = await admin.firestore()
-                    .collection("subscriptionCities")
+                    .collection("cities")
                     .where("campaignId", "==", campaignId)
                     .where("status", "==", "occupied")
                     .limit(1)

@@ -8,6 +8,12 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ## 2026-06-09
 
+### fix(assignments): corregir colección incorrecta en auto-asignación y campaignIds
+- **Módulo:** `functions/src/assignments/autoAssignLead.js`, `src/features/subscriptions/useUserCampaignIds.ts`, `firestore.indexes.json`
+- **What changed:** `autoAssignLead` cambiado de `subscriptionCities` a `cities` (colección correcta donde el servidor escribe `ownerUserId`, `activeCampaignId`, `status`). `useUserCampaignIds` cambiado de `subscriptionCities` a `subscriptions` (colección accesible por el cliente con regla Firestore `userId == auth.uid`). Índice compuesto `(userId, status)` agregado en `subscriptions`. Ahora `cityNames` usa el campo `city` del doc de suscripción.
+- **Why:** `subscriptionCities` no existe como colección — nunca fue escrita. Todo el flujo de asignación por campaña nunca funcionó porque ambas queries siempre devolvían vacío.
+- **See:** [[04_Errors#ERR-013]]
+
 ### feat(leads): fusionar campañas + DDD en "No verificados" cuando ambos están activos
 - **Módulo:** `src/data/incompleteClientsRepo.ts`
 - **What changed:** `subscribeIncompleteClients` ahora corre ambas subscriptions (campaña + DDD) en paralelo cuando el vendor tiene `campaignIds` Y `phoneCodes`. Mergea resultados deduplicando por ID (leads de campaña tienen prioridad). Leads de campaña → `CampaignLeadCard`. Leads DDD → `RecoveryCard`.
