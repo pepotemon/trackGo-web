@@ -23,6 +23,7 @@ import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
 import { useWhatsAppDailyLimit } from "@/hooks/useWhatsAppDailyLimit";
 import { WhatsAppLimitModal } from "@/components/WhatsAppLimitModal";
 import { useVendorSubscriptionStatus, type VendorSubscriptionStatus } from "@/features/subscriptions/useVendorSubscriptionStatus";
+import { useUserCampaignIds } from "@/features/subscriptions/useUserCampaignIds";
 
 type StatusFilter = "pending" | "visited" | "rejected" | "all";
 
@@ -148,6 +149,7 @@ export default function UserLeadsPage() {
     const userName = profile?.name?.split(" ")[0] ?? "Vendedor";
     const activeWeek = useMemo(() => weekRange(), []);
     const subscriptionStatus = useVendorSubscriptionStatus(userPermissions.canSeeSubscriptions ? userId : null);
+    const { campaignIds } = useUserCampaignIds(userId);
 
     useEffect(() => {
         return () => {
@@ -177,7 +179,7 @@ export default function UserLeadsPage() {
     }, [activeWeek, userId]);
 
     useEffect(() => {
-        if (!phoneCodes.length || !userId) return;
+        if ((!phoneCodes.length && !campaignIds.length) || !userId) return;
 
         const VISITED_KEY = 'recuperar_last_visited_at';
         const SNOOZE_KEY = 'recuperar_snooze_until';
@@ -195,10 +197,10 @@ export default function UserLeadsPage() {
                 setRecuperarCount(clients.length);
                 setRecuperarAlert(true);
             }
-        });
+        }, campaignIds.length > 0 ? campaignIds : undefined);
 
         return unsub;
-    }, [phoneCodes, userId]);
+    }, [phoneCodes, campaignIds, userId]);
 
     const stats = useMemo<UserLeadStats>(() => {
         const today = todayKey();

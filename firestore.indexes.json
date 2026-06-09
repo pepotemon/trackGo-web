@@ -47,6 +47,20 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "verificationStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "leadAcquisitionCampaignId",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "clients",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "status",
           "order": "ASCENDING"
         },

@@ -17,6 +17,7 @@ import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
 import { getReviewedIds, getWhatsAppSentIds, markReviewed, markWhatsAppSent } from "@/lib/userContactState";
 import { useWhatsAppDailyLimit } from "@/hooks/useWhatsAppDailyLimit";
 import { WhatsAppLimitModal } from "@/components/WhatsAppLimitModal";
+import { useUserCampaignIds } from "@/features/subscriptions/useUserCampaignIds";
 
 type Tab = "incomplete" | "not_suitable";
 type RangePreset = "all" | "today" | "week" | "month" | "custom";
@@ -172,6 +173,7 @@ function recoveryLocationLabel(lead: MetaLeadDoc, ddd: string | null) {
 export default function UserIncompleteClientsPage() {
     const { firebaseUser, phoneCodes } = useAuth();
     const userId = firebaseUser?.uid ?? "";
+    const { campaignIds, cityNames } = useUserCampaignIds(userId);
 
     const [tab, setTab] = useState<Tab>("incomplete");
     const [incomplete, setIncomplete] = useState<MetaLeadDoc[]>([]);
@@ -233,7 +235,7 @@ export default function UserIncompleteClientsPage() {
     }, []);
 
     useEffect(() => {
-        if (!phoneCodes.length) {
+        if (!phoneCodes.length && !campaignIds.length) {
             const timer = window.setTimeout(() => {
                 setLoadingIncomplete(false);
                 setLoadingNotSuitable(false);
@@ -251,7 +253,7 @@ export default function UserIncompleteClientsPage() {
             setWaSent((prev) => new Set([...prev, ...getWhatsAppSentIds(ids)]));
             setReviewed((prev) => new Set([...prev, ...getReviewedIds(ids)]));
             setLoadingIncomplete(false);
-        });
+        }, campaignIds.length > 0 ? campaignIds : undefined);
 
         const loadingNotSuitableTimer = window.setTimeout(() => setLoadingNotSuitable(true), 0);
         const unsubNS = subscribeNotSuitableClients(phoneCodes, (data) => {
@@ -260,7 +262,7 @@ export default function UserIncompleteClientsPage() {
             setWaSent((prev) => new Set([...prev, ...getWhatsAppSentIds(ids)]));
             setReviewed((prev) => new Set([...prev, ...getReviewedIds(ids)]));
             setLoadingNotSuitable(false);
-        });
+        }, campaignIds.length > 0 ? campaignIds : undefined);
 
         return () => {
             window.clearTimeout(loadingTimer);
@@ -268,7 +270,7 @@ export default function UserIncompleteClientsPage() {
             unsubInc();
             unsubNS();
         };
-    }, [phoneCodes, recoveryClock]);
+    }, [phoneCodes, campaignIds, recoveryClock]);
 
     useEffect(() => {
         if (actionType !== "review" || !actionLead) {
@@ -581,15 +583,15 @@ export default function UserIncompleteClientsPage() {
     }
 
 
-    if (!phoneCodes.length && !loadingIncomplete) {
+    if (!phoneCodes.length && !campaignIds.length && !loadingIncomplete) {
         return (
             <div className="flex min-h-screen flex-col items-center justify-center bg-[#fbfaff] px-6 text-center">
                 <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f3f0ff]">
                     <ClientsIcon className="h-7 w-7 text-[#7C3AED]" />
                 </div>
-                <p className="text-[15px] font-black text-[#101936]">Sin indicativos configurados</p>
+                <p className="text-[15px] font-black text-[#101936]">Sin cobertura configurada</p>
                 <p className="mt-2 max-w-xs text-[12px] font-semibold text-[#66739A]">
-                    El administrador debe configurar los DDDs de tu cobertura en tu perfil.
+                    El administrador debe configurar los indicativos de tu cobertura o activar una suscripción.
                 </p>
             </div>
         );
@@ -604,7 +606,7 @@ export default function UserIncompleteClientsPage() {
                             Clientes por recuperar
                         </h1>
                         <p className="mt-0.5 text-[11px] font-semibold text-[#66739A]">
-                            {phoneCodes.map(dddCity).join(", ")}
+                            {cityNames.length > 0 ? cityNames.join(", ") : phoneCodes.map(dddCity).join(", ")}
                         </p>
                     </div>
                     <div className="flex shrink-0 gap-2">
@@ -686,7 +688,7 @@ export default function UserIncompleteClientsPage() {
                 {loading ? (
                     <LoadingState />
                 ) : visible.length === 0 ? (
-                    <EmptyState tab={tab} hasSearch={!!search} hasPhoneCodes={phoneCodes.length > 0} />
+                    <EmptyState tab={tab} hasSearch={!!search} hasPhoneCodes={phoneCodes.length > 0 || campaignIds.length > 0} />
                 ) : (
                     <>
                         <div className="grid gap-2.5">

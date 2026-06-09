@@ -175,4 +175,22 @@ Registro de decisiones de arquitectura y diseño. Cada ADR explica el contexto, 
 
 ---
 
+## ADR-011: Clientes por recuperar filtrados por campaña activa
+
+**Estado:** Activo  
+**Fecha:** 2026-06-09
+
+**Contexto:** La pantalla "clientes por recuperar" listaba todos los clientes sin dueño en el área de indicativos del vendor (DDDs). Esto mezclaba clientes de campañas de distintos usuarios cuando varios vendors cubrían la misma región.
+
+**Decisión:** Cuando el vendor tiene ciudades activas en `subscriptionCities` (`ownerUserId == uid`, `status == "occupied"`), la query usa `leadAcquisitionCampaignId IN [campaignIds]`. Si no hay campañas activas, hace fallback a la query por indicativos (comportamiento anterior).
+
+**Consecuencias:**
+- Un vendor solo ve clientes de sus propias campañas en la pantalla de recuperación
+- Se añadió el hook `useUserCampaignIds` en `src/features/subscriptions/`
+- Se añadió función `subscribeCoverageByCampaignIds` en `incompleteClientsRepo.ts`
+- Requiere índice compuesto en Firestore: `(verificationStatus ASC, leadAcquisitionCampaignId ASC)`
+- Clientes sin `leadAcquisitionCampaignId` (manuales o históricos) no aparecen en la vista de campaña
+
+---
+
 *Ver [[06_Changelog]] para cuándo se tomaron estas decisiones.*
