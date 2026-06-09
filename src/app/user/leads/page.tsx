@@ -29,6 +29,8 @@ import { useUserCampaignIds } from "@/features/subscriptions/useUserCampaignIds"
 type StatusFilter = "pending" | "visited" | "rejected" | "all";
 type MainTab = "verificados" | "no_verificados";
 
+const INC_PAGE_SIZE = 15;
+
 const SPANISH_3DIGIT_CC = ["507","502","503","504","505","506","509","593","591","595","598"];
 const SPANISH_PHONE_PREFIXES = [...SPANISH_3DIGIT_CC, "52","54","56","57","51","58"];
 function isSpanishPhone(phone: string) {
@@ -161,6 +163,7 @@ export default function UserLeadsPage() {
     const [confirmTakeLead, setConfirmTakeLead] = useState<MetaLeadDoc | null>(null);
     const [takeSaving, setTakeSaving] = useState(false);
     const [incRecoveryClock, setIncRecoveryClock] = useState(0);
+    const [incVisibleCount, setIncVisibleCount] = useState(INC_PAGE_SIZE);
     const [toast, setToast] = useState("");
     const [showNoVerifAnnouncement, setShowNoVerifAnnouncement] = useState(false);
     const [reviewIncLead, setReviewIncLead] = useState<MetaLeadDoc | null>(null);
@@ -340,11 +343,17 @@ export default function UserLeadsPage() {
     useBackButtonDismiss(Boolean(confirmTakeLead), () => setConfirmTakeLead(null));
     useBackButtonDismiss(Boolean(reviewIncLead), () => setReviewIncLead(null));
 
-    // Tab change: reset search and ddd filter
+    // Tab change: reset search, ddd filter and pagination
     useEffect(() => {
         setSearch("");
         setIncDddFilter("all");
+        setIncVisibleCount(INC_PAGE_SIZE);
     }, [mainTab]);
+
+    // Reset pagination when filters/search change in No verificados
+    useEffect(() => {
+        setIncVisibleCount(INC_PAGE_SIZE);
+    }, [incDddFilter, search]);
 
     function showToast(msg: string) {
         setToast(msg);
@@ -675,7 +684,7 @@ export default function UserLeadsPage() {
                         </div>
                     ) :
                     <div className="grid gap-2.5">
-                        {incVisible.map((lead) => (
+                        {incVisible.slice(0, incVisibleCount).map((lead) => (
                             <RecoveryCard
                                 key={lead.id}
                                 lead={lead}
@@ -692,6 +701,15 @@ export default function UserLeadsPage() {
                                 onCopy={() => void copyIncLead(lead)}
                             />
                         ))}
+                        {incVisible.length > incVisibleCount ? (
+                            <button
+                                type="button"
+                                onClick={() => setIncVisibleCount((n) => n + INC_PAGE_SIZE)}
+                                className="w-full rounded-[14px] border border-[#E8E7FB] bg-white py-3 text-[12px] font-black text-[#7C3AED] shadow-sm transition active:bg-[#f3f0ff]"
+                            >
+                                Cargar más ({incVisible.length - incVisibleCount} restantes)
+                            </button>
+                        ) : null}
                     </div>
                 )}
             </div>
