@@ -8,6 +8,11 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ## 2026-06-09
 
+### feat(leads): botones Visitar y Rechazar en CampaignLeadCard
+- **Módulo:** `src/app/user/leads/page.tsx`
+- **What changed:** `CampaignLeadCard` reemplaza el botón "Gestionar" por dos botones directos: "Visitar" (verde) y "Rechazar" (rojo). Ambos auto-asignan al vendor (`takeIncompleteClient`) en silencio antes de abrir el modal correspondiente (`actionType = "visit"` / `"reject"`). Se añadió tono `"red"` a `ActionBtn`. Se crearon `openCampaignVisit` y `openCampaignReject` siguiendo el mismo patrón que `openCampaignManage`.
+- **Why:** Los clientes de campaña son exclusivos del vendor — no tiene sentido pasar por un modal intermedio de "Gestionar" cuando se puede ir directo a la acción.
+
 ### feat(leads): clientes de campaña como ya asignados en No verificados
 - **Módulo:** `src/app/user/leads/page.tsx`
 - **What changed:** Clientes con `leadAcquisitionCampaignId` que pertenece a una campaña activa del vendor se muestran con `CampaignLeadCard` (badge "Sin verificar", acciones iguales a Verificados: chat, WA, maps, copiar, nota, gestionar, No Apto). Las acciones "Gestionar" y "WhatsApp" auto-asignan el cliente al vendor (`takeIncompleteClient`) en silencio antes de ejecutar la acción — sin modal de confirmación de "Tomar". Los clientes filtrados por DDD (sin campaña) siguen usando `RecoveryCard` con flujo de "Tomar" explícito.

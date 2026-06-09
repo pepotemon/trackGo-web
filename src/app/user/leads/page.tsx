@@ -492,6 +492,54 @@ export default function UserLeadsPage() {
         setActionType("note");
     }
 
+    async function openCampaignVisit(lead: MetaLeadDoc) {
+        if (!userId) return;
+        setCampaignManaging(lead.id);
+        try {
+            await takeIncompleteClient(lead.id, userId, {
+                leadName: lead.name,
+                leadPhone: lead.phone,
+                leadBusiness: lead.business,
+            });
+        } catch (error) {
+            setCampaignManaging(null);
+            showToast(
+                error instanceof Error && error.message === "client_already_taken"
+                    ? "Este cliente ya fue tomado por otro usuario."
+                    : "No se pudo procesar este cliente."
+            );
+            return;
+        }
+        setCampaignManaging(null);
+        setActionLead(lead);
+        setActionType("visit");
+    }
+
+    async function openCampaignReject(lead: MetaLeadDoc) {
+        if (!userId) return;
+        setCampaignManaging(lead.id);
+        try {
+            await takeIncompleteClient(lead.id, userId, {
+                leadName: lead.name,
+                leadPhone: lead.phone,
+                leadBusiness: lead.business,
+            });
+        } catch (error) {
+            setCampaignManaging(null);
+            showToast(
+                error instanceof Error && error.message === "client_already_taken"
+                    ? "Este cliente ya fue tomado por otro usuario."
+                    : "No se pudo procesar este cliente."
+            );
+            return;
+        }
+        setCampaignManaging(null);
+        setRejectStep(1);
+        setRejectReason(null);
+        setActionLead(lead);
+        setActionType("reject");
+    }
+
     async function copyIncLead(lead: MetaLeadDoc) {
         const mapsUrl = lead.location?.mapsUrl || (
             lead.location?.lat != null && lead.location?.lng != null
@@ -772,7 +820,8 @@ export default function UserLeadsPage() {
                                     waSent={incWaSent.has(lead.id)}
                                     copied={incCopiedId === lead.id}
                                     managing={campaignManaging === lead.id}
-                                    onManage={() => void openCampaignManage(lead)}
+                                    onVisit={() => void openCampaignVisit(lead)}
+                                    onReject={() => void openCampaignReject(lead)}
                                     onReview={() => setReviewIncLead(lead)}
                                     onNotSuitable={() => setNotSuitableLead(lead)}
                                     onWhatsApp={() => void openCampaignWhatsApp(lead)}
@@ -862,7 +911,8 @@ export default function UserLeadsPage() {
                                             waSent={incWaSent.has(lead.id)}
                                             copied={incCopiedId === lead.id}
                                             managing={campaignManaging === lead.id}
-                                            onManage={() => { void openCampaignManage(lead); setSearchOpen(false); }}
+                                            onVisit={() => { void openCampaignVisit(lead); setSearchOpen(false); }}
+                                            onReject={() => { void openCampaignReject(lead); setSearchOpen(false); }}
                                             onReview={() => { setReviewIncLead(lead); setSearchOpen(false); }}
                                             onNotSuitable={() => { setNotSuitableLead(lead); setSearchOpen(false); }}
                                             onWhatsApp={() => { void openCampaignWhatsApp(lead); setSearchOpen(false); }}
@@ -1448,13 +1498,14 @@ function StatusBadge({ status }: { status?: string }) {
     );
 }
 
-function ActionBtn({ onClick, title, tone, children }: { onClick: () => void; title: string; tone: "green" | "blue" | "violet" | "sent" | "orange"; children: React.ReactNode }) {
+function ActionBtn({ onClick, title, tone, children }: { onClick: () => void; title: string; tone: "green" | "blue" | "violet" | "sent" | "orange" | "red"; children: React.ReactNode }) {
     const cls: Record<string, string> = {
         green: "border-emerald-200 bg-emerald-50 text-emerald-700",
         blue: "border-blue-200 bg-blue-50 text-blue-700",
         violet: "border-violet-200 bg-violet-50 text-violet-700",
         sent: "border-[#6D28D9] bg-[#7C3AED] text-white shadow-[0_8px_18px_rgba(124,58,237,0.28)]",
         orange: "border-orange-200 bg-orange-50 text-orange-600",
+        red: "border-red-200 bg-red-50 text-red-600",
     };
     return (
         <button
@@ -1659,14 +1710,15 @@ function RecoveryCard({
 
 function CampaignLeadCard({
     lead, note, waSent, copied, managing,
-    onManage, onReview, onNotSuitable, onWhatsApp, onMaps, onCopy, onNote,
+    onVisit, onReject, onReview, onNotSuitable, onWhatsApp, onMaps, onCopy, onNote,
 }: {
     lead: MetaLeadDoc;
     note?: string;
     waSent: boolean;
     copied: boolean;
     managing: boolean;
-    onManage: () => void;
+    onVisit: () => void;
+    onReject: () => void;
     onReview: () => void;
     onNotSuitable: () => void;
     onWhatsApp: () => void;
@@ -1763,14 +1815,23 @@ function CampaignLeadCard({
                     <div className="flex-1" />
                     <button
                         type="button"
-                        onClick={onManage}
+                        onClick={onVisit}
                         disabled={managing}
-                        className="flex h-7 items-center gap-1.5 rounded-[10px] border border-[#E8E7FB] bg-white px-2.5 text-[10px] font-black text-[#7C3AED] shadow-sm transition active:bg-[#f3f0ff] disabled:opacity-50"
+                        className="flex h-7 items-center gap-1.5 rounded-[10px] border border-emerald-200 bg-emerald-50 px-2.5 text-[10px] font-black text-emerald-700 shadow-sm transition active:bg-emerald-100 disabled:opacity-50"
                     >
                         {managing ? (
                             <svg className="tg-spin h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 12a9 9 0 1 1-3.1-6.8" /></svg>
-                        ) : null}
-                        Gestionar
+                        ) : <CheckIcon />}
+                        Visitar
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onReject}
+                        disabled={managing}
+                        className="flex h-7 items-center gap-1.5 rounded-[10px] border border-red-200 bg-red-50 px-2.5 text-[10px] font-black text-red-600 shadow-sm transition active:bg-red-100 disabled:opacity-50"
+                    >
+                        <XIcon />
+                        Rechazar
                     </button>
                 </div>
             </div>
