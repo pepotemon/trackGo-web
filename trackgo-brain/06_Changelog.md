@@ -6,6 +6,20 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ---
 
+## 2026-06-09
+
+### feat(prospectos): UI redesign — tabs Verificados / No verificados + pantalla No Aptos
+- **Módulo:** `src/app/user/leads/page.tsx`, `src/app/user/chat/page.tsx`, `src/app/user/layout.tsx`
+- **What changed:** La pantalla de Prospectos ahora tiene dos pestañas principales: "Verificados" (los prospectos asignados de siempre) y "No verificados" (clientes por recuperar de campañas/indicativos, con acción "Pasar a Verificados"). Se eliminó la fila de stats (visitado hoy/semana, rechazado), reemplazada por un contador semanal simple `X/total sem.`. La pantalla `/user/chat` queda exclusivamente para clientes "No Aptos" y el nav label cambió de "Recup." a "No Aptos".
+- **Why:** Unificar la experiencia de gestión de prospectos en una sola pantalla. Los clientes por recuperar (no verificados) son parte del flujo de trabajo, no una pantalla separada.
+- **See:** [[03_Decisions#ADR-012]]
+
+### feat(recovery): filtrar clientes por recuperar según campaña activa del usuario
+- **Módulo:** `src/data/incompleteClientsRepo.ts`, `src/features/subscriptions/useUserCampaignIds.ts`, `src/app/user/chat/page.tsx`, `src/app/user/leads/page.tsx`
+- **What changed:** Los "clientes por recuperar" ahora se filtran por las campañas activas del usuario (ciudades de `subscriptionCities` donde `ownerUserId == uid` y `status == "occupied"`). Si el usuario tiene campañas activas, la query usa `leadAcquisitionCampaignId IN [campaignIds]` en Firestore. Si no tiene campañas, hace fallback al sistema anterior de indicativos (DDDs). El subtitle de la pantalla muestra los nombres de ciudad en lugar de los DDDs cuando hay campañas. Se añadió índice compuesto en `firestore.indexes.json` para `(verificationStatus, leadAcquisitionCampaignId)`.
+- **Why:** Evitar que los vendors vean clientes de campañas de otros usuarios. Antes el filtro por DDD era demasiado amplio y mezclaba clientes de distintas campañas.
+- **See:** [[03_Decisions#ADR — recuperar por campaña]]
+
 ## 2026-06-08
 
 ### fix(subscriptions): liberar ciudad con dos usuarios (ERR-011)

@@ -175,4 +175,44 @@ Registro de decisiones de arquitectura y diseño. Cada ADR explica el contexto, 
 
 ---
 
+## ADR-011: Clientes por recuperar filtrados por campaña activa
+
+**Estado:** Activo  
+**Fecha:** 2026-06-09
+
+**Contexto:** La pantalla "clientes por recuperar" listaba todos los clientes sin dueño en el área de indicativos del vendor (DDDs). Esto mezclaba clientes de campañas de distintos usuarios cuando varios vendors cubrían la misma región.
+
+**Decisión:** Cuando el vendor tiene ciudades activas en `subscriptionCities` (`ownerUserId == uid`, `status == "occupied"`), la query usa `leadAcquisitionCampaignId IN [campaignIds]`. Si no hay campañas activas, hace fallback a la query por indicativos (comportamiento anterior).
+
+**Consecuencias:**
+- Un vendor solo ve clientes de sus propias campañas en la pantalla de recuperación
+- Se añadió el hook `useUserCampaignIds` en `src/features/subscriptions/`
+- Se añadió función `subscribeCoverageByCampaignIds` en `incompleteClientsRepo.ts`
+- Requiere índice compuesto en Firestore: `(verificationStatus ASC, leadAcquisitionCampaignId ASC)`
+- Clientes sin `leadAcquisitionCampaignId` (manuales o históricos) no aparecen en la vista de campaña
+
+---
+
+## ADR-012: Pantalla de Prospectos con dos pestañas (Verificados / No verificados)
+
+**Estado:** Activo  
+**Fecha:** 2026-06-09
+
+**Contexto:** Los "clientes por recuperar" estaban en una pantalla separada (`/user/chat`), lo que fragmentaba el flujo de trabajo del vendor. La pantalla de Prospectos tenía una fila de estadísticas (hoy/semana) que ocupaba espacio sin aportar mucho.
+
+**Decisión:**
+- `leads/page.tsx` tiene dos pestañas principales: `verificados` y `no_verificados`
+- "Verificados" = prospectos asignados con Maps link (flujo de siempre)
+- "No verificados" = clientes por recuperar (de campaña o por indicativos), acción renombrada a "Pasar a Verificados"
+- La fila de stats se reemplazó por un contador semanal simple `X/total sem.`
+- `/user/chat` queda solo para clientes `not_suitable` ("No Aptos")
+- El nav label `/user/chat` cambió de "Recup." a "No Aptos"
+
+**Consecuencias:**
+- `subscribeIncompleteClients` se llama desde `leads/page.tsx` con `campaignIds` (no desde `chat/page.tsx`)
+- `subscribeNotSuitableClients` se llama desde `chat/page.tsx` con `campaignIds`
+- El componente `RecoveryCard` vive en `leads/page.tsx`
+
+---
+
 *Ver [[06_Changelog]] para cuándo se tomaron estas decisiones.*

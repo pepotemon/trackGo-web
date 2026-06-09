@@ -6,9 +6,7 @@ import {
     dddCity,
     extractDDD,
     markClientNotSuitable,
-    subscribeIncompleteClients,
     subscribeNotSuitableClients,
-    takeIncompleteClient,
     takeNotSuitableClient,
 } from "@/data/incompleteClientsRepo";
 import { sendManualLeadMessage, subscribeLeadMessages } from "@/data/leadChatRepo";
@@ -17,8 +15,8 @@ import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
 import { getReviewedIds, getWhatsAppSentIds, markReviewed, markWhatsAppSent } from "@/lib/userContactState";
 import { useWhatsAppDailyLimit } from "@/hooks/useWhatsAppDailyLimit";
 import { WhatsAppLimitModal } from "@/components/WhatsAppLimitModal";
+import { useUserCampaignIds } from "@/features/subscriptions/useUserCampaignIds";
 
-type Tab = "incomplete" | "not_suitable";
 type RangePreset = "all" | "today" | "week" | "month" | "custom";
 
 // ── localStorage notes ────────────────────────────────────────────────────────
@@ -172,11 +170,9 @@ function recoveryLocationLabel(lead: MetaLeadDoc, ddd: string | null) {
 export default function UserIncompleteClientsPage() {
     const { firebaseUser, phoneCodes } = useAuth();
     const userId = firebaseUser?.uid ?? "";
+    const { campaignIds } = useUserCampaignIds(userId);
 
-    const [tab, setTab] = useState<Tab>("incomplete");
-    const [incomplete, setIncomplete] = useState<MetaLeadDoc[]>([]);
     const [notSuitable, setNotSuitable] = useState<MetaLeadDoc[]>([]);
-    const [loadingIncomplete, setLoadingIncomplete] = useState(true);
     const [loadingNotSuitable, setLoadingNotSuitable] = useState(true);
     const [notes, setNotes] = useState<Record<string, string>>({});
     const [copiedLeadId, setCopiedLeadId] = useState<string | null>(null);
@@ -218,10 +214,6 @@ export default function UserIncompleteClientsPage() {
     const { triggerWa, showModal: waLimitOpen, countAtWarning: waLimitCount, confirmWa, cancelWa } = useWhatsAppDailyLimit();
 
     useEffect(() => {
-        localStorage.setItem('recuperar_last_visited_at', String(Date.now()));
-    }, []);
-
-    useEffect(() => {
         const timer = window.setInterval(() => setRecoveryClock((value) => value + 1), 5 * 60 * 1000);
         return () => window.clearInterval(timer);
     }, []);
@@ -233,25 +225,12 @@ export default function UserIncompleteClientsPage() {
     }, []);
 
     useEffect(() => {
-        if (!phoneCodes.length) {
+        if (!phoneCodes.length && !campaignIds.length) {
             const timer = window.setTimeout(() => {
-                setLoadingIncomplete(false);
                 setLoadingNotSuitable(false);
             }, 0);
             return () => window.clearTimeout(timer);
         }
-
-        const loadingTimer = window.setTimeout(() => setLoadingIncomplete(true), 0);
-        const unsubInc = subscribeIncompleteClients(phoneCodes, (data) => {
-            setIncomplete(data);
-            const noteMap: Record<string, string> = {};
-            data.forEach((l) => { const n = getNote(l.id); if (n) noteMap[l.id] = n; });
-            setNotes((prev) => ({ ...prev, ...noteMap }));
-            const ids = data.map((l) => l.id);
-            setWaSent((prev) => new Set([...prev, ...getWhatsAppSentIds(ids)]));
-            setReviewed((prev) => new Set([...prev, ...getReviewedIds(ids)]));
-            setLoadingIncomplete(false);
-        });
 
         const loadingNotSuitableTimer = window.setTimeout(() => setLoadingNotSuitable(true), 0);
         const unsubNS = subscribeNotSuitableClients(phoneCodes, (data) => {
@@ -260,15 +239,13 @@ export default function UserIncompleteClientsPage() {
             setWaSent((prev) => new Set([...prev, ...getWhatsAppSentIds(ids)]));
             setReviewed((prev) => new Set([...prev, ...getReviewedIds(ids)]));
             setLoadingNotSuitable(false);
-        });
+        }, campaignIds);
 
         return () => {
-            window.clearTimeout(loadingTimer);
             window.clearTimeout(loadingNotSuitableTimer);
-            unsubInc();
             unsubNS();
         };
-    }, [phoneCodes, recoveryClock]);
+    }, [phoneCodes, campaignIds, recoveryClock]);
 
     useEffect(() => {
         if (actionType !== "review" || !actionLead) {
@@ -302,8 +279,6 @@ export default function UserIncompleteClientsPage() {
         };
     }, [actionLead, actionType]);
 
-    const activeList = tab === "incomplete" ? incomplete : notSuitable;
-    const loading = tab === "incomplete" ? loadingIncomplete : loadingNotSuitable;
     const { startKey, endKey } = useMemo(
         () => rangeFromPreset(rangePreset, customStart, customEnd),
         [customEnd, customStart, rangePreset]
@@ -311,17 +286,12 @@ export default function UserIncompleteClientsPage() {
 
     const activeDdds = useMemo(() => {
         const seen = new Set<string>();
-        activeList
+        notSuitable
             .filter((lead) => leadInDateRange(lead, startKey, endKey))
             .forEach((l) => { const d = extractDDD(l.phone); if (d) seen.add(d); });
         return [...seen].sort();
-    }, [activeList, endKey, startKey]);
+    }, [notSuitable, endKey, startKey]);
 
-    // reset ddd filter and pagination when switching tabs
-    useEffect(() => {
-        const timer = window.setTimeout(() => { setDddFilter("all"); setVisibleCount(PAGE_SIZE); }, 0);
-        return () => window.clearTimeout(timer);
-    }, [tab]);
     useEffect(() => {
         if (dddFilter !== "all" && !activeDdds.includes(dddFilter)) {
             const timer = window.setTimeout(() => setDddFilter("all"), 0);
@@ -330,7 +300,7 @@ export default function UserIncompleteClientsPage() {
     }, [activeDdds, dddFilter]);
 
     const visible = useMemo(() => {
-        let list = activeList.filter((lead) => leadInDateRange(lead, startKey, endKey));
+        let list = notSuitable.filter((lead) => leadInDateRange(lead, startKey, endKey));
         if (dddFilter !== "all") list = list.filter((l) => extractDDD(l.phone) === dddFilter);
         if (search.trim()) {
             const q = norm(search.trim());
@@ -342,7 +312,7 @@ export default function UserIncompleteClientsPage() {
             );
         }
         return list;
-    }, [activeList, dddFilter, endKey, search, startKey]);
+    }, [notSuitable, dddFilter, endKey, search, startKey]);
 
     // reset pagination when filtered list changes
     useEffect(() => {
@@ -350,8 +320,8 @@ export default function UserIncompleteClientsPage() {
         return () => window.clearTimeout(timer);
     }, [dddFilter, startKey, endKey, search]);
 
-    const pagedVisible = tab === "incomplete" ? visible.slice(0, visibleCount) : visible;
-    const hasMore = tab === "incomplete" && visible.length > visibleCount;
+    const pagedVisible = visible;
+    const hasMore = false;
 
     // ── actions ───────────────────────────────────────────────────────────────
 
@@ -385,15 +355,7 @@ export default function UserIncompleteClientsPage() {
         setWaTaking(true);
         const lead = waTakeLead;
         try {
-            if (lead.verificationStatus === "not_suitable") {
-                await takeNotSuitableClient(lead.id, userId);
-            } else {
-                await takeIncompleteClient(lead.id, userId, {
-                    leadName: lead.name,
-                    leadPhone: lead.phone,
-                    leadBusiness: lead.business,
-                });
-            }
+            await takeNotSuitableClient(lead.id, userId);
             setWaTakeLead(null);
             setWaTaking(false);
             const msg = isSpanishPhone(lead.phone)
@@ -417,7 +379,6 @@ export default function UserIncompleteClientsPage() {
         }
     }
 
-    function openNotSuitable(lead: MetaLeadDoc) { setActionLead(lead); setActionType("not_suitable"); }
     function openReview(lead: MetaLeadDoc) {
         markReviewed(lead.id);
         setReviewed((prev) => new Set(prev).add(lead.id));
@@ -447,29 +408,11 @@ export default function UserIncompleteClientsPage() {
     useBackButtonDismiss(Boolean(actionType), closeAction);
     useBackButtonDismiss(Boolean(waTakeLead), () => setWaTakeLead(null));
 
-    async function confirmNotSuitable() {
-        if (!actionLead) return;
-        setSaving(true);
-        try {
-            await markClientNotSuitable(actionLead.id);
-            closeAction();
-        } catch { setSaving(false); }
-    }
-
     async function confirmAccept() {
         if (!actionLead || !userId) return;
         setSaving(true);
         try {
-            // If the client is not_suitable, use takeNotSuitableClient to also reset verificationStatus
-            if (actionLead.verificationStatus === "not_suitable") {
-                await takeNotSuitableClient(actionLead.id, userId);
-            } else {
-                await takeIncompleteClient(actionLead.id, userId, {
-                    leadName: actionLead.name,
-                    leadPhone: actionLead.phone,
-                    leadBusiness: actionLead.business,
-                });
-            }
+            await takeNotSuitableClient(actionLead.id, userId);
             setToast("Cliente tomado. Lo encontraras en Prospectos para completar sus datos.");
             window.setTimeout(() => setToast(""), 2600);
             closeAction();
@@ -536,7 +479,6 @@ export default function UserIncompleteClientsPage() {
 
         window.addEventListener("keydown", onKeyDown);
         return () => window.removeEventListener("keydown", onKeyDown);
-        // goReviewLead only wraps openReview; the concrete prev/next leads drive this listener.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [actionType, reviewNextLead, reviewPrevLead]);
 
@@ -581,7 +523,7 @@ export default function UserIncompleteClientsPage() {
     }
 
 
-    if (!phoneCodes.length && !loadingIncomplete) {
+    if (!phoneCodes.length && !campaignIds.length && !loadingNotSuitable) {
         return (
             <div className="flex min-h-screen flex-col items-center justify-center bg-[#fbfaff] px-6 text-center">
                 <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f3f0ff]">
@@ -601,7 +543,7 @@ export default function UserIncompleteClientsPage() {
                 <div className="mb-3 flex items-center justify-between gap-3">
                     <div>
                         <h1 className="text-[20px] font-black tracking-[-0.03em] text-[#101936]">
-                            Clientes por recuperar
+                            No Aptos
                         </h1>
                         <p className="mt-0.5 text-[11px] font-semibold text-[#66739A]">
                             {phoneCodes.map(dddCity).join(", ")}
@@ -638,26 +580,13 @@ export default function UserIncompleteClientsPage() {
                     </div>
                 </div>
 
-                <div className="mb-3 flex gap-1.5">
-                    <TabBtn active={tab === "incomplete"} onClick={() => setTab("incomplete")}>
-                        Recuperar
-                        <CountPill active={tab === "incomplete"} hasMore={tab === "incomplete" && hasMore}>
-                            {incomplete.length}{tab === "incomplete" && hasMore ? "+" : ""}
-                        </CountPill>
-                    </TabBtn>
-                    <TabBtn active={tab === "not_suitable"} onClick={() => setTab("not_suitable")}>
-                        No aptos
-                        <CountPill active={tab === "not_suitable"}>{notSuitable.length}</CountPill>
-                    </TabBtn>
-                </div>
-
                 {activeDdds.length > 1 ? (
                     <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                         <FilterChip active={dddFilter === "all"} onClick={() => setDddFilter("all")}>
-                            Todos <CountPill active={dddFilter === "all"}>{activeList.filter((lead) => leadInDateRange(lead, startKey, endKey)).length}</CountPill>
+                            Todos <CountPill active={dddFilter === "all"}>{notSuitable.filter((lead) => leadInDateRange(lead, startKey, endKey)).length}</CountPill>
                         </FilterChip>
                         {activeDdds.map((ddd) => {
-                            const cnt = activeList.filter((l) => leadInDateRange(l, startKey, endKey) && extractDDD(l.phone) === ddd).length;
+                            const cnt = notSuitable.filter((l) => leadInDateRange(l, startKey, endKey) && extractDDD(l.phone) === ddd).length;
                             return (
                                 <FilterChip key={ddd} active={dddFilter === ddd} onClick={() => setDddFilter(ddd)}>
                                     {dddCity(ddd)} <CountPill active={dddFilter === ddd}>{cnt}</CountPill>
@@ -683,10 +612,10 @@ export default function UserIncompleteClientsPage() {
             </div>
 
             <div className="flex-1 px-3 pb-4 pt-2 xl:px-6">
-                {loading ? (
+                {loadingNotSuitable ? (
                     <LoadingState />
                 ) : visible.length === 0 ? (
-                    <EmptyState tab={tab} hasSearch={!!search} hasPhoneCodes={phoneCodes.length > 0} />
+                    <EmptyState hasSearch={!!search} hasPhoneCodes={phoneCodes.length > 0 || campaignIds.length > 0} />
                 ) : (
                     <>
                         <div className="grid gap-2.5">
@@ -695,12 +624,10 @@ export default function UserIncompleteClientsPage() {
                                     key={lead.id}
                                     lead={lead}
                                     note={notes[lead.id]}
-                                    tab={tab}
                                     waSent={waSent.has(lead.id)}
                                     reviewed={reviewed.has(lead.id)}
                                     copied={copiedLeadId === lead.id}
                                     onNote={() => openNote(lead)}
-                                    onNotSuitable={() => openNotSuitable(lead)}
                                     onReview={() => openReview(lead)}
                                     onWhatsApp={() => openWhatsApp(lead)}
                                     onMaps={() => openMaps(lead)}
@@ -747,12 +674,10 @@ export default function UserIncompleteClientsPage() {
                                         key={lead.id}
                                         lead={lead}
                                         note={notes[lead.id]}
-                                        tab={tab}
                                         waSent={waSent.has(lead.id)}
                                         reviewed={reviewed.has(lead.id)}
                                         copied={copiedLeadId === lead.id}
                                         onNote={() => { openNote(lead); setSearchOpen(false); }}
-                                        onNotSuitable={() => { openNotSuitable(lead); setSearchOpen(false); }}
                                         onReview={() => { openReview(lead); setSearchOpen(false); }}
                                         onWhatsApp={() => { openWhatsApp(lead); setSearchOpen(false); }}
                                         onMaps={() => openMaps(lead)}
@@ -775,14 +700,14 @@ export default function UserIncompleteClientsPage() {
                 <BottomSheet onClose={() => setInfoOpen(false)}>
                     <div className="mb-4">
                         <span className="inline-flex items-center rounded-full bg-[#f3f0ff] px-2.5 py-1 text-[10px] font-black text-[#7C3AED]">AYUDA</span>
-                        <p className="mt-2 text-[17px] font-black text-[#101936]">Clientes por recuperar y no aptos</p>
+                        <p className="mt-2 text-[17px] font-black text-[#101936]">Clientes No Aptos</p>
                     </div>
                     <div className="space-y-3 text-[12px] font-semibold leading-relaxed text-[#66739A]">
                         <p>
-                            Aqui aparecen clientes de tu cobertura que no completaron el registro. Si todavia no dejaron negocio, entran despues de 24 horas sin nueva respuesta.
+                            Aqui aparecen clientes de tu cobertura que han sido marcados como No Aptos para recibir crédito.
                         </p>
                         <p>
-                            Puedes revisar la conversacion, agregar una nota, marcar los que no sirven y tomar los que tengan potencial para pasarlos a Prospectos.
+                            Puedes revisar la conversacion, agregar una nota y tomar los que consideres que tienen potencial para pasarlos a Prospectos.
                         </p>
                     </div>
                     <button
@@ -799,10 +724,7 @@ export default function UserIncompleteClientsPage() {
                 <BottomSheet onClose={() => setFiltersOpen(false)}>
                     <div className="mb-4">
                         <span className="inline-flex items-center rounded-full bg-[#f3f0ff] px-2.5 py-1 text-[10px] font-black text-[#7C3AED]">FILTROS</span>
-                        <p className="mt-2 text-[17px] font-black text-[#101936]">Filtrar recuperables</p>
-                        <p className="mt-1 text-[12px] font-semibold text-[#66739A]">
-                            Se muestran clientes incompletos con negocio y clientes sin datos despues de 24 horas sin respuesta.
-                        </p>
+                        <p className="mt-2 text-[17px] font-black text-[#101936]">Filtrar No Aptos</p>
                     </div>
 
                     <div className="space-y-4">
@@ -949,7 +871,7 @@ export default function UserIncompleteClientsPage() {
                         <div className="mb-2 flex items-start justify-between gap-3">
                             <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-1.5">
-                                    <span className="inline-flex items-center rounded-full bg-[#f3f0ff] px-2 py-0.5 text-[9px] font-black text-[#7C3AED]">REVISION</span>
+                                    <span className="inline-flex items-center rounded-full bg-orange-100 px-2 py-0.5 text-[9px] font-black text-orange-700">NO APTO</span>
                                     {missingFields(actionLead).map((field) => (
                                         <span key={field} className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-black text-amber-700">{field}</span>
                                     ))}
@@ -1091,26 +1013,6 @@ export default function UserIncompleteClientsPage() {
                 </BottomSheet>
             ) : null}
 
-            {actionType === "not_suitable" && actionLead ? (
-                <BottomSheet onClose={closeAction}>
-                    <div className="mb-4">
-                        <span className="inline-flex items-center rounded-full bg-orange-100 px-2.5 py-1 text-[10px] font-black text-orange-700">NO APTO</span>
-                        <p className="mt-2 text-[17px] font-black text-[#101936]">{displayName(actionLead)}</p>
-                        <p className="mt-0.5 text-[12px] font-semibold text-[#66739A]">{actionLead.phone}</p>
-                    </div>
-                    <div className="mb-4 rounded-[14px] border border-orange-100 bg-orange-50 px-3 py-3 text-[12px] font-semibold text-orange-800">
-                        <p className="font-black">Esta accion es visible para el administrador.</p>
-                        <p className="mt-1">El cliente pasara a la base de datos de No Aptos. Ayudaras al sistema a identificar clientes que no son candidatos validos en tu zona.</p>
-                    </div>
-                    <div className="flex gap-2">
-                        <button type="button" onClick={closeAction} className="flex-1 rounded-[14px] border border-[#E8E7FB] py-3 text-[13px] font-black text-[#66739A]">Cancelar</button>
-                        <button type="button" onClick={confirmNotSuitable} disabled={saving} className="flex-1 rounded-[14px] bg-orange-600 py-3 text-[13px] font-black text-white disabled:opacity-60">
-                            {saving ? "Guardando..." : "Confirmar No Apto"}
-                        </button>
-                    </div>
-                </BottomSheet>
-            ) : null}
-
             {waLimitOpen ? (
                 <WhatsAppLimitModal count={waLimitCount} onConfirm={confirmWa} onCancel={cancelWa} />
             ) : null}
@@ -1122,17 +1024,15 @@ export default function UserIncompleteClientsPage() {
 // ── CLIENT CARD ───────────────────────────────────────────────────────────────
 
 function ClientCard({
-    lead, note, tab, waSent, reviewed, copied,
-    onNote, onNotSuitable, onReview, onWhatsApp, onMaps, onCopy,
+    lead, note, waSent, reviewed, copied,
+    onNote, onReview, onWhatsApp, onMaps, onCopy,
 }: {
     lead: MetaLeadDoc;
     note?: string;
-    tab: Tab;
     waSent: boolean;
     reviewed: boolean;
     copied: boolean;
     onNote: () => void;
-    onNotSuitable: () => void;
     onReview: () => void;
     onWhatsApp: () => void;
     onMaps: () => void;
@@ -1140,14 +1040,9 @@ function ClientCard({
 }) {
     const ddd = extractDDD(lead.phone);
     const locationBadge = recoveryLocationLabel(lead, ddd);
-    const hasLocation = !!lead.location?.lat;
-    const missing = missingFields(lead);
 
     return (
-        <div className={[
-            "overflow-hidden rounded-[18px] border bg-white shadow-[0_2px_12px_rgba(91,33,255,0.05)]",
-            tab === "not_suitable" ? "border-orange-200 bg-orange-50/10" : "border-[#E8E7FB]",
-        ].join(" ")}>
+        <div className="overflow-hidden rounded-[18px] border border-orange-200 bg-orange-50/10 bg-white shadow-[0_2px_12px_rgba(91,33,255,0.05)]">
             <div className="p-3">
                 {/* Header */}
                 <div className="flex items-start justify-between gap-2">
@@ -1179,22 +1074,6 @@ function ClientCard({
                     ) : null}
                 </div>
 
-                {/* Recovery badges — only falta ubicacion & falta negocio */}
-                {(tab === "incomplete" && (!hasLocation || missing.includes("Falta negocio"))) ? (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                        {!hasLocation ? (
-                            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">
-                                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />Falta: ubicación
-                            </span>
-                        ) : null}
-                        {missing.includes("Falta negocio") ? (
-                            <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700">
-                                <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />Falta: negocio
-                            </span>
-                        ) : null}
-                    </div>
-                ) : null}
-
                 {/* Last message */}
                 {lead.lastInboundText ? (
                     <p className="mt-2 line-clamp-2 rounded-[10px] border border-[#F2F0FF] bg-[#f8f7ff] px-2.5 py-1.5 text-[11px] font-semibold text-[#66739A]">
@@ -1211,7 +1090,7 @@ function ClientCard({
                 ) : null}
 
                 {/* Not suitable reason */}
-                {tab === "not_suitable" && lead.notSuitableReason ? (
+                {lead.notSuitableReason ? (
                     <div className="mt-2 flex items-start gap-1.5 rounded-[10px] border border-orange-100 bg-orange-50/80 px-2.5 py-1.5">
                         <BanIcon />
                         <p className="text-[11px] font-semibold text-orange-700">{lead.notSuitableReason}</p>
@@ -1249,10 +1128,6 @@ function ClientCard({
                     {(lead.location?.mapsUrl || lead.location?.lat) ? (
                         <ActionBtn onClick={onMaps} tone="blue" title="Maps"><MapsIcon /></ActionBtn>
                     ) : null}
-                    <div className="flex-1" />
-                    {tab === "incomplete" ? (
-                        <ActionBtn onClick={onNotSuitable} tone="gray" title="Marcar no apto"><BanIcon /></ActionBtn>
-                    ) : null}
                 </div>
             </div>
         </div>
@@ -1285,16 +1160,6 @@ function PreviewMessageBubble({ message }: { message: LeadMessageDoc }) {
     );
 }
 
-function TabBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-    return (
-        <button type="button" onClick={onClick} className={[
-            "flex flex-1 items-center justify-center gap-1.5 rounded-[12px] border py-2 text-[12px] font-black transition",
-            active ? "border-[#7C3AED] bg-[#7C3AED] text-white" : "border-[#E8E7FB] bg-white text-[#66739A]",
-        ].join(" ")}>
-            {children}
-        </button>
-    );
-}
 function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
     return (
         <button type="button" onClick={onClick} className={["flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-black transition", active ? "border-[#7C3AED] bg-[#7C3AED] text-white" : "border-[#E8E7FB] bg-white text-[#66739A]"].join(" ")}>
@@ -1302,12 +1167,11 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
         </button>
     );
 }
-function CountPill({ active, hasMore, children }: { active: boolean; hasMore?: boolean; children: React.ReactNode }) {
+function CountPill({ active, children }: { active: boolean; children: React.ReactNode }) {
     return (
         <span className={[
             "flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[9px] font-black",
             active ? "bg-white/25 text-white" : "bg-[#f3f0ff] text-[#7C3AED]",
-            hasMore ? "animate-pulse" : "",
         ].join(" ")}>{children}</span>
     );
 }
@@ -1356,13 +1220,11 @@ function LoadingState() {
         </div>
     );
 }
-function EmptyState({ tab, hasSearch, hasPhoneCodes }: { tab: Tab; hasSearch: boolean; hasPhoneCodes: boolean }) {
+function EmptyState({ hasSearch, hasPhoneCodes }: { hasSearch: boolean; hasPhoneCodes: boolean }) {
     const msg = hasSearch ? "Sin resultados" :
-        tab === "not_suitable" ? "Sin clientes no aptos en tu zona" :
-        hasPhoneCodes ? "Sin clientes por recuperar en tu zona" : "Sin indicativos configurados";
+        hasPhoneCodes ? "Sin clientes no aptos en tu zona" : "Sin indicativos configurados";
     const sub = hasSearch ? "Intenta con otro término" :
-        tab === "not_suitable" ? "Aquí aparecerán los que marques como No Apto" :
-        hasPhoneCodes ? "Los clientes sin negocio aparecen despues de 24 horas sin respuesta" : "Contacta al administrador";
+        hasPhoneCodes ? "Aquí aparecerán los que marques como No Apto" : "Contacta al administrador";
     return (
         <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f3f0ff]">

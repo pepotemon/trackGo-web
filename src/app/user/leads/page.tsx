@@ -10,9 +10,10 @@ import {
     subscribeUserDailyEvents,
     subscribeUserLeads,
 } from "@/data/userLeadsRepo";
-import { subscribeIncompleteClients } from "@/data/incompleteClientsRepo";
-import type { MetaLeadDoc } from "@/types/leads";
+import { takeIncompleteClient, subscribeIncompleteClients, dddCity, extractDDD } from "@/data/incompleteClientsRepo";
+import type { MetaLeadDoc, LeadMessageDoc } from "@/types/leads";
 import type { DailyEventDoc } from "@/types/accounting";
+import { subscribeLeadMessages } from "@/data/leadChatRepo";
 import {
     REJECTED_REASON_LABELS,
     type RejectedReason,
@@ -23,8 +24,10 @@ import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
 import { useWhatsAppDailyLimit } from "@/hooks/useWhatsAppDailyLimit";
 import { WhatsAppLimitModal } from "@/components/WhatsAppLimitModal";
 import { useVendorSubscriptionStatus, type VendorSubscriptionStatus } from "@/features/subscriptions/useVendorSubscriptionStatus";
+import { useUserCampaignIds } from "@/features/subscriptions/useUserCampaignIds";
 
 type StatusFilter = "pending" | "visited" | "rejected" | "all";
+type MainTab = "verificados" | "no_verificados";
 
 const SPANISH_3DIGIT_CC = ["507","502","503","504","505","506","509","593","591","595","598"];
 const SPANISH_PHONE_PREFIXES = [...SPANISH_3DIGIT_CC, "52","54","56","57","51","58"];
@@ -141,13 +144,41 @@ export default function UserLeadsPage() {
     const [saving, setSaving] = useState(false);
 
     const { triggerWa, showModal: waLimitOpen, countAtWarning: waLimitCount, confirmWa, cancelWa } = useWhatsAppDailyLimit();
-    const [recuperarAlert, setRecuperarAlert] = useState(false);
-    const [recuperarCount, setRecuperarCount] = useState(0);
+
+    // Main tab
+    const [mainTab, setMainTab] = useState<MainTab>("verificados");
+
+    // Recovery (No verificados) state
+    const [incomplete, setIncomplete] = useState<MetaLeadDoc[]>([]);
+    const [loadingIncomplete, setLoadingIncomplete] = useState(false);
+    const [incDddFilter, setIncDddFilter] = useState("all");
+    const [incNotes, setIncNotes] = useState<Record<string, string>>({});
+    const [incWaSent, setIncWaSent] = useState<Set<string>>(new Set());
+    const [incCopiedId, setIncCopiedId] = useState<string | null>(null);
+    const incCopyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [waTakeLead, setWaTakeLead] = useState<MetaLeadDoc | null>(null);
+    const [waTaking, setWaTaking] = useState(false);
+    const [confirmTakeLead, setConfirmTakeLead] = useState<MetaLeadDoc | null>(null);
+    const [takeSaving, setTakeSaving] = useState(false);
+    const [incRecoveryClock, setIncRecoveryClock] = useState(0);
+    const [toast, setToast] = useState("");
+    const [showNoVerifAnnouncement, setShowNoVerifAnnouncement] = useState(false);
+    const [reviewIncLead, setReviewIncLead] = useState<MetaLeadDoc | null>(null);
+    const [reviewIncMessages, setReviewIncMessages] = useState<LeadMessageDoc[]>([]);
+    const [reviewIncLoading, setReviewIncLoading] = useState(false);
+    const [reviewIncError, setReviewIncError] = useState("");
 
     const userId = firebaseUser?.uid ?? "";
     const userName = profile?.name?.split(" ")[0] ?? "Vendedor";
     const activeWeek = useMemo(() => weekRange(), []);
     const subscriptionStatus = useVendorSubscriptionStatus(userPermissions.canSeeSubscriptions ? userId : null);
+    const { campaignIds } = useUserCampaignIds(userId);
+
+    useEffect(() => {
+        if (userPermissions.canSeeUnverifiedClients && !localStorage.getItem("tg_seen_noverif_v1")) {
+            setShowNoVerifAnnouncement(true);
+        }
+    }, [userPermissions.canSeeUnverifiedClients]);
 
     useEffect(() => {
         return () => {
@@ -176,29 +207,46 @@ export default function UserLeadsPage() {
         return unsub;
     }, [activeWeek, userId]);
 
+    // Recovery subscription (No verificados tab)
     useEffect(() => {
-        if (!phoneCodes.length || !userId) return;
-
-        const VISITED_KEY = 'recuperar_last_visited_at';
-        const SNOOZE_KEY = 'recuperar_snooze_until';
-        const now = Date.now();
-
-        const snoozeUntil = parseInt(localStorage.getItem(SNOOZE_KEY) ?? '0', 10);
-        if (snoozeUntil > now) return;
-
-        const lastVisited = parseInt(localStorage.getItem(VISITED_KEY) ?? '0', 10);
-        if (now - lastVisited < 2 * 24 * 60 * 60 * 1000) return;
-
-        const unsub = subscribeIncompleteClients(phoneCodes, (clients) => {
-            unsub();
-            if (clients.length >= 5) {
-                setRecuperarCount(clients.length);
-                setRecuperarAlert(true);
-            }
-        });
-
+        if (!phoneCodes.length && !campaignIds.length) {
+            setLoadingIncomplete(false);
+            return;
+        }
+        setLoadingIncomplete(true);
+        const unsub = subscribeIncompleteClients(phoneCodes, (data) => {
+            setIncomplete(data);
+            const noteMap: Record<string, string> = {};
+            data.forEach((l) => { const n = getNote(l.id); if (n) noteMap[l.id] = n; });
+            setIncNotes((prev) => ({ ...prev, ...noteMap }));
+            const ids = data.map((l) => l.id);
+            setIncWaSent((prev) => new Set([...prev, ...getWhatsAppSentIds(ids)]));
+            setLoadingIncomplete(false);
+        }, campaignIds);
         return unsub;
-    }, [phoneCodes, userId]);
+    }, [phoneCodes, campaignIds, incRecoveryClock]);
+
+    // Recovery clock (refresh every 5 min)
+    useEffect(() => {
+        const timer = window.setInterval(() => setIncRecoveryClock((c) => c + 1), 5 * 60 * 1000);
+        return () => window.clearInterval(timer);
+    }, []);
+
+    useEffect(() => {
+        if (!reviewIncLead) {
+            setReviewIncMessages([]);
+            setReviewIncError("");
+            setReviewIncLoading(false);
+            return;
+        }
+        setReviewIncLoading(true);
+        setReviewIncError("");
+        return subscribeLeadMessages(
+            reviewIncLead.id,
+            (messages) => { setReviewIncMessages(messages); setReviewIncLoading(false); },
+            (msg) => { setReviewIncError(msg); setReviewIncLoading(false); }
+        );
+    }, [reviewIncLead]);
 
     const stats = useMemo<UserLeadStats>(() => {
         const today = todayKey();
@@ -242,6 +290,27 @@ export default function UserLeadsPage() {
         return list;
     }, [activeWeek, leads, filter, search]);
 
+    const incActiveDdds = useMemo(() => {
+        const seen = new Set<string>();
+        incomplete.forEach((l) => { const d = extractDDD(l.phone); if (d) seen.add(d); });
+        return [...seen].sort();
+    }, [incomplete]);
+
+    const incVisible = useMemo(() => {
+        let list = incomplete;
+        if (incDddFilter !== "all") list = list.filter((l) => extractDDD(l.phone) === incDddFilter);
+        if (search.trim()) {
+            const q = norm(search.trim());
+            list = list.filter((l) =>
+                norm(l.business).includes(q) || norm(l.name).includes(q) ||
+                norm(l.phone).includes(q) || norm(l.leadAcquisitionCityLabel).includes(q)
+            );
+        }
+        return list;
+    }, [incomplete, incDddFilter, search]);
+
+    const searchList = mainTab === "verificados" ? visibleLeads : incVisible;
+
     // ── Actions ─────────────────────────────────────────────────────────
 
     function openVisit(lead: MetaLeadDoc) { setActionLead(lead); setActionType("visit"); }
@@ -267,6 +336,97 @@ export default function UserLeadsPage() {
     useBackButtonDismiss(filtersOpen, () => setFiltersOpen(false));
     useBackButtonDismiss(Boolean(waConfirmLead), () => setWaConfirmLead(null));
     useBackButtonDismiss(Boolean(actionType), closeAction);
+    useBackButtonDismiss(Boolean(waTakeLead), () => setWaTakeLead(null));
+    useBackButtonDismiss(Boolean(confirmTakeLead), () => setConfirmTakeLead(null));
+    useBackButtonDismiss(Boolean(reviewIncLead), () => setReviewIncLead(null));
+
+    // Tab change: reset search and ddd filter
+    useEffect(() => {
+        setSearch("");
+        setIncDddFilter("all");
+    }, [mainTab]);
+
+    function showToast(msg: string) {
+        setToast(msg);
+        window.setTimeout(() => setToast(""), 2600);
+    }
+
+    async function confirmTakeClient(lead: MetaLeadDoc) {
+        if (!userId) return;
+        setTakeSaving(true);
+        try {
+            await takeIncompleteClient(lead.id, userId, {
+                leadName: lead.name,
+                leadPhone: lead.phone,
+                leadBusiness: lead.business,
+            });
+            setConfirmTakeLead(null);
+            setTakeSaving(false);
+            showToast("Cliente tomado. Lo verás en Verificados.");
+        } catch (error) {
+            setConfirmTakeLead(null);
+            setTakeSaving(false);
+            showToast(
+                error instanceof Error && error.message === "client_already_taken"
+                    ? "Este cliente ya fue tomado por otro usuario."
+                    : "No se pudo tomar este cliente. Intenta nuevamente."
+            );
+        }
+    }
+
+    async function confirmTakeAndWa() {
+        if (!waTakeLead || !userId) return;
+        setWaTaking(true);
+        const lead = waTakeLead;
+        try {
+            await takeIncompleteClient(lead.id, userId, {
+                leadName: lead.name,
+                leadPhone: lead.phone,
+                leadBusiness: lead.business,
+            });
+            setWaTakeLead(null);
+            setWaTaking(false);
+            const msg = isSpanishPhone(lead.phone)
+                ? `¡Hola! Somos de Crédito Comercial. Usted nos contactó anteriormente sobre la liberación de crédito para su negocio. Nos gustaría saber si aún tiene interés. ¡Gracias y disculpe la molestia! 🙏`
+                : `Olá! Somos da Crédito Comercial. Você nos contatou anteriormente sobre a liberação de crédito para o seu comércio. Gostaríamos de saber se ainda tem interesse. Obrigado e desculpe o incômodo! 🙏`;
+            triggerWa(() => {
+                window.open(buildWALink(lead.phone, msg), "_blank");
+                markWhatsAppSent(lead.id);
+                setIncWaSent((prev) => new Set(prev).add(lead.id));
+            });
+            showToast("Cliente tomado. Lo verás en Verificados.");
+        } catch (error) {
+            setWaTakeLead(null);
+            setWaTaking(false);
+            showToast(
+                error instanceof Error && error.message === "client_already_taken"
+                    ? "Este cliente ya fue tomado por otro usuario."
+                    : "No se pudo tomar este cliente."
+            );
+        }
+    }
+
+    async function copyIncLead(lead: MetaLeadDoc) {
+        const mapsUrl = lead.location?.mapsUrl || (
+            lead.location?.lat != null && lead.location?.lng != null
+                ? `https://maps.google.com/?q=${lead.location.lat},${lead.location.lng}` : ""
+        );
+        const text = [
+            lead.name ? `Nombre: ${lead.name}` : "",
+            lead.phone ? `Telefono: ${lead.phone}` : "",
+            lead.business ? `Negocio: ${lead.business}` : "",
+            lead.location?.address ? `Direccion: ${lead.location.address}` : "",
+            mapsUrl ? `Maps: ${mapsUrl}` : "",
+        ].filter(Boolean).join("\n");
+        try {
+            await navigator.clipboard.writeText(text);
+        } catch {
+            window.prompt("Copia los datos del cliente", text);
+        }
+        setIncCopiedId(lead.id);
+        if (incCopyTimer.current) clearTimeout(incCopyTimer.current);
+        incCopyTimer.current = setTimeout(() => setIncCopiedId(null), 1200);
+    }
 
     function saveLeadNote() {
         if (!actionLead) return;
@@ -374,23 +534,32 @@ export default function UserLeadsPage() {
                         <h1 className="text-[20px] font-black tracking-[-0.03em] text-[#101936]">
                             Hola, <span className="text-[#7C3AED]">{userName}</span>
                         </h1>
-                        <p className="mt-0.5 text-[11px] font-semibold text-[#66739A]">
-                            {new Intl.DateTimeFormat("es", { weekday: "long", day: "2-digit", month: "long" }).format(new Date())}
-                        </p>
+                        <div className="mt-0.5 flex items-center gap-1.5 text-[11px] font-semibold text-[#66739A]">
+                            <span>{new Intl.DateTimeFormat("es", { weekday: "long", day: "2-digit", month: "long" }).format(new Date())}</span>
+                            <span>·</span>
+                            <span>
+                                <span className={stats.weekVisited > 0 ? "font-black text-emerald-600" : "font-black text-amber-600"}>
+                                    {stats.weekVisited}
+                                </span>
+                                <span className="text-[#98A2B3]">/{counts.all} sem.</span>
+                            </span>
+                        </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                         {userPermissions.canSeeSubscriptions ? <HeaderSubscriptionBadge status={subscriptionStatus} /> : null}
-                        <button
-                            type="button"
-                            onClick={() => setFiltersOpen(true)}
-                            className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-white shadow-sm transition active:bg-[#f3f0ff]"
-                            aria-label="Filtrar"
-                        >
-                            <FilterIcon />
-                            {filter !== "pending" ? (
-                                <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[#7C3AED]" />
-                            ) : null}
-                        </button>
+                        {mainTab === "verificados" ? (
+                            <button
+                                type="button"
+                                onClick={() => setFiltersOpen(true)}
+                                className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-[#E8E7FB] bg-white shadow-sm transition active:bg-[#f3f0ff]"
+                                aria-label="Filtrar"
+                            >
+                                <FilterIcon />
+                                {filter !== "pending" ? (
+                                    <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[#7C3AED]" />
+                                ) : null}
+                            </button>
+                        ) : null}
                         <button
                             type="button"
                             onClick={() => setSearchOpen(true)}
@@ -402,25 +571,63 @@ export default function UserLeadsPage() {
                     </div>
                 </div>
 
-                {/* STATS ROW */}
-                <div className="mb-2 grid grid-cols-4 gap-2">
-                    <StatPill label="Hoy visit." value={stats.todayVisited} tone="green" />
-                    <StatPill label="Hoy rech." value={stats.todayRejected} tone="red" />
-                    <StatPill label="Sem. visit." value={stats.weekVisited} tone="green" />
-                    <StatPill label="Sem. rech." value={stats.weekRejected} tone="red" />
+                {/* MAIN TABS */}
+                <div className={["mb-2 gap-1.5", userPermissions.canSeeUnverifiedClients ? "grid grid-cols-2" : "flex"].join(" ")}>
+                    <button
+                        type="button"
+                        onClick={() => setMainTab("verificados")}
+                        className={["flex items-center justify-center gap-1.5 rounded-[12px] border py-2 text-[12px] font-black transition",
+                            userPermissions.canSeeUnverifiedClients ? "" : "flex-1",
+                            mainTab === "verificados" ? "border-[#7C3AED] bg-[#7C3AED] text-white" : "border-[#E8E7FB] bg-white text-[#66739A]",
+                        ].join(" ")}
+                    >
+                        Verificados
+                        <span className={["flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[9px] font-black",
+                            mainTab === "verificados" ? "bg-white/25 text-white" : "bg-[#f3f0ff] text-[#7C3AED]",
+                        ].join(" ")}>{counts.all}</span>
+                    </button>
+                    {userPermissions.canSeeUnverifiedClients ? (
+                        <button
+                            type="button"
+                            onClick={() => setMainTab("no_verificados")}
+                            className={["flex items-center justify-center gap-1.5 rounded-[12px] border py-2 text-[12px] font-black transition",
+                                mainTab === "no_verificados" ? "border-[#7C3AED] bg-[#7C3AED] text-white" : "border-[#E8E7FB] bg-white text-[#66739A]",
+                            ].join(" ")}
+                        >
+                            No verificados
+                            <span className={["flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[9px] font-black",
+                                mainTab === "no_verificados" ? "bg-white/25 text-white" : "bg-[#f3f0ff] text-[#7C3AED]",
+                            ].join(" ")}>{incomplete.length}</span>
+                        </button>
+                    ) : null}
                 </div>
+
+                {/* DDD chips - only for No verificados when multiple DDDs */}
+                {mainTab === "no_verificados" && incActiveDdds.length > 1 ? (
+                    <div className="flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                        <FilterChip active={incDddFilter === "all"} onClick={() => setIncDddFilter("all")}>
+                            Todos <CountPill active={incDddFilter === "all"}>{incomplete.length}</CountPill>
+                        </FilterChip>
+                        {incActiveDdds.map((ddd) => {
+                            const cnt = incomplete.filter((l) => extractDDD(l.phone) === ddd).length;
+                            return (
+                                <FilterChip key={ddd} active={incDddFilter === ddd} onClick={() => setIncDddFilter(ddd)}>
+                                    {dddCity(ddd)} <CountPill active={incDddFilter === ddd}>{cnt}</CountPill>
+                                </FilterChip>
+                            );
+                        })}
+                    </div>
+                ) : null}
 
             </div>
 
-            {/* ── LEAD LIST ───────────────────────────────────────────── */}
+            {/* ── CONTENT ─────────────────────────────────────────────── */}
             <div className="flex-1 px-3 pt-2 pb-4 xl:px-6">
-                {loading ? (
-                    <LoadingState />
-                ) : visibleLeads.length === 0 ? (
-                    <EmptyState filter={filter} search={search} />
-                ) : (
+                {mainTab === "verificados" ? (
+                    loading ? <LoadingState /> :
+                    visibleLeads.length === 0 ? <EmptyState filter={filter} search={search} /> :
                     <div className="grid gap-2.5">
-                        {visibleLeads.map((lead, idx) => {
+                        {visibleLeads.map((lead) => {
                             const isPending = !lead.status || lead.status === "pending";
                             const priority = isPending ? visibleLeads.filter((l) => !l.status || l.status === "pending").indexOf(lead) : -1;
                             return (
@@ -436,12 +643,55 @@ export default function UserLeadsPage() {
                                     onUndo={() => handleUndo(lead)}
                                     onWhatsApp={() => openWhatsApp(lead)}
                                     onMaps={() => openMaps(lead)}
-                                onCopy={() => copyLead(lead)}
-                                onNote={() => openNoteAction(lead)}
-                                canChatWithProspects={userPermissions.canChatWithProspects}
-                            />
+                                    onCopy={() => copyLead(lead)}
+                                    onNote={() => openNoteAction(lead)}
+                                    canChatWithProspects={userPermissions.canChatWithProspects}
+                                />
                             );
                         })}
+                    </div>
+                ) : (
+                    loadingIncomplete ? <LoadingState /> :
+                    !phoneCodes.length && !campaignIds.length ? (
+                        <div className="flex flex-col items-center justify-center py-20 text-center">
+                            <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f3f0ff]">
+                                <InboxIcon />
+                            </div>
+                            <p className="text-[14px] font-black text-[#101936]">Sin cobertura configurada</p>
+                            <p className="mt-1 text-[12px] font-semibold text-[#98A2B3]">El administrador debe configurar los indicativos o activar una suscripción</p>
+                        </div>
+                    ) :
+                    incVisible.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-20 text-center">
+                            <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f3f0ff]">
+                                <InboxIcon />
+                            </div>
+                            <p className="text-[14px] font-black text-[#101936]">
+                                {search ? "Sin resultados" : "Sin clientes por verificar"}
+                            </p>
+                            <p className="mt-1 text-[12px] font-semibold text-[#98A2B3]">
+                                {search ? "Intenta con otro término" : "Los clientes incompletos aparecerán aquí"}
+                            </p>
+                        </div>
+                    ) :
+                    <div className="grid gap-2.5">
+                        {incVisible.map((lead) => (
+                            <RecoveryCard
+                                key={lead.id}
+                                lead={lead}
+                                note={incNotes[lead.id]}
+                                waSent={incWaSent.has(lead.id)}
+                                copied={incCopiedId === lead.id}
+                                onTake={() => setConfirmTakeLead(lead)}
+                                onReview={() => setReviewIncLead(lead)}
+                                onWhatsApp={() => setWaTakeLead(lead)}
+                                onMaps={() => {
+                                    const url = lead.location?.mapsUrl || (lead.location?.lat != null ? `https://maps.google.com/?q=${lead.location.lat},${lead.location.lng}` : "");
+                                    if (url) window.open(url, "_blank");
+                                }}
+                                onCopy={() => void copyIncLead(lead)}
+                            />
+                        ))}
                     </div>
                 )}
             </div>
@@ -468,11 +718,11 @@ export default function UserLeadsPage() {
                         </button>
                     </div>
                     <div className="flex-1 overflow-y-auto px-4 pt-3">
-                        {visibleLeads.length === 0 ? (
+                        {searchList.length === 0 ? (
                             <p className="pt-10 text-center text-[13px] font-semibold text-[#98A2B3]">Sin resultados</p>
                         ) : (
                             <div className="grid gap-2.5">
-                                {visibleLeads.map((lead) => (
+                                {mainTab === "verificados" ? searchList.map((lead) => (
                                     <LeadCard
                                         key={lead.id}
                                         lead={lead}
@@ -488,6 +738,22 @@ export default function UserLeadsPage() {
                                         onCopy={() => copyLead(lead)}
                                         onNote={() => { openNoteAction(lead); setSearchOpen(false); }}
                                         canChatWithProspects={userPermissions.canChatWithProspects}
+                                    />
+                                )) : searchList.map((lead) => (
+                                    <RecoveryCard
+                                        key={lead.id}
+                                        lead={lead}
+                                        note={incNotes[lead.id]}
+                                        waSent={incWaSent.has(lead.id)}
+                                        copied={incCopiedId === lead.id}
+                                        onTake={() => { setConfirmTakeLead(lead); setSearchOpen(false); }}
+                                        onReview={() => { setReviewIncLead(lead); setSearchOpen(false); }}
+                                        onWhatsApp={() => { setWaTakeLead(lead); setSearchOpen(false); }}
+                                        onMaps={() => {
+                                            const url = lead.location?.mapsUrl || (lead.location?.lat != null ? `https://maps.google.com/?q=${lead.location.lat},${lead.location.lng}` : "");
+                                            if (url) window.open(url, "_blank");
+                                        }}
+                                        onCopy={() => void copyIncLead(lead)}
                                     />
                                 ))}
                             </div>
@@ -716,45 +982,129 @@ export default function UserLeadsPage() {
                 <WhatsAppLimitModal count={waLimitCount} onConfirm={confirmWa} onCancel={cancelWa} />
             ) : null}
 
-            {recuperarAlert ? (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-                    <button type="button" className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => setRecuperarAlert(false)} />
-                    <div className="relative w-full max-w-sm rounded-[24px] bg-white p-5 shadow-2xl">
-                        <div className="mb-4 flex items-start gap-3">
-                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] bg-amber-100">
-                                <AlertTriangleIcon />
-                            </div>
-                            <div className="min-w-0">
-                                <p className="text-[16px] font-black text-[#101936]">Clientes por recuperar</p>
-                                <p className="mt-0.5 text-[12px] font-semibold text-[#66739A]">{recuperarCount} clientes sin atención por más de 2 días</p>
-                            </div>
-                        </div>
-                        <p className="mb-5 rounded-[14px] border border-amber-100 bg-amber-50 px-3 py-2.5 text-[12px] font-semibold text-amber-800">
-                            Hay clientes esperando contacto. ¡Revísalos antes de que se enfríen!
+            {/* PASAR A VERIFICADOS modal */}
+            {confirmTakeLead ? (
+                <BottomSheet onClose={() => setConfirmTakeLead(null)}>
+                    <div className="mb-4">
+                        <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-700">PASAR A VERIFICADOS</span>
+                        <p className="mt-2 text-[17px] font-black text-[#101936]">{displayName(confirmTakeLead)}</p>
+                        <p className="mt-0.5 text-[12px] font-semibold text-[#66739A]">{confirmTakeLead.phone}</p>
+                    </div>
+                    <div className="mb-4 rounded-[14px] border border-emerald-100 bg-emerald-50 px-3 py-3 text-[12px] font-semibold text-emerald-800">
+                        <p className="font-black">Este cliente pasará a tus Verificados</p>
+                        <p className="mt-1">Podrás gestionarlo desde la pestaña Verificados y ningún otro vendedor podrá tomarlo.</p>
+                    </div>
+                    <div className="flex gap-2">
+                        <button type="button" onClick={() => setConfirmTakeLead(null)} className="flex-1 rounded-[14px] border border-[#E8E7FB] py-3 text-[13px] font-black text-[#66739A]">Cancelar</button>
+                        <button type="button" onClick={() => void confirmTakeClient(confirmTakeLead)} disabled={takeSaving} className="flex-1 rounded-[14px] bg-emerald-600 py-3 text-[13px] font-black text-white disabled:opacity-60">
+                            {takeSaving ? "Guardando..." : "Confirmar"}
+                        </button>
+                    </div>
+                </BottomSheet>
+            ) : null}
+
+            {/* CONTACTAR (WhatsApp + take) modal */}
+            {waTakeLead ? (
+                <BottomSheet onClose={() => setWaTakeLead(null)}>
+                    <div className="mb-4">
+                        <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-700">CONTACTAR</span>
+                        <p className="mt-2 text-[17px] font-black text-[#101936]">{displayName(waTakeLead)}</p>
+                        <p className="mt-0.5 text-[12px] font-semibold text-[#66739A]">{waTakeLead.phone}</p>
+                    </div>
+                    <div className="mb-4 rounded-[14px] border border-emerald-100 bg-emerald-50 px-3 py-3 text-[12px] font-semibold text-emerald-800">
+                        <p className="font-black">Para contactar, primero debes tomar el cliente</p>
+                        <p className="mt-1">Al tomarlo pasará a Verificados y WhatsApp se abrirá automáticamente.</p>
+                    </div>
+                    <div className="flex gap-2">
+                        <button type="button" onClick={() => setWaTakeLead(null)} className="flex-1 rounded-[14px] border border-[#E8E7FB] py-3 text-[13px] font-black text-[#66739A]">Cancelar</button>
+                        <button type="button" onClick={() => void confirmTakeAndWa()} disabled={waTaking} className="flex-1 rounded-[14px] bg-emerald-600 py-3 text-[13px] font-black text-white disabled:opacity-60">
+                            {waTaking ? "Tomando..." : "Tomar y contactar"}
+                        </button>
+                    </div>
+                </BottomSheet>
+            ) : null}
+
+            {/* ONE-TIME ANNOUNCEMENT: No verificados tab */}
+            {showNoVerifAnnouncement ? (
+                <BottomSheet onClose={() => { localStorage.setItem("tg_seen_noverif_v1", "1"); setShowNoVerifAnnouncement(false); }}>
+                    <div className="mb-5">
+                        <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-700">NOVEDAD</span>
+                        <p className="mt-3 text-[19px] font-black leading-snug tracking-[-0.02em] text-[#101936]">
+                            Tus clientes por recuperar ahora están aquí
                         </p>
-                        <div className="flex gap-2">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    localStorage.setItem('recuperar_snooze_until', String(Date.now() + 24 * 60 * 60 * 1000));
-                                    setRecuperarAlert(false);
-                                }}
-                                className="flex-1 rounded-[14px] border border-[#E8E7FB] py-3 text-[13px] font-black text-[#66739A]"
-                            >
-                                Más tarde
-                            </button>
-                            <Link
-                                href="/user/chat"
-                                onClick={() => {
-                                    localStorage.setItem('recuperar_last_visited_at', String(Date.now()));
-                                    setRecuperarAlert(false);
-                                }}
-                                className="flex flex-1 items-center justify-center rounded-[14px] bg-amber-500 py-3 text-[13px] font-black text-white"
-                            >
-                                Ver ahora
-                            </Link>
+                        <p className="mt-1.5 text-[13px] font-semibold text-[#66739A]">
+                            Los encontrás en la pestaña <span className="font-black text-[#7C3AED]">No verificados</span>, justo al lado de tus Prospectos.
+                        </p>
+                    </div>
+                    <div className="space-y-3 text-[13px] font-semibold text-[#66739A]">
+                        <div className="flex items-start gap-3 rounded-[14px] border border-[#E8E7FB] bg-[#f8f7ff] px-3.5 py-3">
+                            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-violet-100 text-[11px] font-black text-[#7C3AED]">1</span>
+                            <p>Tocá <span className="font-black text-[#101936]">No verificados</span> para ver los clientes que aún no completaron su registro.</p>
+                        </div>
+                        <div className="flex items-start gap-3 rounded-[14px] border border-[#E8E7FB] bg-[#f8f7ff] px-3.5 py-3">
+                            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-violet-100 text-[11px] font-black text-[#7C3AED]">2</span>
+                            <p>Podés ver el <span className="font-black text-[#101936]">chat del bot</span> con cada cliente antes de decidir si te interesa.</p>
+                        </div>
+                        <div className="flex items-start gap-3 rounded-[14px] border border-[#E8E7FB] bg-[#f8f7ff] px-3.5 py-3">
+                            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-violet-100 text-[11px] font-black text-[#7C3AED]">3</span>
+                            <p>Si te interesa, tocá <span className="font-black text-[#101936]">Pasar a Verificados</span> y el cliente pasa directamente a tus Prospectos.</p>
                         </div>
                     </div>
+                    <button
+                        type="button"
+                        onClick={() => { localStorage.setItem("tg_seen_noverif_v1", "1"); setShowNoVerifAnnouncement(false); }}
+                        className="mt-5 w-full rounded-[14px] bg-[#7C3AED] py-3.5 text-[14px] font-black text-white"
+                    >
+                        Entendido
+                    </button>
+                </BottomSheet>
+            ) : null}
+
+            {/* VER CHAT (read-only) for No verificados */}
+            {reviewIncLead ? (
+                <BottomSheet onClose={() => setReviewIncLead(null)} tall>
+                    <div className="mb-3 flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                            <span className="inline-flex items-center rounded-full bg-[#f3f0ff] px-2 py-0.5 text-[9px] font-black text-[#7C3AED]">CHAT</span>
+                            <p className="mt-1.5 truncate text-[15px] font-black text-[#101936]">
+                                {reviewIncLead.business || reviewIncLead.name || reviewIncLead.phone || "Sin nombre"}
+                            </p>
+                            <p className="text-[11px] font-semibold text-[#66739A]">{reviewIncLead.phone}</p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => { const lead = reviewIncLead; setReviewIncLead(null); setConfirmTakeLead(lead); }}
+                            className="shrink-0 rounded-[11px] bg-emerald-600 px-3 py-2 text-[11px] font-black text-white"
+                        >
+                            Tomar
+                        </button>
+                    </div>
+                    <div className="min-h-[260px] overflow-y-auto rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 py-3">
+                        {reviewIncLoading ? (
+                            <div className="flex justify-center py-8">
+                                <svg className="tg-spin h-6 w-6 text-[#7C3AED]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                                    <path d="M21 12a9 9 0 1 1-3.1-6.8" />
+                                </svg>
+                            </div>
+                        ) : reviewIncError ? (
+                            <p className="py-6 text-center text-[12px] font-bold text-red-600">{reviewIncError}</p>
+                        ) : reviewIncMessages.length === 0 ? (
+                            <p className="py-6 text-center text-[12px] font-semibold text-[#98A2B3]">Sin mensajes guardados.</p>
+                        ) : (
+                            <div className="space-y-2 pb-4">
+                                {reviewIncMessages.map((message) => (
+                                    <IncMessageBubble key={message.id} message={message} />
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </BottomSheet>
+            ) : null}
+
+            {/* TOAST */}
+            {toast ? (
+                <div className="fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom)+84px)] z-[60] rounded-[16px] border border-[#E8E7FB] bg-white px-4 py-3 text-center text-[12px] font-black text-[#101936] shadow-[0_16px_42px_rgba(91,33,255,0.16)]">
+                    {toast}
                 </div>
             ) : null}
         </div>
@@ -947,18 +1297,6 @@ function StatusBadge({ status }: { status?: string }) {
     );
 }
 
-function StatPill({ label, value, tone }: { label: string; value: number; tone: "green" | "red" }) {
-    return (
-        <div className={[
-            "rounded-[12px] border px-1.5 py-1.5 text-center",
-            tone === "green" ? "border-emerald-100 bg-emerald-50" : "border-red-100 bg-red-50",
-        ].join(" ")}>
-            <div className={["text-[15px] font-black", tone === "green" ? "text-emerald-700" : "text-red-700"].join(" ")}>{value}</div>
-            <div className="mt-0.5 text-[9px] font-black text-[#98A2B3] leading-none">{label}</div>
-        </div>
-    );
-}
-
 function ActionBtn({ onClick, title, tone, children }: { onClick: () => void; title: string; tone: "green" | "blue" | "violet" | "sent"; children: React.ReactNode }) {
     const cls: Record<string, string> = {
         green: "border-emerald-200 bg-emerald-50 text-emerald-700",
@@ -1026,6 +1364,155 @@ function EmptyState({ filter, search }: { filter: StatusFilter; search: string }
             <p className="text-[14px] font-black text-[#101936]">{msg}</p>
             <p className="mt-1 text-[12px] font-semibold text-[#98A2B3]">Aparecerán aquí cuando se asignen</p>
         </div>
+    );
+}
+
+// ── RECOVERY CARD ────────────────────────────────────────────────────────────
+
+function RecoveryCard({
+    lead, note, waSent, copied,
+    onTake, onReview, onWhatsApp, onMaps, onCopy,
+}: {
+    lead: MetaLeadDoc;
+    note?: string;
+    waSent: boolean;
+    copied: boolean;
+    onTake: () => void;
+    onReview: () => void;
+    onWhatsApp: () => void;
+    onMaps: () => void;
+    onCopy: () => void;
+}) {
+    const ddd = extractDDD(lead.phone);
+    const hasLocation = !!lead.location?.lat || !!lead.location?.mapsUrl;
+
+    const locationBadge = (() => {
+        const realCity = lead.location?.adminCityLabel || lead.location?.cityLabel || lead.location?.displayLabel;
+        const fallbackCity = lead.leadAcquisitionCityLabel;
+        const city = realCity || fallbackCity || (ddd ? dddCity(ddd) : "");
+        if (ddd && city) return `${ddd} · ${city}`;
+        if (ddd) return ddd;
+        return city;
+    })();
+
+    const activity = lead.lastInboundMessageAt ?? lead.updatedAt ?? lead.createdAt ?? null;
+    const activityLabel = (() => {
+        if (!activity) return "";
+        const diff = Date.now() - activity;
+        const mins = Math.floor(diff / 60_000);
+        if (mins < 1) return "Ahora";
+        if (mins < 60) return `${mins}m`;
+        const hrs = Math.floor(mins / 60);
+        if (hrs < 24) return `${hrs}h`;
+        return `${Math.floor(hrs / 24)}d`;
+    })();
+
+    return (
+        <div className="overflow-hidden rounded-[18px] border border-[#E8E7FB] bg-white shadow-[0_2px_12px_rgba(91,33,255,0.05)]">
+            <div className="p-3">
+                <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                        <p className="truncate text-[14px] font-black text-[#101936]">
+                            {lead.business || lead.name || lead.phone || "Sin nombre"}
+                        </p>
+                        {lead.name && lead.business ? (
+                            <p className="truncate text-[11px] font-semibold text-[#66739A]">{lead.name}</p>
+                        ) : null}
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                        {locationBadge ? (
+                            <span className="rounded-full bg-[#f3f0ff] px-2 py-0.5 text-[9px] font-black text-[#7C3AED]">
+                                {locationBadge}
+                            </span>
+                        ) : null}
+                        {activityLabel ? (
+                            <span className="text-[10px] font-semibold text-[#98A2B3]">{activityLabel}</span>
+                        ) : null}
+                    </div>
+                </div>
+
+                <div className="mt-1.5 space-y-1">
+                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#66739A]">
+                        <PhoneIcon /> <span className="truncate">{lead.phone}</span>
+                    </div>
+                    {lead.location?.address ? (
+                        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#66739A]">
+                            <PinIcon /> <span className="truncate">{lead.location.address}</span>
+                        </div>
+                    ) : null}
+                </div>
+
+                {(!hasLocation || !lead.business) ? (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                        {!hasLocation ? (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+                                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />Falta: ubicación
+                            </span>
+                        ) : null}
+                        {!lead.business ? (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700">
+                                <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />Falta: negocio
+                            </span>
+                        ) : null}
+                    </div>
+                ) : null}
+
+                {lead.lastInboundText ? (
+                    <p className="mt-2 line-clamp-2 rounded-[10px] border border-[#F2F0FF] bg-[#f8f7ff] px-2.5 py-1.5 text-[11px] font-semibold text-[#66739A]">
+                        {lead.lastInboundText}
+                    </p>
+                ) : null}
+
+                {note ? (
+                    <div className="mt-2 flex items-start gap-1.5 rounded-[10px] border border-violet-100 bg-violet-50 px-2.5 py-1.5">
+                        <NoteIcon />
+                        <p className="text-[11px] font-semibold text-[#5B21FF]">{note}</p>
+                    </div>
+                ) : null}
+
+                <div className="mt-3 flex items-center gap-1.5 border-t border-[#F2F0FF] pt-2.5">
+                    <ActionBtn onClick={onReview} tone="violet" title="Ver chat"><ChatIcon /></ActionBtn>
+                    <button
+                        type="button"
+                        onClick={onTake}
+                        className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-[12px] border border-emerald-200 bg-emerald-50 text-[12px] font-black text-emerald-700 transition active:bg-emerald-100"
+                    >
+                        Pasar a Verificados
+                    </button>
+                    <div className="relative">
+                        <ActionBtn onClick={onCopy} title={copied ? "Copiado" : "Copiar"} tone={copied ? "sent" : "violet"}>
+                            {copied ? <CheckIcon /> : <CopyIcon />}
+                        </ActionBtn>
+                        {copied ? (
+                            <span className="pointer-events-none absolute -top-7 left-1/2 -translate-x-1/2 rounded-full border border-emerald-200 bg-white px-2 py-1 text-[9px] font-black text-emerald-700 shadow-[0_8px_22px_rgba(16,185,129,0.16)]">
+                                Copiado
+                            </span>
+                        ) : null}
+                    </div>
+                    <ActionBtn onClick={onWhatsApp} tone={waSent ? "sent" : "green"} title={waSent ? "Enviado" : "WhatsApp"}>
+                        {waSent ? <WACheckIcon /> : <WAIcon />}
+                    </ActionBtn>
+                    {hasLocation ? (
+                        <ActionBtn onClick={onMaps} title="Maps" tone="blue"><MapsIcon /></ActionBtn>
+                    ) : null}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ── FILTER CHIPS ─────────────────────────────────────────────────────────────
+
+function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+    return (
+        <button type="button" onClick={onClick} className={["flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-black transition", active ? "border-[#7C3AED] bg-[#7C3AED] text-white" : "border-[#E8E7FB] bg-white text-[#66739A]"].join(" ")}>
+            {children}
+        </button>
+    );
+}
+function CountPill({ active, children }: { active: boolean; children: React.ReactNode }) {
+    return (
+        <span className={["flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[9px] font-black", active ? "bg-white/25 text-white" : "bg-[#f3f0ff] text-[#7C3AED]"].join(" ")}>{children}</span>
     );
 }
 
@@ -1098,6 +1585,30 @@ function WACheckIcon() {
 function InboxIcon() {
     return <svg viewBox="0 0 24 24" className="h-7 w-7 text-[#7C3AED]" {...ic}><path d="M4 4h16l-2 9H6L4 4Z" /><path d="M6 13v5a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-5" /></svg>;
 }
-function AlertTriangleIcon() {
-    return <svg viewBox="0 0 24 24" className="h-5 w-5 text-amber-600" {...ic}><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" /><path d="M12 9v4M12 17h.01" /></svg>;
+function ChatIcon() {
+    return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z" /><path d="M8 9h8M8 13h5" /></svg>;
+}
+
+// ── MESSAGE BUBBLE (for read-only chat in No verificados) ─────────────────────
+
+function formatMessageTime(ts: number | null | undefined): string {
+    if (!ts) return "";
+    return new Intl.DateTimeFormat("es", { hour: "2-digit", minute: "2-digit" }).format(new Date(ts));
+}
+
+function IncMessageBubble({ message }: { message: LeadMessageDoc }) {
+    const outbound = message.direction === "outbound";
+    const sender = message.senderType === "bot" ? "Bot" : message.senderType === "admin" ? "Admin" : "Cliente";
+    return (
+        <div className={["flex", outbound ? "justify-end" : "justify-start"].join(" ")}>
+            <div className={[
+                "max-w-[82%] rounded-[15px] px-3 py-2",
+                outbound ? "rounded-br-[4px] bg-[#7C3AED] text-white" : "rounded-bl-[4px] border border-[#E8E7FB] bg-white text-[#101936]",
+            ].join(" ")}>
+                <p className={["mb-0.5 text-[9px] font-black uppercase tracking-wide", outbound ? "text-violet-200" : "text-[#98A2B3]"].join(" ")}>{sender}</p>
+                <p className="whitespace-pre-wrap text-[12px] font-semibold leading-relaxed">{message.text}</p>
+                <p className={["mt-1 text-right text-[9px] font-semibold", outbound ? "text-violet-200" : "text-[#98A2B3]"].join(" ")}>{formatMessageTime(message.createdAt)}</p>
+            </div>
+        </div>
+    );
 }

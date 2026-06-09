@@ -606,7 +606,10 @@ export default function SubscriptionsAdminPage() {
                                 action={<StatusBadge>{cityStats.available} libres</StatusBadge>}
                             />
                             <CardContent className="grid gap-2">
-                                {(overview?.cities ?? []).map((city) => (
+                                {(overview?.cities ?? []).slice().sort((a, b) => {
+                                    const order = { occupied: 0, reserved: 1, available: 2 };
+                                    return (order[a.status] ?? 2) - (order[b.status] ?? 2);
+                                }).map((city) => (
                                     <CityCard
                                         key={city.id}
                                         city={city}

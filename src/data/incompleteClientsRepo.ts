@@ -92,6 +92,65 @@ function isRecoverableIncompleteLead(lead: MetaLeadDoc) {
     return activityMs > 0 && Date.now() - activityMs >= RECOVERY_WAIT_MS;
 }
 
+function subscribeCoverageByCampaignIds(
+    campaignIds: string[],
+    statuses: readonly string[],
+    callback: (leads: MetaLeadDoc[]) => void,
+    extraFilter: (lead: MetaLeadDoc) => boolean,
+    sortBy: (lead: MetaLeadDoc) => number
+): Unsubscribe {
+    // Split into (status × chunk) queries — Firestore forbids two 'in' clauses in one query.
+    const chunks: string[][] = [];
+    for (let i = 0; i < campaignIds.length; i += 30) {
+        chunks.push(campaignIds.slice(i, i + 30));
+    }
+
+    const snapshots = new Map<string, MetaLeadDoc[]>();
+    const unsubs: Unsubscribe[] = [];
+
+    function emit() {
+        const seen = new Map<string, MetaLeadDoc>();
+        for (const leads of snapshots.values()) {
+            for (const lead of leads) {
+                if (!seen.has(lead.id)) seen.set(lead.id, lead);
+            }
+        }
+        callback(
+            [...seen.values()]
+                .filter((lead) => statuses.includes(lead.verificationStatus))
+                .filter(extraFilter)
+                .sort((a, b) => sortBy(b) - sortBy(a))
+        );
+    }
+
+    for (const status of statuses) {
+        for (let ci = 0; ci < chunks.length; ci++) {
+            const chunk = chunks[ci]!;
+            const key = `${status}:${ci}`;
+            const q = query(
+                collection(db, "clients"),
+                where("verificationStatus", "==", status),
+                where("leadAcquisitionCampaignId", "in", chunk)
+            );
+            const unsub = onSnapshot(
+                q,
+                (snap) => {
+                    snapshots.set(key, snap.docs.map((d) => normalizeLeadDoc(d.id, d.data() as Record<string, unknown>)));
+                    emit();
+                },
+                (err) => {
+                    console.error("[subscribeCoverageByCampaignIds]", key, err.message);
+                    snapshots.set(key, []);
+                    emit();
+                }
+            );
+            unsubs.push(unsub);
+        }
+    }
+
+    return () => unsubs.forEach((unsub) => unsub());
+}
+
 function subscribeCoverageByPhonePrefixes(
     phoneCodes: string[],
     statuses: readonly string[],
@@ -154,13 +213,26 @@ function subscribeCoverageByPhonePrefixes(
 
 /**
  * Recoverable clients: incomplete/pending leads without an owner.
+ * When campaignIds are provided they take priority over phoneCodes — only leads from
+ * those campaigns are returned. Falls back to phoneCodes when no campaigns are active.
  * Leads with business are available immediately; leads without business wait 24h after
  * their last activity so the client still has time to complete the bot flow.
  */
 export function subscribeIncompleteClients(
     phoneCodes: string[],
-    callback: (leads: MetaLeadDoc[]) => void
+    callback: (leads: MetaLeadDoc[]) => void,
+    campaignIds?: string[]
 ): Unsubscribe {
+    if (campaignIds && campaignIds.length > 0) {
+        return subscribeCoverageByCampaignIds(
+            campaignIds,
+            INCOMPLETE_STATUSES,
+            callback,
+            isRecoverableIncompleteLead,
+            recoveryActivityMs
+        );
+    }
+
     if (!phoneCodes.length) {
         callback([]);
         return () => {};
@@ -176,13 +248,26 @@ export function subscribeIncompleteClients(
 }
 
 /**
- * Not-suitable clients in vendor's coverage area.
- * These were marked as not_suitable by this vendor or admin.
+ * Not-suitable clients in vendor's coverage area (or campaigns when active).
  */
 export function subscribeNotSuitableClients(
     phoneCodes: string[],
-    callback: (leads: MetaLeadDoc[]) => void
+    callback: (leads: MetaLeadDoc[]) => void,
+    campaignIds?: string[]
 ): Unsubscribe {
+    const sortBy = (lead: MetaLeadDoc) =>
+        lead.verificationStatusChangedAt ?? lead.lastInboundMessageAt ?? lead.updatedAt ?? lead.createdAt ?? 0;
+
+    if (campaignIds && campaignIds.length > 0) {
+        return subscribeCoverageByCampaignIds(
+            campaignIds,
+            ["not_suitable"],
+            callback,
+            () => true,
+            sortBy
+        );
+    }
+
     if (!phoneCodes.length) {
         callback([]);
         return () => {};
@@ -193,7 +278,7 @@ export function subscribeNotSuitableClients(
         ["not_suitable"],
         callback,
         () => true,
-        (lead) => lead.verificationStatusChangedAt ?? lead.lastInboundMessageAt ?? lead.updatedAt ?? lead.createdAt ?? 0
+        sortBy
     );
 }
 

@@ -115,8 +115,10 @@ export type UserPermissions = {
     canSeeMap: boolean;
     /** Can view the history screen. */
     canSeeHistory: boolean;
-    /** Can view the chat / incomplete-clients screen. */
+    /** Can view the No Aptos screen (/user/chat). */
     canSeeChat: boolean;
+    /** Can view the No Verificados tab in Prospectos (recovery clients). */
+    canSeeUnverifiedClients: boolean;
     /** Can reply from TrackGo chat to any assigned pending prospect. */
     canChatWithProspects: boolean;
     /** Can access subscription purchase/settings screens. */
@@ -126,11 +128,11 @@ export type UserPermissions = {
 };
 
 export function defaultUserPermissions(): UserPermissions {
-    return { canSeeMap: true, canSeeHistory: true, canSeeChat: true, canChatWithProspects: false, canSeeSubscriptions: true, canSeeCommercialDirectory: true };
+    return { canSeeMap: true, canSeeHistory: true, canSeeChat: true, canSeeUnverifiedClients: true, canChatWithProspects: false, canSeeSubscriptions: true, canSeeCommercialDirectory: true };
 }
 
 export function fullUserPermissions(): UserPermissions {
-    return { canSeeMap: true, canSeeHistory: true, canSeeChat: true, canChatWithProspects: true, canSeeSubscriptions: true, canSeeCommercialDirectory: true };
+    return { canSeeMap: true, canSeeHistory: true, canSeeChat: true, canSeeUnverifiedClients: true, canChatWithProspects: true, canSeeSubscriptions: true, canSeeCommercialDirectory: true };
 }
 
 /** Returns a permissions object with everything enabled (used for superadmin). */
