@@ -10,7 +10,7 @@ import {
     subscribeUserDailyEvents,
     subscribeUserLeads,
 } from "@/data/userLeadsRepo";
-import { takeIncompleteClient, subscribeIncompleteClients, dddCity, extractDDD } from "@/data/incompleteClientsRepo";
+import { takeIncompleteClient, subscribeIncompleteClients, markClientNotSuitable, dddCity, extractDDD } from "@/data/incompleteClientsRepo";
 import type { MetaLeadDoc, LeadMessageDoc } from "@/types/leads";
 import type { DailyEventDoc } from "@/types/accounting";
 import { subscribeLeadMessages } from "@/data/leadChatRepo";
@@ -164,6 +164,8 @@ export default function UserLeadsPage() {
     const [takeSaving, setTakeSaving] = useState(false);
     const [incRecoveryClock, setIncRecoveryClock] = useState(0);
     const [incVisibleCount, setIncVisibleCount] = useState(INC_PAGE_SIZE);
+    const [notSuitableLead, setNotSuitableLead] = useState<MetaLeadDoc | null>(null);
+    const [notSuitableSaving, setNotSuitableSaving] = useState(false);
     const [toast, setToast] = useState("");
     const [showNoVerifAnnouncement, setShowNoVerifAnnouncement] = useState(false);
     const [reviewIncLead, setReviewIncLead] = useState<MetaLeadDoc | null>(null);
@@ -342,6 +344,7 @@ export default function UserLeadsPage() {
     useBackButtonDismiss(Boolean(waTakeLead), () => setWaTakeLead(null));
     useBackButtonDismiss(Boolean(confirmTakeLead), () => setConfirmTakeLead(null));
     useBackButtonDismiss(Boolean(reviewIncLead), () => setReviewIncLead(null));
+    useBackButtonDismiss(Boolean(notSuitableLead), () => setNotSuitableLead(null));
 
     // Tab change: reset search, ddd filter and pagination
     useEffect(() => {
@@ -413,6 +416,16 @@ export default function UserLeadsPage() {
                     : "No se pudo tomar este cliente."
             );
         }
+    }
+
+    async function confirmNotSuitable() {
+        if (!notSuitableLead) return;
+        setNotSuitableSaving(true);
+        try {
+            await markClientNotSuitable(notSuitableLead.id);
+            setNotSuitableLead(null);
+        } catch { /* noop */ }
+        setNotSuitableSaving(false);
     }
 
     async function copyIncLead(lead: MetaLeadDoc) {
@@ -693,6 +706,7 @@ export default function UserLeadsPage() {
                                 copied={incCopiedId === lead.id}
                                 onTake={() => setConfirmTakeLead(lead)}
                                 onReview={() => setReviewIncLead(lead)}
+                                onNotSuitable={() => setNotSuitableLead(lead)}
                                 onWhatsApp={() => setWaTakeLead(lead)}
                                 onMaps={() => {
                                     const url = lead.location?.mapsUrl || (lead.location?.lat != null ? `https://maps.google.com/?q=${lead.location.lat},${lead.location.lng}` : "");
@@ -766,6 +780,7 @@ export default function UserLeadsPage() {
                                         copied={incCopiedId === lead.id}
                                         onTake={() => { setConfirmTakeLead(lead); setSearchOpen(false); }}
                                         onReview={() => { setReviewIncLead(lead); setSearchOpen(false); }}
+                                        onNotSuitable={() => { setNotSuitableLead(lead); setSearchOpen(false); }}
                                         onWhatsApp={() => { setWaTakeLead(lead); setSearchOpen(false); }}
                                         onMaps={() => {
                                             const url = lead.location?.mapsUrl || (lead.location?.lat != null ? `https://maps.google.com/?q=${lead.location.lat},${lead.location.lng}` : "");
@@ -1119,6 +1134,27 @@ export default function UserLeadsPage() {
                 </BottomSheet>
             ) : null}
 
+            {/* NO APTO modal */}
+            {notSuitableLead ? (
+                <BottomSheet onClose={() => setNotSuitableLead(null)}>
+                    <div className="mb-4">
+                        <span className="inline-flex items-center rounded-full bg-orange-100 px-2.5 py-1 text-[10px] font-black text-orange-700">NO APTO</span>
+                        <p className="mt-2 text-[17px] font-black text-[#101936]">{notSuitableLead.business || notSuitableLead.name || notSuitableLead.phone || "Sin nombre"}</p>
+                        <p className="mt-0.5 text-[12px] font-semibold text-[#66739A]">{notSuitableLead.phone}</p>
+                    </div>
+                    <div className="mb-4 rounded-[14px] border border-orange-100 bg-orange-50 px-3 py-3 text-[12px] font-semibold text-orange-800">
+                        <p className="font-black">Este cliente pasará a No Aptos</p>
+                        <p className="mt-1">Quedará registrado como no apto y desaparecerá de los No verificados.</p>
+                    </div>
+                    <div className="flex gap-2">
+                        <button type="button" onClick={() => setNotSuitableLead(null)} className="flex-1 rounded-[14px] border border-[#E8E7FB] py-3 text-[13px] font-black text-[#66739A]">Cancelar</button>
+                        <button type="button" onClick={() => void confirmNotSuitable()} disabled={notSuitableSaving} className="flex-1 rounded-[14px] bg-orange-500 py-3 text-[13px] font-black text-white disabled:opacity-60">
+                            {notSuitableSaving ? "Guardando..." : "Confirmar"}
+                        </button>
+                    </div>
+                </BottomSheet>
+            ) : null}
+
             {/* TOAST */}
             {toast ? (
                 <div className="fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom)+84px)] z-[60] rounded-[16px] border border-[#E8E7FB] bg-white px-4 py-3 text-center text-[12px] font-black text-[#101936] shadow-[0_16px_42px_rgba(91,33,255,0.16)]">
@@ -1315,12 +1351,13 @@ function StatusBadge({ status }: { status?: string }) {
     );
 }
 
-function ActionBtn({ onClick, title, tone, children }: { onClick: () => void; title: string; tone: "green" | "blue" | "violet" | "sent"; children: React.ReactNode }) {
+function ActionBtn({ onClick, title, tone, children }: { onClick: () => void; title: string; tone: "green" | "blue" | "violet" | "sent" | "orange"; children: React.ReactNode }) {
     const cls: Record<string, string> = {
         green: "border-emerald-200 bg-emerald-50 text-emerald-700",
         blue: "border-blue-200 bg-blue-50 text-blue-700",
         violet: "border-violet-200 bg-violet-50 text-violet-700",
         sent: "border-[#6D28D9] bg-[#7C3AED] text-white shadow-[0_8px_18px_rgba(124,58,237,0.28)]",
+        orange: "border-orange-200 bg-orange-50 text-orange-600",
     };
     return (
         <button
@@ -1389,7 +1426,7 @@ function EmptyState({ filter, search }: { filter: StatusFilter; search: string }
 
 function RecoveryCard({
     lead, note, waSent, copied,
-    onTake, onReview, onWhatsApp, onMaps, onCopy,
+    onTake, onReview, onNotSuitable, onWhatsApp, onMaps, onCopy,
 }: {
     lead: MetaLeadDoc;
     note?: string;
@@ -1397,6 +1434,7 @@ function RecoveryCard({
     copied: boolean;
     onTake: () => void;
     onReview: () => void;
+    onNotSuitable: () => void;
     onWhatsApp: () => void;
     onMaps: () => void;
     onCopy: () => void;
@@ -1493,10 +1531,11 @@ function RecoveryCard({
                     <button
                         type="button"
                         onClick={onTake}
-                        className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-[12px] border border-emerald-200 bg-emerald-50 text-[12px] font-black text-emerald-700 transition active:bg-emerald-100"
+                        className="flex h-8 flex-1 items-center justify-center rounded-[11px] border border-emerald-200 bg-emerald-50 px-2.5 text-[11px] font-black text-emerald-700 transition active:bg-emerald-100"
                     >
-                        Pasar a Verificados
+                        Verificados
                     </button>
+                    <ActionBtn onClick={onNotSuitable} tone="orange" title="No Apto"><BanIcon /></ActionBtn>
                     <div className="relative">
                         <ActionBtn onClick={onCopy} title={copied ? "Copiado" : "Copiar"} tone={copied ? "sent" : "violet"}>
                             {copied ? <CheckIcon /> : <CopyIcon />}
@@ -1605,6 +1644,9 @@ function InboxIcon() {
 }
 function ChatIcon() {
     return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z" /><path d="M8 9h8M8 13h5" /></svg>;
+}
+function BanIcon() {
+    return <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" {...ic}><circle cx="12" cy="12" r="10" /><path d="m4.9 4.9 14.2 14.2" /></svg>;
 }
 
 // ── MESSAGE BUBBLE (for read-only chat in No verificados) ─────────────────────
