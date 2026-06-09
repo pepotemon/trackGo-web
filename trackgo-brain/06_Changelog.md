@@ -8,6 +8,11 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ## 2026-06-09
 
+### fix(push): notificación "nuevo cliente" falsa al rechazar/visitar desde No verificados
+- **Módulo:** `functions/index.js` → `onClientReassigned`
+- **What changed:** Añadida guarda: si `takenFromIncompleteAt` pasa de null → valor en el mismo write que cambia `assignedTo`, es una auto-asignación del vendor → no se envía notificación.
+- **Why:** `confirmVisit`/`confirmReject` llaman `takeIncompleteClient` para leads `incomplete` sin asignar. Eso cambia `assignedTo` null→userId, disparando `onClientReassigned` → notificación falsa de "nuevo cliente" al mismo vendor que acaba de rechazar/visitar el lead.
+
 ### fix(leads): rechazar/visitar desde Gestionar falla para leads incompletos no asignados
 - **Módulo:** `src/app/user/leads/page.tsx`
 - **What changed:** `confirmVisit`/`confirmReject` ahora detectan si el lead de campaña no tiene `assignedTo = userId` (caso `verificationStatus = "incomplete"` donde `autoAssignLead` no corre). En ese caso, llaman `takeIncompleteClient` primero (asigna y sella `takenFromIncompleteAt`), luego `markLeadVisited`/`markLeadRejected` sin stamp extra. Para leads ya asignados (`autoAssignLead` corrió, `pending_review`), siguen usando el stamp en un solo write.

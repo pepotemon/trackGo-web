@@ -648,6 +648,12 @@ exports.onClientReassigned = onDocumentUpdated("clients/{clientId}", async (even
 
     if (!afterUid || beforeUid === afterUid) return;
 
+    // If takenFromIncompleteAt was just stamped in the same write, the vendor
+    // self-assigned from "No verificados" — don't send a "nuevo cliente" notification.
+    const beforeTaken = before.takenFromIncompleteAt || null;
+    const afterTaken = after.takenFromIncompleteAt || null;
+    if (afterTaken && !beforeTaken) return;
+
     try {
         await notifyAssignedUser({ clientId, after });
         await notifyAssignedLeadAdmins({ clientId, after });
