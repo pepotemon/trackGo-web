@@ -1750,7 +1750,8 @@ function EditUserModal({
                                     {([
                                         { key: "canSeeMap" as keyof UserPermissions, label: "Ver Mapa de prospectos" },
                                         { key: "canSeeHistory" as keyof UserPermissions, label: "Ver Historial de visitas" },
-                                        { key: "canSeeChat" as keyof UserPermissions, label: "Ver Clientes por recuperar" },
+                                        { key: "canSeeChat" as keyof UserPermissions, label: "Ver No Aptos" },
+                                        { key: "canSeeUnverifiedClients" as keyof UserPermissions, label: "Ver No Verificados (clientes por recuperar)" },
                                         { key: "canChatWithProspects" as keyof UserPermissions, label: "Responder por chat a prospectos pendientes" },
                                         { key: "canSeeSubscriptions" as keyof UserPermissions, label: "Acceder a suscripciones" },
                                         { key: "canSeeCommercialDirectory" as keyof UserPermissions, label: "Acceder a Base Comercial" },
@@ -1775,7 +1776,7 @@ function EditUserModal({
                             </button>
                             <button
                                 type="button"
-                                onClick={() => setUserPermissions({ canSeeMap: false, canSeeHistory: false, canSeeChat: false, canChatWithProspects: false, canSeeSubscriptions: false, canSeeCommercialDirectory: false })}
+                                onClick={() => setUserPermissions({ canSeeMap: false, canSeeHistory: false, canSeeChat: false, canSeeUnverifiedClients: false, canChatWithProspects: false, canSeeSubscriptions: false, canSeeCommercialDirectory: false })}
                                 className="flex-1 rounded-lg border border-red-200 bg-red-50 py-2 text-[12px] font-semibold text-red-600 transition hover:bg-red-100"
                             >
                                 Revocar todo

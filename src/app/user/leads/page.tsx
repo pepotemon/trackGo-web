@@ -565,11 +565,12 @@ export default function UserLeadsPage() {
                 </div>
 
                 {/* MAIN TABS */}
-                <div className="mb-2 grid grid-cols-2 gap-1.5">
+                <div className={["mb-2 gap-1.5", userPermissions.canSeeUnverifiedClients ? "grid grid-cols-2" : "flex"].join(" ")}>
                     <button
                         type="button"
                         onClick={() => setMainTab("verificados")}
                         className={["flex items-center justify-center gap-1.5 rounded-[12px] border py-2 text-[12px] font-black transition",
+                            userPermissions.canSeeUnverifiedClients ? "" : "flex-1",
                             mainTab === "verificados" ? "border-[#7C3AED] bg-[#7C3AED] text-white" : "border-[#E8E7FB] bg-white text-[#66739A]",
                         ].join(" ")}
                     >
@@ -578,18 +579,20 @@ export default function UserLeadsPage() {
                             mainTab === "verificados" ? "bg-white/25 text-white" : "bg-[#f3f0ff] text-[#7C3AED]",
                         ].join(" ")}>{counts.all}</span>
                     </button>
-                    <button
-                        type="button"
-                        onClick={() => setMainTab("no_verificados")}
-                        className={["flex items-center justify-center gap-1.5 rounded-[12px] border py-2 text-[12px] font-black transition",
-                            mainTab === "no_verificados" ? "border-[#7C3AED] bg-[#7C3AED] text-white" : "border-[#E8E7FB] bg-white text-[#66739A]",
-                        ].join(" ")}
-                    >
-                        No verificados
-                        <span className={["flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[9px] font-black",
-                            mainTab === "no_verificados" ? "bg-white/25 text-white" : "bg-[#f3f0ff] text-[#7C3AED]",
-                        ].join(" ")}>{incomplete.length}</span>
-                    </button>
+                    {userPermissions.canSeeUnverifiedClients ? (
+                        <button
+                            type="button"
+                            onClick={() => setMainTab("no_verificados")}
+                            className={["flex items-center justify-center gap-1.5 rounded-[12px] border py-2 text-[12px] font-black transition",
+                                mainTab === "no_verificados" ? "border-[#7C3AED] bg-[#7C3AED] text-white" : "border-[#E8E7FB] bg-white text-[#66739A]",
+                            ].join(" ")}
+                        >
+                            No verificados
+                            <span className={["flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[9px] font-black",
+                                mainTab === "no_verificados" ? "bg-white/25 text-white" : "bg-[#f3f0ff] text-[#7C3AED]",
+                            ].join(" ")}>{incomplete.length}</span>
+                        </button>
+                    ) : null}
                 </div>
 
                 {/* DDD chips - only for No verificados when multiple DDDs */}

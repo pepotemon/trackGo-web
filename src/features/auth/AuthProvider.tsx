@@ -251,6 +251,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 canSeeMap: profile?.userPermissions?.canSeeMap ?? true,
                 canSeeHistory: profile?.userPermissions?.canSeeHistory ?? true,
                 canSeeChat: profile?.userPermissions?.canSeeChat ?? true,
+                canSeeUnverifiedClients: profile?.userPermissions?.canSeeUnverifiedClients ?? true,
                 canChatWithProspects: profile?.userPermissions?.canChatWithProspects ?? false,
                 canSeeSubscriptions: profile?.userPermissions?.canSeeSubscriptions ?? true,
                 canSeeCommercialDirectory: profile?.userPermissions?.canSeeCommercialDirectory ?? true,
