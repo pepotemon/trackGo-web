@@ -8,6 +8,11 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ## 2026-06-09
 
+### feat(leads): simplificar UX de "No verificados" — Gestionar modal + Revisar fusionado
+- **Módulo:** `src/app/user/leads/page.tsx`
+- **What changed:** `CampaignLeadCard`: botones Visitar/Rechazar reemplazados por un único botón "Gestionar" que abre el modal con opciones Visitado/Rechazado. `RecoveryCard`: eliminados botones WA standalone y Verificar standalone; el botón principal pasa a ser "Revisar" (full-width, abre el chat) con ícono de chat. Dentro del modal de review, el botón "Tomar" renombrado a "Verificar" y oculto para leads de campaña (estos usan el flujo Gestionar).
+- **Why:** Reducir botones visibles en la tarjeta, obligar al vendor a leer el chat antes de verificar un lead DDD, y unificar el flujo de campaña bajo un solo punto de entrada (Gestionar).
+
 ### fix(assignments): corregir colección incorrecta en auto-asignación y campaignIds
 - **Módulo:** `functions/src/assignments/autoAssignLead.js`, `src/features/subscriptions/useUserCampaignIds.ts`, `firestore.indexes.json`
 - **What changed:** `autoAssignLead` cambiado de `subscriptionCities` a `cities` (colección correcta donde el servidor escribe `ownerUserId`, `activeCampaignId`, `status`). `useUserCampaignIds` cambiado de `subscriptionCities` a `subscriptions` (colección accesible por el cliente con regla Firestore `userId == auth.uid`). Índice compuesto `(userId, status)` agregado en `subscriptions`. Ahora `cityNames` usa el campo `city` del doc de suscripción.

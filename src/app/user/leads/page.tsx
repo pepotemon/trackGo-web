@@ -838,8 +838,7 @@ export default function UserLeadsPage() {
                                     waSent={incWaSent.has(lead.id)}
                                     copied={incCopiedId === lead.id}
                                     managing={campaignManaging === lead.id}
-                                    onVisit={() => void openCampaignVisit(lead)}
-                                    onReject={() => void openCampaignReject(lead)}
+                                    onManage={() => void openCampaignManage(lead)}
                                     onReview={() => setReviewIncLead(lead)}
                                     onNotSuitable={() => setNotSuitableLead(lead)}
                                     onWhatsApp={() => void openCampaignWhatsApp(lead)}
@@ -852,12 +851,9 @@ export default function UserLeadsPage() {
                                     key={lead.id}
                                     lead={lead}
                                     note={incNotes[lead.id]}
-                                    waSent={incWaSent.has(lead.id)}
                                     copied={incCopiedId === lead.id}
-                                    onTake={() => setConfirmTakeLead(lead)}
                                     onReview={() => setReviewIncLead(lead)}
                                     onNotSuitable={() => setNotSuitableLead(lead)}
-                                    onWhatsApp={() => setWaTakeLead(lead)}
                                     onMaps={mapsUrl ? () => window.open(mapsUrl, "_blank") : () => {}}
                                     onCopy={() => void copyIncLead(lead)}
                                 />
@@ -929,8 +925,7 @@ export default function UserLeadsPage() {
                                             waSent={incWaSent.has(lead.id)}
                                             copied={incCopiedId === lead.id}
                                             managing={campaignManaging === lead.id}
-                                            onVisit={() => { void openCampaignVisit(lead); setSearchOpen(false); }}
-                                            onReject={() => { void openCampaignReject(lead); setSearchOpen(false); }}
+                                            onManage={() => { void openCampaignManage(lead); setSearchOpen(false); }}
                                             onReview={() => { setReviewIncLead(lead); setSearchOpen(false); }}
                                             onNotSuitable={() => { setNotSuitableLead(lead); setSearchOpen(false); }}
                                             onWhatsApp={() => { void openCampaignWhatsApp(lead); setSearchOpen(false); }}
@@ -943,12 +938,9 @@ export default function UserLeadsPage() {
                                             key={lead.id}
                                             lead={lead}
                                             note={incNotes[lead.id]}
-                                            waSent={incWaSent.has(lead.id)}
                                             copied={incCopiedId === lead.id}
-                                            onTake={() => { setConfirmTakeLead(lead); setSearchOpen(false); }}
                                             onReview={() => { setReviewIncLead(lead); setSearchOpen(false); }}
                                             onNotSuitable={() => { setNotSuitableLead(lead); setSearchOpen(false); }}
-                                            onWhatsApp={() => { setWaTakeLead(lead); setSearchOpen(false); }}
                                             onMaps={mapsUrl ? () => window.open(mapsUrl, "_blank") : () => {}}
                                             onCopy={() => void copyIncLead(lead)}
                                         />
@@ -1269,13 +1261,15 @@ export default function UserLeadsPage() {
                             </p>
                             <p className="text-[11px] font-semibold text-[#66739A]">{reviewIncLead.phone}</p>
                         </div>
-                        <button
-                            type="button"
-                            onClick={() => { const lead = reviewIncLead; setReviewIncLead(null); setConfirmTakeLead(lead); }}
-                            className="shrink-0 rounded-[11px] bg-emerald-600 px-3 py-2 text-[11px] font-black text-white"
-                        >
-                            Tomar
-                        </button>
+                        {!isCampaignClient(reviewIncLead, campaignIds) ? (
+                            <button
+                                type="button"
+                                onClick={() => { const lead = reviewIncLead; setReviewIncLead(null); setConfirmTakeLead(lead); }}
+                                className="shrink-0 rounded-[11px] bg-emerald-600 px-3 py-2 text-[11px] font-black text-white"
+                            >
+                                Verificar
+                            </button>
+                        ) : null}
                     </div>
                     <div className="min-h-[260px] overflow-y-auto rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 py-3">
                         {reviewIncLoading ? (
@@ -1591,17 +1585,14 @@ function EmptyState({ filter, search }: { filter: StatusFilter; search: string }
 // ── RECOVERY CARD ────────────────────────────────────────────────────────────
 
 function RecoveryCard({
-    lead, note, waSent, copied,
-    onTake, onReview, onNotSuitable, onWhatsApp, onMaps, onCopy,
+    lead, note, copied,
+    onReview, onNotSuitable, onMaps, onCopy,
 }: {
     lead: MetaLeadDoc;
     note?: string;
-    waSent: boolean;
     copied: boolean;
-    onTake: () => void;
     onReview: () => void;
     onNotSuitable: () => void;
-    onWhatsApp: () => void;
     onMaps: () => void;
     onCopy: () => void;
 }) {
@@ -1693,13 +1684,13 @@ function RecoveryCard({
                 ) : null}
 
                 <div className="mt-3 flex items-center gap-1.5 border-t border-[#F2F0FF] pt-2.5">
-                    <ActionBtn onClick={onReview} tone="violet" title="Ver chat"><ChatIcon /></ActionBtn>
                     <button
                         type="button"
-                        onClick={onTake}
-                        className="flex h-8 flex-1 items-center justify-center rounded-[11px] border border-emerald-200 bg-emerald-50 px-2.5 text-[11px] font-black text-emerald-700 transition active:bg-emerald-100"
+                        onClick={onReview}
+                        className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-[11px] border border-[#E8E7FB] bg-[#f3f0ff] px-2.5 text-[11px] font-black text-[#7C3AED] transition active:bg-[#ebe7ff]"
                     >
-                        Verificar
+                        <ChatIcon />
+                        Revisar
                     </button>
                     <ActionBtn onClick={onNotSuitable} tone="orange" title="No Apto"><BanIcon /></ActionBtn>
                     <div className="relative">
@@ -1712,9 +1703,6 @@ function RecoveryCard({
                             </span>
                         ) : null}
                     </div>
-                    <ActionBtn onClick={onWhatsApp} tone={waSent ? "sent" : "green"} title={waSent ? "Enviado" : "WhatsApp"}>
-                        {waSent ? <WACheckIcon /> : <WAIcon />}
-                    </ActionBtn>
                     {hasLocation ? (
                         <ActionBtn onClick={onMaps} title="Maps" tone="blue"><MapsIcon /></ActionBtn>
                     ) : null}
@@ -1728,15 +1716,14 @@ function RecoveryCard({
 
 function CampaignLeadCard({
     lead, note, waSent, copied, managing,
-    onVisit, onReject, onReview, onNotSuitable, onWhatsApp, onMaps, onCopy, onNote,
+    onManage, onReview, onNotSuitable, onWhatsApp, onMaps, onCopy, onNote,
 }: {
     lead: MetaLeadDoc;
     note?: string;
     waSent: boolean;
     copied: boolean;
     managing: boolean;
-    onVisit: () => void;
-    onReject: () => void;
+    onManage: () => void;
     onReview: () => void;
     onNotSuitable: () => void;
     onWhatsApp: () => void;
@@ -1833,23 +1820,14 @@ function CampaignLeadCard({
                     <div className="flex-1" />
                     <button
                         type="button"
-                        onClick={onVisit}
+                        onClick={onManage}
                         disabled={managing}
-                        className="flex h-7 items-center gap-1.5 rounded-[10px] border border-emerald-200 bg-emerald-50 px-2.5 text-[10px] font-black text-emerald-700 shadow-sm transition active:bg-emerald-100 disabled:opacity-50"
+                        className="flex h-7 items-center gap-1.5 rounded-[10px] border border-[#E8E7FB] bg-white px-2.5 text-[10px] font-black text-[#7C3AED] shadow-sm transition active:bg-[#f3f0ff] disabled:opacity-50"
                     >
                         {managing ? (
                             <svg className="tg-spin h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 12a9 9 0 1 1-3.1-6.8" /></svg>
-                        ) : <CheckIcon />}
-                        Visitar
-                    </button>
-                    <button
-                        type="button"
-                        onClick={onReject}
-                        disabled={managing}
-                        className="flex h-7 items-center gap-1.5 rounded-[10px] border border-red-200 bg-red-50 px-2.5 text-[10px] font-black text-red-600 shadow-sm transition active:bg-red-100 disabled:opacity-50"
-                    >
-                        <XIcon />
-                        Rechazar
+                        ) : null}
+                        Gestionar
                     </button>
                 </div>
             </div>
