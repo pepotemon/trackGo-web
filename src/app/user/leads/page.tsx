@@ -1630,7 +1630,7 @@ function RecoveryCard({
                         onClick={onTake}
                         className="flex h-8 flex-1 items-center justify-center rounded-[11px] border border-emerald-200 bg-emerald-50 px-2.5 text-[11px] font-black text-emerald-700 transition active:bg-emerald-100"
                     >
-                        Verificados
+                        Verificar
                     </button>
                     <ActionBtn onClick={onNotSuitable} tone="orange" title="No Apto"><BanIcon /></ActionBtn>
                     <div className="relative">
