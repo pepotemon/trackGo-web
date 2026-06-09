@@ -162,6 +162,7 @@ export default function UserLeadsPage() {
     const [takeSaving, setTakeSaving] = useState(false);
     const [incRecoveryClock, setIncRecoveryClock] = useState(0);
     const [toast, setToast] = useState("");
+    const [showNoVerifAnnouncement, setShowNoVerifAnnouncement] = useState(false);
     const [reviewIncLead, setReviewIncLead] = useState<MetaLeadDoc | null>(null);
     const [reviewIncMessages, setReviewIncMessages] = useState<LeadMessageDoc[]>([]);
     const [reviewIncLoading, setReviewIncLoading] = useState(false);
@@ -172,6 +173,12 @@ export default function UserLeadsPage() {
     const activeWeek = useMemo(() => weekRange(), []);
     const subscriptionStatus = useVendorSubscriptionStatus(userPermissions.canSeeSubscriptions ? userId : null);
     const { campaignIds } = useUserCampaignIds(userId);
+
+    useEffect(() => {
+        if (userPermissions.canSeeUnverifiedClients && !localStorage.getItem("tg_seen_noverif_v1")) {
+            setShowNoVerifAnnouncement(true);
+        }
+    }, [userPermissions.canSeeUnverifiedClients]);
 
     useEffect(() => {
         return () => {
@@ -1014,6 +1021,42 @@ export default function UserLeadsPage() {
                             {waTaking ? "Tomando..." : "Tomar y contactar"}
                         </button>
                     </div>
+                </BottomSheet>
+            ) : null}
+
+            {/* ONE-TIME ANNOUNCEMENT: No verificados tab */}
+            {showNoVerifAnnouncement ? (
+                <BottomSheet onClose={() => { localStorage.setItem("tg_seen_noverif_v1", "1"); setShowNoVerifAnnouncement(false); }}>
+                    <div className="mb-5">
+                        <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-black text-emerald-700">NOVEDAD</span>
+                        <p className="mt-3 text-[19px] font-black leading-snug tracking-[-0.02em] text-[#101936]">
+                            Tus clientes por recuperar ahora están aquí
+                        </p>
+                        <p className="mt-1.5 text-[13px] font-semibold text-[#66739A]">
+                            Los encontrás en la pestaña <span className="font-black text-[#7C3AED]">No verificados</span>, justo al lado de tus Prospectos.
+                        </p>
+                    </div>
+                    <div className="space-y-3 text-[13px] font-semibold text-[#66739A]">
+                        <div className="flex items-start gap-3 rounded-[14px] border border-[#E8E7FB] bg-[#f8f7ff] px-3.5 py-3">
+                            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-violet-100 text-[11px] font-black text-[#7C3AED]">1</span>
+                            <p>Tocá <span className="font-black text-[#101936]">No verificados</span> para ver los clientes que aún no completaron su registro.</p>
+                        </div>
+                        <div className="flex items-start gap-3 rounded-[14px] border border-[#E8E7FB] bg-[#f8f7ff] px-3.5 py-3">
+                            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-violet-100 text-[11px] font-black text-[#7C3AED]">2</span>
+                            <p>Podés ver el <span className="font-black text-[#101936]">chat del bot</span> con cada cliente antes de decidir si te interesa.</p>
+                        </div>
+                        <div className="flex items-start gap-3 rounded-[14px] border border-[#E8E7FB] bg-[#f8f7ff] px-3.5 py-3">
+                            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-violet-100 text-[11px] font-black text-[#7C3AED]">3</span>
+                            <p>Si te interesa, tocá <span className="font-black text-[#101936]">Pasar a Verificados</span> y el cliente pasa directamente a tus Prospectos.</p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => { localStorage.setItem("tg_seen_noverif_v1", "1"); setShowNoVerifAnnouncement(false); }}
+                        className="mt-5 w-full rounded-[14px] bg-[#7C3AED] py-3.5 text-[14px] font-black text-white"
+                    >
+                        Entendido
+                    </button>
                 </BottomSheet>
             ) : null}
 
