@@ -215,4 +215,24 @@ Registro de decisiones de arquitectura y diseño. Cada ADR explica el contexto, 
 
 ---
 
+## ADR-013: Clientes de campaña tratados como ya asignados en No verificados
+
+**Estado:** Activo
+**Fecha:** 2026-06-09
+
+**Contexto:** Los clientes en "No verificados" de campaña (`leadAcquisitionCampaignId` en las campañas activas del vendor) son exclusivamente visibles para ese vendor — nadie más los puede ver. Sin embargo, se mostraban con el mismo flujo "Tomar" de los clientes por DDD (compartidos), añadiendo fricción innecesaria.
+
+**Decisión:**
+- Si `lead.leadAcquisitionCampaignId ∈ campaignIds` del vendor → `CampaignLeadCard`: mismas acciones que Verificados, sin botón "Tomar"
+- Las acciones "Gestionar" y "WhatsApp" auto-asignan el cliente (`takeIncompleteClient`) silenciosamente antes de ejecutar
+- Si el cliente no tiene `leadAcquisitionCampaignId` en las campañas activas → `RecoveryCard` con "Tomar" explícito (puede haber competencia entre vendors del mismo indicativo)
+
+**Consecuencias:**
+- `isCampaignClient(lead, campaignIds)` es la función de discriminación en `leads/page.tsx`
+- `openCampaignManage` y `openCampaignWhatsApp` realizan el auto-take antes de la acción
+- Error `"client_already_taken"` puede ocurrir si la campaña tiene múltiples vendors asignados (edge case)
+- `CampaignLeadCard` es un componente separado de `LeadCard` para evitar prop-drilling excesivo
+
+---
+
 *Ver [[06_Changelog]] para cuándo se tomaron estas decisiones.*

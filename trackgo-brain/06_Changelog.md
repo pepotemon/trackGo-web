@@ -8,6 +8,17 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ## 2026-06-09
 
+### feat(leads): clientes de campaña como ya asignados en No verificados
+- **Módulo:** `src/app/user/leads/page.tsx`
+- **What changed:** Clientes con `leadAcquisitionCampaignId` que pertenece a una campaña activa del vendor se muestran con `CampaignLeadCard` (badge "Sin verificar", acciones iguales a Verificados: chat, WA, maps, copiar, nota, gestionar, No Apto). Las acciones "Gestionar" y "WhatsApp" auto-asignan el cliente al vendor (`takeIncompleteClient`) en silencio antes de ejecutar la acción — sin modal de confirmación de "Tomar". Los clientes filtrados por DDD (sin campaña) siguen usando `RecoveryCard` con flujo de "Tomar" explícito.
+- **Why:** Los clientes de campaña son exclusivos de un vendor (nadie más los ve), por lo que el "Tomar" era fricción innecesaria. Los DDD clients sí son compartidos y mantienen el anti-colisión.
+- **See:** [[03_Decisions#ADR-013]]
+
+### feat(leads): botón No Apto en RecoveryCard + Verificados más pequeño
+- **Módulo:** `src/app/user/leads/page.tsx`
+- **What changed:** Botón de "Pasar a Verificados" reducido en tamaño. Se añadió botón "No Apto" (BanIcon, naranja) en RecoveryCard que abre modal de confirmación y llama `markClientNotSuitable`, moviendo el cliente a No Aptos.
+- **Why:** Permitir limpiar los No verificados de clientes no aptos sin tenerlos que tomar primero.
+
 ### feat(prospectos): UI redesign — tabs Verificados / No verificados + pantalla No Aptos
 - **Módulo:** `src/app/user/leads/page.tsx`, `src/app/user/chat/page.tsx`, `src/app/user/layout.tsx`
 - **What changed:** La pantalla de Prospectos ahora tiene dos pestañas principales: "Verificados" (los prospectos asignados de siempre) y "No verificados" (clientes por recuperar de campañas/indicativos, con acción "Pasar a Verificados"). Se eliminó la fila de stats (visitado hoy/semana, rechazado), reemplazada por un contador semanal simple `X/total sem.`. La pantalla `/user/chat` queda exclusivamente para clientes "No Aptos" y el nav label cambió de "Recup." a "No Aptos".

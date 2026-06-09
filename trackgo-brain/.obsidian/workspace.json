@@ -4,21 +4,17 @@
     "type": "split",
     "children": [
       {
-        "id": "ef82714cf1caea44",
+        "id": "4b6f5128794eed0a",
         "type": "tabs",
         "children": [
           {
-            "id": "3c77fa9f91e97c73",
+            "id": "c0f4e27e6f871643",
             "type": "leaf",
             "state": {
-              "type": "markdown",
-              "state": {
-                "file": "00_Index.md",
-                "mode": "source",
-                "source": false
-              },
+              "type": "empty",
+              "state": {},
               "icon": "lucide-file",
-              "title": "00_Index"
+              "title": "Nova aba"
             }
           }
         ]
@@ -180,13 +176,13 @@
       "bases:Criar nova base": false
     }
   },
-  "active": "3c77fa9f91e97c73",
+  "active": "c0f4e27e6f871643",
   "lastOpenFiles": [
+    "00_Index.md",
     "08_Workflows.md",
     "09_Glossary.md",
     "07_Prompts.md",
     "06_Changelog.md",
-    "02_Architecture.md",
-    "00_Index.md"
+    "02_Architecture.md"
   ]
 }
