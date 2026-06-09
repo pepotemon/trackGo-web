@@ -163,6 +163,23 @@ Registro de bugs, errores resueltos, y patrones problemáticos. Sirve para no re
 
 ---
 
+## ERR-012: Leads de campaña auto-asignados desaparecen de "No verificados"
+
+**Estado:** Resuelto  
+**Fecha:** 2026-06-09
+
+**Problema:** `autoAssignLead` seteaba `assignedTo = vendorId` en los leads de campaña antes de que el vendor los viera. `isRecoverableIncompleteLead` tenía `if (lead.assignedTo) return false` → los filtraba de "No verificados". Los leads terminaban visibles en "Verificados" (vía `subscribeUserLeads`) pero sin que el vendor los esperara ahí. Adicionalmente, `useUserCampaignIds` no tenía estado `loading`, causando una race condition donde se mostraban clientes DDD no-campaña mientras se cargaban los campaignIds.
+
+**Solución:**
+- `subscribeIncompleteClients` con `campaignIds`: filtro cambiado a `!takenFromIncompleteAt && status !== "visited/rejected"`. `takenFromIncompleteAt` lo setea solo `takeIncompleteClient` (acción explícita del vendor), no `autoAssignLead`.
+- `useUserCampaignIds`: expone `loading: boolean`, inicialmente `true`.
+- La suscripción de "No verificados" espera a que `campaignIdsLoading === false` antes de activarse.
+- `visibleLeads` y `counts` en `page.tsx` excluyen leads de campaña con `takenFromIncompleteAt == null` para evitar duplicarlos en "Verificados".
+
+**Lección:** `autoAssignLead` asigna sin que el vendor sepa. Nunca usar `assignedTo` como señal de "el vendor ya actuó" en el contexto de campaña. Usar `takenFromIncompleteAt` como discriminador.
+
+---
+
 ## Patrones problemáticos a evitar
 
 ### No usar `leads` en UI

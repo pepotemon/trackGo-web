@@ -8,6 +8,17 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ## 2026-06-09
 
+### feat(leads): fusionar campañas + DDD en "No verificados" cuando ambos están activos
+- **Módulo:** `src/data/incompleteClientsRepo.ts`
+- **What changed:** `subscribeIncompleteClients` ahora corre ambas subscriptions (campaña + DDD) en paralelo cuando el vendor tiene `campaignIds` Y `phoneCodes`. Mergea resultados deduplicando por ID (leads de campaña tienen prioridad). Leads de campaña → `CampaignLeadCard`. Leads DDD → `RecoveryCard`.
+- **Why:** Un vendor puede tener campañas activas y también tener clientes por DDD en su área. Antes el modo campaña excluía completamente los leads DDD.
+
+### fix(leads): leads de campaña auto-asignados visibles en "No verificados"
+- **Módulo:** `src/data/incompleteClientsRepo.ts`, `src/features/subscriptions/useUserCampaignIds.ts`, `src/app/user/leads/page.tsx`
+- **What changed:** `subscribeIncompleteClients` con `campaignIds` ahora usa `!takenFromIncompleteAt && status !== "visited/rejected"` como filtro en lugar de `isRecoverableIncompleteLead`. `useUserCampaignIds` expone `loading: boolean` para evitar race condition. La suscripción de "No verificados" espera a que `campaignIdsLoading` sea false antes de activarse. `visibleLeads` y `counts` en `page.tsx` excluyen leads de campaña sin `takenFromIncompleteAt` para que no aparezcan duplicados en "Verificados".
+- **Why:** `autoAssignLead` setea `assignedTo` antes de que el vendor vea el lead, por lo que `isRecoverableIncompleteLead` los filtraba y desaparecían. `takenFromIncompleteAt` (solo seteado por `takeIncompleteClient`) es el discriminador correcto del estado "vendor ya actuó".
+- **See:** [[04_Errors#ERR-012]]
+
 ### feat(assignments): auto-asignación por campaña en autoAssignLead
 - **Módulo:** `functions/src/assignments/autoAssignLead.js`, `src/types/leads.ts`, `src/app/admin/leads/assignments/page.tsx`, `src/app/admin/page.tsx`
 - **What changed:** Antes del matcher geográfico, `autoAssignLead` ahora comprueba si el lead tiene `leadAcquisitionCampaignId`. Si existe, busca en `subscriptionCities` el doc con `activeCampaignId == valor` (fallback a `campaignId`) y `status == "occupied"`, y asigna directamente al `ownerUserId`. Se registra con `autoAssignMatchType: "campaign"` y `assignmentMode: "campaign_auto"`. Si no hay match en campaña, cae al matcher geográfico normal. Se agregó `"campaign"` a `LeadAutoAssignMatchType` y a los labels/tones del admin.

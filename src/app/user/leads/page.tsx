@@ -182,7 +182,7 @@ export default function UserLeadsPage() {
     const userName = profile?.name?.split(" ")[0] ?? "Vendedor";
     const activeWeek = useMemo(() => weekRange(), []);
     const subscriptionStatus = useVendorSubscriptionStatus(userPermissions.canSeeSubscriptions ? userId : null);
-    const { campaignIds } = useUserCampaignIds(userId);
+    const { campaignIds, loading: campaignIdsLoading } = useUserCampaignIds(userId);
 
     useEffect(() => {
         if (userPermissions.canSeeUnverifiedClients && !localStorage.getItem("tg_seen_noverif_v1")) {
@@ -219,6 +219,9 @@ export default function UserLeadsPage() {
 
     // Recovery subscription (No verificados tab)
     useEffect(() => {
+        // Wait for campaignIds to resolve before subscribing — avoids briefly showing
+        // DDD-based clients when the vendor actually has active campaigns.
+        if (campaignIdsLoading) return;
         if (!phoneCodes.length && !campaignIds.length) {
             setLoadingIncomplete(false);
             return;
@@ -234,7 +237,7 @@ export default function UserLeadsPage() {
             setLoadingIncomplete(false);
         }, campaignIds);
         return unsub;
-    }, [phoneCodes, campaignIds, incRecoveryClock]);
+    }, [phoneCodes, campaignIds, campaignIdsLoading, incRecoveryClock]);
 
     // Recovery clock (refresh every 5 min)
     useEffect(() => {
@@ -269,15 +272,30 @@ export default function UserLeadsPage() {
         };
     }, [events]);
 
-    const counts = useMemo(() => ({
-        pending: leads.filter(isPendingLead).length,
-        visited: leads.filter((l) => l.status === "visited" && leadInRange(l, activeWeek.startKey, activeWeek.endKey)).length,
-        rejected: leads.filter((l) => l.status === "rejected" && leadInRange(l, activeWeek.startKey, activeWeek.endKey)).length,
-        all: leads.filter((l) => leadVisibleInWorkRange(l, activeWeek.startKey, activeWeek.endKey)).length,
-    }), [activeWeek, leads]);
+    const counts = useMemo(() => {
+        const inVerificados = (lead: MetaLeadDoc) =>
+            !(lead.leadAcquisitionCampaignId && campaignIds.includes(lead.leadAcquisitionCampaignId) && !lead.takenFromIncompleteAt);
+        return {
+            pending: leads.filter((l) => isPendingLead(l) && inVerificados(l)).length,
+            visited: leads.filter((l) => l.status === "visited" && leadInRange(l, activeWeek.startKey, activeWeek.endKey) && inVerificados(l)).length,
+            rejected: leads.filter((l) => l.status === "rejected" && leadInRange(l, activeWeek.startKey, activeWeek.endKey) && inVerificados(l)).length,
+            all: leads.filter((l) => leadVisibleInWorkRange(l, activeWeek.startKey, activeWeek.endKey) && inVerificados(l)).length,
+        };
+    }, [activeWeek, leads, campaignIds]);
 
     const visibleLeads = useMemo(() => {
-        let list = leads.filter((lead) => leadVisibleInWorkRange(lead, activeWeek.startKey, activeWeek.endKey));
+        let list = leads.filter((lead) => {
+            if (!leadVisibleInWorkRange(lead, activeWeek.startKey, activeWeek.endKey)) return false;
+            // Auto-assigned campaign leads that the vendor hasn't acted on yet belong in
+            // "No verificados" (CampaignLeadCard). Exclude them from "Verificados" until
+            // takeIncompleteClient sets takenFromIncompleteAt.
+            if (
+                lead.leadAcquisitionCampaignId &&
+                campaignIds.includes(lead.leadAcquisitionCampaignId) &&
+                !lead.takenFromIncompleteAt
+            ) return false;
+            return true;
+        });
         if (filter === "pending") list = list.filter(isPendingLead);
         else if (filter === "visited") list = list.filter((l) => l.status === "visited");
         else if (filter === "rejected") list = list.filter((l) => l.status === "rejected");
@@ -298,7 +316,7 @@ export default function UserLeadsPage() {
         }
 
         return list;
-    }, [activeWeek, leads, filter, search]);
+    }, [activeWeek, leads, filter, search, campaignIds]);
 
     const incActiveDdds = useMemo(() => {
         const seen = new Set<string>();

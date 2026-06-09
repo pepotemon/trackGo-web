@@ -7,16 +7,19 @@ import { db } from "@/lib/firebase";
 type UserCampaignData = {
     campaignIds: string[];
     cityNames: string[];
+    loading: boolean;
 };
 
 export function useUserCampaignIds(userId: string | null | undefined): UserCampaignData {
-    const [data, setData] = useState<UserCampaignData>({ campaignIds: [], cityNames: [] });
+    const [data, setData] = useState<UserCampaignData>({ campaignIds: [], cityNames: [], loading: true });
 
     useEffect(() => {
         if (!userId) {
-            setData({ campaignIds: [], cityNames: [] });
+            setData({ campaignIds: [], cityNames: [], loading: false });
             return;
         }
+
+        setData((prev) => ({ ...prev, loading: true }));
 
         const q = query(
             collection(db, "subscriptionCities"),
@@ -37,9 +40,9 @@ export function useUserCampaignIds(userId: string | null | undefined): UserCampa
                         if (d.name) cityNames.push(String(d.name));
                     }
                 }
-                setData({ campaignIds: [...new Set(campaignIds)], cityNames });
+                setData({ campaignIds: [...new Set(campaignIds)], cityNames, loading: false });
             },
-            () => setData({ campaignIds: [], cityNames: [] })
+            () => setData({ campaignIds: [], cityNames: [], loading: false })
         );
     }, [userId]);
 
