@@ -24,7 +24,6 @@ import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
 import { useWhatsAppDailyLimit } from "@/hooks/useWhatsAppDailyLimit";
 import { WhatsAppLimitModal } from "@/components/WhatsAppLimitModal";
 import { useVendorSubscriptionStatus, type VendorSubscriptionStatus } from "@/features/subscriptions/useVendorSubscriptionStatus";
-import { useUserCampaignIds } from "@/features/subscriptions/useUserCampaignIds";
 
 type StatusFilter = "pending" | "visited" | "rejected" | "all";
 type MainTab = "verificados" | "no_verificados";
@@ -121,9 +120,6 @@ function saveNote(leadId: string, note: string) {
         : localStorage.removeItem(`lead_note_${leadId}`);
 }
 
-function isCampaignClient(lead: MetaLeadDoc, campaignIds: string[]): boolean {
-    return campaignIds.length > 0 && !!lead.leadAcquisitionCampaignId && campaignIds.includes(lead.leadAcquisitionCampaignId);
-}
 
 export default function UserLeadsPage() {
     const { firebaseUser, profile, userPermissions, phoneCodes } = useAuth();
@@ -143,7 +139,6 @@ export default function UserLeadsPage() {
 
     const [actionLead, setActionLead] = useState<MetaLeadDoc | null>(null);
     const [actionType, setActionType] = useState<"visit" | "reject" | "note" | "manage" | null>(null);
-    const [actionFromNoVerificados, setActionFromNoVerificados] = useState(false);
     const [noteText, setNoteText] = useState("");
     const [rejectStep, setRejectStep] = useState<1 | 2>(1);
     const [rejectReason, setRejectReason] = useState<RejectedReason | null>(null);
@@ -160,7 +155,6 @@ export default function UserLeadsPage() {
     const [loadingIncomplete, setLoadingIncomplete] = useState(false);
     const [incDddFilter, setIncDddFilter] = useState("all");
     const [incNotes, setIncNotes] = useState<Record<string, string>>({});
-    const [incWaSent, setIncWaSent] = useState<Set<string>>(new Set());
     const [incCopiedId, setIncCopiedId] = useState<string | null>(null);
     const incCopyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [waTakeLead, setWaTakeLead] = useState<MetaLeadDoc | null>(null);
@@ -171,7 +165,6 @@ export default function UserLeadsPage() {
     const [incVisibleCount, setIncVisibleCount] = useState(INC_PAGE_SIZE);
     const [notSuitableLead, setNotSuitableLead] = useState<MetaLeadDoc | null>(null);
     const [notSuitableSaving, setNotSuitableSaving] = useState(false);
-    const [campaignManaging, setCampaignManaging] = useState<string | null>(null);
     const [toast, setToast] = useState("");
     const [showNoVerifAnnouncement, setShowNoVerifAnnouncement] = useState(false);
     const [reviewIncLead, setReviewIncLead] = useState<MetaLeadDoc | null>(null);
@@ -183,7 +176,6 @@ export default function UserLeadsPage() {
     const userName = profile?.name?.split(" ")[0] ?? "Vendedor";
     const activeWeek = useMemo(() => weekRange(), []);
     const subscriptionStatus = useVendorSubscriptionStatus(userPermissions.canSeeSubscriptions ? userId : null);
-    const { campaignIds, loading: campaignIdsLoading } = useUserCampaignIds(userId);
 
     useEffect(() => {
         if (userPermissions.canSeeUnverifiedClients && !localStorage.getItem("tg_seen_noverif_v1")) {
@@ -220,10 +212,7 @@ export default function UserLeadsPage() {
 
     // Recovery subscription (No verificados tab)
     useEffect(() => {
-        // Wait for campaignIds to resolve before subscribing — avoids briefly showing
-        // DDD-based clients when the vendor actually has active campaigns.
-        if (campaignIdsLoading) return;
-        if (!phoneCodes.length && !campaignIds.length) {
+        if (!phoneCodes.length) {
             setLoadingIncomplete(false);
             return;
         }
@@ -233,12 +222,10 @@ export default function UserLeadsPage() {
             const noteMap: Record<string, string> = {};
             data.forEach((l) => { const n = getNote(l.id); if (n) noteMap[l.id] = n; });
             setIncNotes((prev) => ({ ...prev, ...noteMap }));
-            const ids = data.map((l) => l.id);
-            setIncWaSent((prev) => new Set([...prev, ...getWhatsAppSentIds(ids)]));
             setLoadingIncomplete(false);
-        }, campaignIds);
+        });
         return unsub;
-    }, [phoneCodes, campaignIds, campaignIdsLoading, incRecoveryClock]);
+    }, [phoneCodes, incRecoveryClock]);
 
     // Recovery clock (refresh every 5 min)
     useEffect(() => {
@@ -273,30 +260,15 @@ export default function UserLeadsPage() {
         };
     }, [events]);
 
-    const counts = useMemo(() => {
-        const inVerificados = (lead: MetaLeadDoc) =>
-            !(lead.leadAcquisitionCampaignId && campaignIds.includes(lead.leadAcquisitionCampaignId) && !lead.takenFromIncompleteAt);
-        return {
-            pending: leads.filter((l) => isPendingLead(l) && inVerificados(l)).length,
-            visited: leads.filter((l) => l.status === "visited" && leadInRange(l, activeWeek.startKey, activeWeek.endKey) && inVerificados(l)).length,
-            rejected: leads.filter((l) => l.status === "rejected" && leadInRange(l, activeWeek.startKey, activeWeek.endKey) && inVerificados(l)).length,
-            all: leads.filter((l) => leadVisibleInWorkRange(l, activeWeek.startKey, activeWeek.endKey) && inVerificados(l)).length,
-        };
-    }, [activeWeek, leads, campaignIds]);
+    const counts = useMemo(() => ({
+        pending: leads.filter(isPendingLead).length,
+        visited: leads.filter((l) => l.status === "visited" && leadInRange(l, activeWeek.startKey, activeWeek.endKey)).length,
+        rejected: leads.filter((l) => l.status === "rejected" && leadInRange(l, activeWeek.startKey, activeWeek.endKey)).length,
+        all: leads.filter((l) => leadVisibleInWorkRange(l, activeWeek.startKey, activeWeek.endKey)).length,
+    }), [activeWeek, leads]);
 
     const visibleLeads = useMemo(() => {
-        let list = leads.filter((lead) => {
-            if (!leadVisibleInWorkRange(lead, activeWeek.startKey, activeWeek.endKey)) return false;
-            // Auto-assigned campaign leads that the vendor hasn't acted on yet belong in
-            // "No verificados" (CampaignLeadCard). Exclude them from "Verificados" until
-            // takeIncompleteClient sets takenFromIncompleteAt.
-            if (
-                lead.leadAcquisitionCampaignId &&
-                campaignIds.includes(lead.leadAcquisitionCampaignId) &&
-                !lead.takenFromIncompleteAt
-            ) return false;
-            return true;
-        });
+        let list = leads.filter((lead) => leadVisibleInWorkRange(lead, activeWeek.startKey, activeWeek.endKey));
         if (filter === "pending") list = list.filter(isPendingLead);
         else if (filter === "visited") list = list.filter((l) => l.status === "visited");
         else if (filter === "rejected") list = list.filter((l) => l.status === "rejected");
@@ -317,7 +289,7 @@ export default function UserLeadsPage() {
         }
 
         return list;
-    }, [activeWeek, leads, filter, search, campaignIds]);
+    }, [activeWeek, leads, filter, search]);
 
     const incActiveDdds = useMemo(() => {
         const seen = new Set<string>();
@@ -360,7 +332,7 @@ export default function UserLeadsPage() {
         setNoteText(notes[lead.id] ?? "");
         setActionType("note");
     }
-    function closeAction() { setActionLead(null); setActionType(null); setSaving(false); setActionFromNoVerificados(false); }
+    function closeAction() { setActionLead(null); setActionType(null); setSaving(false); }
     useBackButtonDismiss(searchOpen, () => setSearchOpen(false));
     useBackButtonDismiss(filtersOpen, () => setFiltersOpen(false));
     useBackButtonDismiss(Boolean(waConfirmLead), () => setWaConfirmLead(null));
@@ -428,7 +400,6 @@ export default function UserLeadsPage() {
             triggerWa(() => {
                 window.open(buildWALink(lead.phone, msg), "_blank");
                 markWhatsAppSent(lead.id);
-                setIncWaSent((prev) => new Set(prev).add(lead.id));
             });
             showToast("Cliente tomado. Lo verás en Verificados.");
         } catch (error) {
@@ -450,96 +421,6 @@ export default function UserLeadsPage() {
             setNotSuitableLead(null);
         } catch { /* noop */ }
         setNotSuitableSaving(false);
-    }
-
-    function openCampaignManage(lead: MetaLeadDoc) {
-        setActionLead(lead);
-        setActionType("manage");
-        setActionFromNoVerificados(true);
-    }
-
-    async function openCampaignWhatsApp(lead: MetaLeadDoc) {
-        if (!userId) return;
-        setCampaignManaging(lead.id);
-        try {
-            await takeIncompleteClient(lead.id, userId, {
-                leadName: lead.name,
-                leadPhone: lead.phone,
-                leadBusiness: lead.business,
-            });
-        } catch (error) {
-            setCampaignManaging(null);
-            showToast(
-                error instanceof Error && error.message === "client_already_taken"
-                    ? "Este cliente ya fue tomado por otro usuario."
-                    : "No se pudo procesar este cliente."
-            );
-            return;
-        }
-        setCampaignManaging(null);
-        const msg = isSpanishPhone(lead.phone)
-            ? `¡Hola! Somos de Crédito Comercial. Usted nos contactó anteriormente sobre la liberación de crédito para su negocio. Nos gustaría saber si aún tiene interés. ¡Gracias y disculpe la molestia! 🙏`
-            : `Olá! Somos da Crédito Comercial. Você nos contatou anteriormente sobre a liberação de crédito para o seu comércio. Gostaríamos de saber se ainda tem interesse. Obrigado e desculpe o incômodo! 🙏`;
-        triggerWa(() => {
-            window.open(buildWALink(lead.phone, msg), "_blank");
-            markWhatsAppSent(lead.id);
-            setIncWaSent((prev) => new Set(prev).add(lead.id));
-        });
-        showToast("Cliente añadido a Verificados.");
-    }
-
-    function openCampaignNoteAction(lead: MetaLeadDoc) {
-        setActionLead(lead);
-        setNoteText(incNotes[lead.id] ?? getNote(lead.id));
-        setActionType("note");
-    }
-
-    async function openCampaignVisit(lead: MetaLeadDoc) {
-        if (!userId) return;
-        setCampaignManaging(lead.id);
-        try {
-            await takeIncompleteClient(lead.id, userId, {
-                leadName: lead.name,
-                leadPhone: lead.phone,
-                leadBusiness: lead.business,
-            });
-        } catch (error) {
-            setCampaignManaging(null);
-            showToast(
-                error instanceof Error && error.message === "client_already_taken"
-                    ? "Este cliente ya fue tomado por otro usuario."
-                    : "No se pudo procesar este cliente."
-            );
-            return;
-        }
-        setCampaignManaging(null);
-        setActionLead(lead);
-        setActionType("visit");
-    }
-
-    async function openCampaignReject(lead: MetaLeadDoc) {
-        if (!userId) return;
-        setCampaignManaging(lead.id);
-        try {
-            await takeIncompleteClient(lead.id, userId, {
-                leadName: lead.name,
-                leadPhone: lead.phone,
-                leadBusiness: lead.business,
-            });
-        } catch (error) {
-            setCampaignManaging(null);
-            showToast(
-                error instanceof Error && error.message === "client_already_taken"
-                    ? "Este cliente ya fue tomado por otro usuario."
-                    : "No se pudo procesar este cliente."
-            );
-            return;
-        }
-        setCampaignManaging(null);
-        setRejectStep(1);
-        setRejectReason(null);
-        setActionLead(lead);
-        setActionType("reject");
     }
 
     async function copyIncLead(lead: MetaLeadDoc) {
@@ -576,19 +457,7 @@ export default function UserLeadsPage() {
         if (!actionLead || !userId) return;
         setSaving(true);
         try {
-            let stamp: number | undefined;
-            if (actionFromNoVerificados && !actionLead.takenFromIncompleteAt) {
-                if (actionLead.assignedTo !== userId) {
-                    await takeIncompleteClient(actionLead.id, userId, {
-                        leadName: actionLead.name,
-                        leadPhone: actionLead.phone,
-                        leadBusiness: actionLead.business,
-                    });
-                } else {
-                    stamp = Date.now();
-                }
-            }
-            await markLeadVisited(actionLead, userId, stamp);
+            await markLeadVisited(actionLead, userId);
             closeAction();
         } catch (error) {
             if (error instanceof Error && error.message === "client_already_taken") showToast("Este cliente ya fue tomado por otro usuario.");
@@ -605,19 +474,7 @@ export default function UserLeadsPage() {
         if (!actionLead || !rejectReason || !userId) return;
         setSaving(true);
         try {
-            let stamp: number | undefined;
-            if (actionFromNoVerificados && !actionLead.takenFromIncompleteAt) {
-                if (actionLead.assignedTo !== userId) {
-                    await takeIncompleteClient(actionLead.id, userId, {
-                        leadName: actionLead.name,
-                        leadPhone: actionLead.phone,
-                        leadBusiness: actionLead.business,
-                    });
-                } else {
-                    stamp = Date.now();
-                }
-            }
-            await markLeadRejected(actionLead, userId, rejectReason, rejectText, stamp);
+            await markLeadRejected(actionLead, userId, rejectReason, rejectText);
             closeAction();
         } catch (error) {
             if (error instanceof Error && error.message === "client_already_taken") showToast("Este cliente ya fue tomado por otro usuario.");
@@ -823,7 +680,7 @@ export default function UserLeadsPage() {
                     </div>
                 ) : (
                     loadingIncomplete ? <LoadingState /> :
-                    !phoneCodes.length && !campaignIds.length ? (
+                    !phoneCodes.length ? (
                         <div className="flex flex-col items-center justify-center py-20 text-center">
                             <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f3f0ff]">
                                 <InboxIcon />
@@ -848,23 +705,7 @@ export default function UserLeadsPage() {
                     <div className="grid gap-2.5">
                         {incVisible.slice(0, incVisibleCount).map((lead) => {
                             const mapsUrl = lead.location?.mapsUrl || (lead.location?.lat != null ? `https://maps.google.com/?q=${lead.location.lat},${lead.location.lng}` : "");
-                            return isCampaignClient(lead, campaignIds) ? (
-                                <CampaignLeadCard
-                                    key={lead.id}
-                                    lead={lead}
-                                    note={incNotes[lead.id]}
-                                    waSent={incWaSent.has(lead.id)}
-                                    copied={incCopiedId === lead.id}
-                                    managing={campaignManaging === lead.id}
-                                    onManage={() => openCampaignManage(lead)}
-                                    onReview={() => setReviewIncLead(lead)}
-                                    onNotSuitable={() => setNotSuitableLead(lead)}
-                                    onWhatsApp={() => void openCampaignWhatsApp(lead)}
-                                    onMaps={mapsUrl ? () => window.open(mapsUrl, "_blank") : undefined}
-                                    onCopy={() => void copyIncLead(lead)}
-                                    onNote={() => openCampaignNoteAction(lead)}
-                                />
-                            ) : (
+                            return (
                                 <RecoveryCard
                                     key={lead.id}
                                     lead={lead}
@@ -935,23 +776,7 @@ export default function UserLeadsPage() {
                                     />
                                 )) : searchList.map((lead) => {
                                     const mapsUrl = lead.location?.mapsUrl || (lead.location?.lat != null ? `https://maps.google.com/?q=${lead.location.lat},${lead.location.lng}` : "");
-                                    return isCampaignClient(lead, campaignIds) ? (
-                                        <CampaignLeadCard
-                                            key={lead.id}
-                                            lead={lead}
-                                            note={incNotes[lead.id]}
-                                            waSent={incWaSent.has(lead.id)}
-                                            copied={incCopiedId === lead.id}
-                                            managing={campaignManaging === lead.id}
-                                            onManage={() => { openCampaignManage(lead); setSearchOpen(false); }}
-                                            onReview={() => { setReviewIncLead(lead); setSearchOpen(false); }}
-                                            onNotSuitable={() => { setNotSuitableLead(lead); setSearchOpen(false); }}
-                                            onWhatsApp={() => { void openCampaignWhatsApp(lead); setSearchOpen(false); }}
-                                            onMaps={mapsUrl ? () => window.open(mapsUrl, "_blank") : undefined}
-                                            onCopy={() => void copyIncLead(lead)}
-                                            onNote={() => { openCampaignNoteAction(lead); setSearchOpen(false); }}
-                                        />
-                                    ) : (
+                                    return (
                                         <RecoveryCard
                                             key={lead.id}
                                             lead={lead}
@@ -1279,15 +1104,13 @@ export default function UserLeadsPage() {
                             </p>
                             <p className="text-[11px] font-semibold text-[#66739A]">{reviewIncLead.phone}</p>
                         </div>
-                        {!isCampaignClient(reviewIncLead, campaignIds) ? (
-                            <button
-                                type="button"
-                                onClick={() => { const lead = reviewIncLead; setReviewIncLead(null); setConfirmTakeLead(lead); }}
-                                className="shrink-0 rounded-[11px] bg-emerald-600 px-3 py-2 text-[11px] font-black text-white"
-                            >
-                                Verificar
-                            </button>
-                        ) : null}
+                        <button
+                            type="button"
+                            onClick={() => { const lead = reviewIncLead; setReviewIncLead(null); setConfirmTakeLead(lead); }}
+                            className="shrink-0 rounded-[11px] bg-emerald-600 px-3 py-2 text-[11px] font-black text-white"
+                        >
+                            Verificar
+                        </button>
                     </div>
                     <div className="min-h-[260px] overflow-y-auto rounded-[16px] border border-[#E8E7FB] bg-[#f8f7ff] px-3 py-3">
                         {reviewIncLoading ? (
@@ -1724,129 +1547,6 @@ function RecoveryCard({
                     {hasLocation ? (
                         <ActionBtn onClick={onMaps} title="Maps" tone="blue"><MapsIcon /></ActionBtn>
                     ) : null}
-                </div>
-            </div>
-        </div>
-    );
-}
-
-// ── CAMPAIGN LEAD CARD ───────────────────────────────────────────────────────
-
-function CampaignLeadCard({
-    lead, note, waSent, copied, managing,
-    onManage, onReview, onNotSuitable, onWhatsApp, onMaps, onCopy, onNote,
-}: {
-    lead: MetaLeadDoc;
-    note?: string;
-    waSent: boolean;
-    copied: boolean;
-    managing: boolean;
-    onManage: () => void;
-    onReview: () => void;
-    onNotSuitable: () => void;
-    onWhatsApp: () => void;
-    onMaps?: () => void;
-    onCopy: () => void;
-    onNote: () => void;
-}) {
-    const hasLocation = !!lead.location?.lat || !!lead.location?.mapsUrl;
-
-    return (
-        <div className="overflow-hidden rounded-[18px] border border-amber-100 bg-white shadow-[0_2px_12px_rgba(91,33,255,0.05)]">
-            <div className="p-3">
-                {/* Header */}
-                <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                        <p className="truncate text-[14px] font-black text-[#101936]">
-                            {lead.business || lead.name || lead.phone || "Sin nombre"}
-                        </p>
-                        {lead.name && lead.business ? (
-                            <p className="truncate text-[11px] font-semibold text-[#66739A]">{lead.name}</p>
-                        ) : null}
-                    </div>
-                    <span className="shrink-0 inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700">Sin verificar</span>
-                </div>
-
-                {/* Details */}
-                <div className="mt-1.5 space-y-1">
-                    {lead.phone ? (
-                        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#66739A]">
-                            <PhoneIcon /> <span className="truncate">{lead.phone}</span>
-                        </div>
-                    ) : null}
-                    {lead.location?.address ? (
-                        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#66739A]">
-                            <PinIcon /> <span className="truncate">{lead.location.address}</span>
-                        </div>
-                    ) : lead.leadAcquisitionCityLabel ? (
-                        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#66739A]">
-                            <PinIcon /> <span className="truncate">{lead.leadAcquisitionCityLabel}</span>
-                        </div>
-                    ) : null}
-                </div>
-
-                {/* Missing data badges */}
-                {(!hasLocation || !lead.business) ? (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                        {!hasLocation ? (
-                            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">
-                                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />Falta: ubicación
-                            </span>
-                        ) : null}
-                        {!lead.business ? (
-                            <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700">
-                                <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />Falta: negocio
-                            </span>
-                        ) : null}
-                    </div>
-                ) : null}
-
-                {/* Last message snippet */}
-                {lead.lastInboundText ? (
-                    <p className="mt-2 line-clamp-2 rounded-[10px] border border-[#F2F0FF] bg-[#f8f7ff] px-2.5 py-1.5 text-[11px] font-semibold text-[#66739A]">
-                        {lead.lastInboundText}
-                    </p>
-                ) : null}
-
-                {/* Note */}
-                {note ? (
-                    <div className="mt-2 flex items-start gap-1.5 rounded-[10px] border border-violet-100 bg-violet-50 px-2.5 py-1.5">
-                        <NoteIcon />
-                        <p className="text-[11px] font-semibold text-[#5B21FF]">{note}</p>
-                    </div>
-                ) : null}
-
-                {/* Actions */}
-                <div className="mt-3 flex items-center gap-1.5 border-t border-[#F2F0FF] pt-2.5">
-                    <ActionBtn onClick={onReview} tone="violet" title="Ver chat"><ChatIcon /></ActionBtn>
-                    <ActionBtn onClick={onWhatsApp} tone={waSent ? "sent" : "green"} title={waSent ? "Enviado" : "WhatsApp"}>
-                        {waSent ? <WACheckIcon /> : <WAIcon />}
-                    </ActionBtn>
-                    {onMaps ? <ActionBtn onClick={onMaps} title="Maps" tone="blue"><MapsIcon /></ActionBtn> : null}
-                    <div className="relative">
-                        <ActionBtn onClick={onCopy} title={copied ? "Copiado" : "Copiar"} tone={copied ? "sent" : "violet"}>
-                            {copied ? <CheckIcon /> : <CopyIcon />}
-                        </ActionBtn>
-                        {copied ? (
-                            <span className="pointer-events-none absolute -top-7 left-1/2 -translate-x-1/2 rounded-full border border-emerald-200 bg-white px-2 py-1 text-[9px] font-black text-emerald-700 shadow-[0_8px_22px_rgba(16,185,129,0.16)]">
-                                Copiado
-                            </span>
-                        ) : null}
-                    </div>
-                    <ActionBtn onClick={onNote} title="Nota" tone="violet"><NoteIcon /></ActionBtn>
-                    <ActionBtn onClick={onNotSuitable} tone="orange" title="No Apto"><BanIcon /></ActionBtn>
-                    <div className="flex-1" />
-                    <button
-                        type="button"
-                        onClick={onManage}
-                        disabled={managing}
-                        className="flex h-7 items-center gap-1.5 rounded-[10px] border border-[#E8E7FB] bg-white px-2.5 text-[10px] font-black text-[#7C3AED] shadow-sm transition active:bg-[#f3f0ff] disabled:opacity-50"
-                    >
-                        {managing ? (
-                            <svg className="tg-spin h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 12a9 9 0 1 1-3.1-6.8" /></svg>
-                        ) : null}
-                        Gestionar
-                    </button>
                 </div>
             </div>
         </div>

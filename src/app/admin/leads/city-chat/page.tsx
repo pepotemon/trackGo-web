@@ -24,6 +24,7 @@ type DddGroup = {
     incomplete: number;
     notSuitable: number;
     newInbound: number;
+    assigned: number;
 };
 
 const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
@@ -121,6 +122,8 @@ export default function AdminCityChatPage() {
     const [leads, setLeads] = useState<MetaLeadDoc[]>([]);
     const [status, setStatus] = useState<StatusFilter>("all");
     const [search, setSearch] = useState("");
+    const [onlyUnassigned, setOnlyUnassigned] = useState(false);
+    const [onlyActive, setOnlyActive] = useState(false);
     const [selectedCode, setSelectedCode] = useState<string>("");
     const [cursor, setCursor] = useState<LeadQueuePageCursor | null>(null);
     const [cursorLeadId, setCursorLeadId] = useState<string | null>(null);
@@ -168,6 +171,7 @@ export default function AdminCityChatPage() {
                     incomplete: sortedLeads.filter((lead) => lead.verificationStatus === "incomplete").length,
                     notSuitable: sortedLeads.filter((lead) => lead.verificationStatus === "not_suitable").length,
                     newInbound: sortedLeads.filter(hasNewInbound).length,
+                    assigned: sortedLeads.filter((lead) => !!lead.assignedTo).length,
                 };
             })
             .sort((a, b) => b.latestAt - a.latestAt);
@@ -201,6 +205,8 @@ export default function AdminCityChatPage() {
                 cursor: reset ? null : cursor,
                 statuses: statusList(status),
                 pageSize: PAGE_SIZE,
+                includeAssigned: !onlyUnassigned,
+                includeStale: !onlyActive,
             });
             setLeads((prev) => {
                 const map = new Map((reset ? [] : prev).map((lead) => [lead.id, lead]));
@@ -263,7 +269,7 @@ export default function AdminCityChatPage() {
             void loadPage(true);
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [status]);
+    }, [status, onlyUnassigned, onlyActive]);
 
     useEffect(() => {
         queueMicrotask(() => {
@@ -314,10 +320,11 @@ export default function AdminCityChatPage() {
                 }
             />
 
-            <section className="mb-4 grid gap-2 sm:grid-cols-3">
-                <Stat title="Chats visibles" value={visibleLeads.length} icon="lead" />
+            <section className="mb-4 grid gap-2 sm:grid-cols-4">
+                <Stat title="Prospectos visibles" value={visibleLeads.length} icon="lead" />
                 <Stat title="Indicativos" value={groups.length} icon="map" />
                 <Stat title="Sin leer" value={totalNew} icon="alert" />
+                <Stat title="Asignados" value={visibleLeads.filter((l) => !!l.assignedTo).length} icon="user" />
             </section>
 
             <Card className="mb-4">
@@ -347,6 +354,26 @@ export default function AdminCityChatPage() {
                     <Button type="button" variant="secondary" onClick={() => setSearch("")} disabled={!search.trim()}>
                         Limpiar
                     </Button>
+                </CardContent>
+                <CardContent className="flex flex-wrap gap-4 border-t border-[#f2f4f7] pt-3">
+                    <label className="flex cursor-pointer items-center gap-2">
+                        <input
+                            type="checkbox"
+                            checked={onlyUnassigned}
+                            onChange={(e) => setOnlyUnassigned(e.target.checked)}
+                            className="h-4 w-4 rounded border-[#ded8ff] accent-[#7c3aed]"
+                        />
+                        <span className="text-[13px] font-bold text-[#344054]">Solo sin asignar</span>
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-2">
+                        <input
+                            type="checkbox"
+                            checked={onlyActive}
+                            onChange={(e) => setOnlyActive(e.target.checked)}
+                            className="h-4 w-4 rounded border-[#ded8ff] accent-[#7c3aed]"
+                        />
+                        <span className="text-[13px] font-bold text-[#344054]">Solo activos (últimos 30 días)</span>
+                    </label>
                 </CardContent>
             </Card>
 
@@ -401,6 +428,7 @@ export default function AdminCityChatPage() {
                                             <MiniPill tone="gray">Inc. {group.incomplete}</MiniPill>
                                             <MiniPill tone="red">No apt. {group.notSuitable}</MiniPill>
                                             {group.newInbound ? <MiniPill tone="blue">Nuevo {group.newInbound}</MiniPill> : null}
+                                {group.assigned ? <MiniPill tone="green">Asig. {group.assigned}</MiniPill> : null}
                                         </div>
                                     </button>
                                 );
@@ -462,6 +490,11 @@ export default function AdminCityChatPage() {
                                                         {statusLabel[lead.verificationStatus]}
                                                     </Badge>
                                                     {hasNewInbound(lead) ? <Badge tone="blue">Nuevo</Badge> : null}
+                                                    {lead.assignedTo ? (
+                                                        <Badge tone="green">
+                                                            {users.find((u) => u.id === lead.assignedTo)?.name ?? "Asignado"}
+                                                        </Badge>
+                                                    ) : null}
                                                 </div>
                                                 <p className="mt-1 text-[12px] font-semibold text-[#66739a]">
                                                     {lead.business || quickStatus(lead) || "Sin negocio confirmado"}
@@ -516,12 +549,12 @@ function Stat({
 }: {
     title: string;
     value: number;
-    icon: "lead" | "map" | "alert";
+    icon: "lead" | "map" | "alert" | "user";
 }) {
     return (
         <Card>
             <CardContent className="flex items-center gap-3">
-                <AppIcon name={icon} tone={icon === "alert" ? "orange" : "purple"} />
+                <AppIcon name={icon} tone={icon === "alert" ? "orange" : icon === "user" ? "green" : "purple"} />
                 <div>
                     <p className="text-[11px] font-black uppercase tracking-[0.08em] text-[#66739a]">{title}</p>
                     <p className="text-[22px] font-black text-[#101936]">{value}</p>
@@ -536,13 +569,14 @@ function MiniPill({
     tone,
 }: {
     children: ReactNode;
-    tone: "yellow" | "gray" | "red" | "blue";
+    tone: "yellow" | "gray" | "red" | "blue" | "green";
 }) {
     const classes: Record<typeof tone, string> = {
         yellow: "bg-amber-50 text-amber-700",
         gray: "bg-slate-100 text-slate-600",
         red: "bg-red-50 text-red-600",
         blue: "bg-blue-50 text-blue-600",
+        green: "bg-emerald-50 text-emerald-700",
     };
 
     return (

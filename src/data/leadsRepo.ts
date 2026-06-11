@@ -306,18 +306,22 @@ export async function getLeadQueuePage({
     pageSize,
     statuses,
     city,
+    includeAssigned = false,
+    includeStale = false,
 }: {
     cursor?: LeadQueuePageCursor | null;
     cursorLeadId?: string | null;
     pageSize?: number;
     statuses?: LeadReviewStatus[];
     city?: LeadQueueCityFilter | null;
+    includeAssigned?: boolean;
+    includeStale?: boolean;
 } = {}): Promise<LeadQueuePage> {
     const normalizedStatuses = normalizeQueueStatuses(statuses);
 
     const constraints: QueryConstraint[] = [
         where("source", "==", "whatsapp_meta"),
-        where("assignedTo", "==", ""),
+        ...(!includeAssigned ? [where("assignedTo", "==", "")] : []),
         where("verificationStatus", "in", normalizedStatuses),
     ];
 
@@ -342,7 +346,7 @@ export async function getLeadQueuePage({
     const now = Date.now();
     const items = snap.docs
         .map((item) => normalizeLeadDoc(item.id, item.data()))
-        .filter((lead) => isLeadInActiveQueue(lead, now));
+        .filter((lead) => includeStale || isLeadInActiveQueue(lead, now));
 
     return {
         items,

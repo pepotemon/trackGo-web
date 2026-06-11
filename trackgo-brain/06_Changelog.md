@@ -6,6 +6,18 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ---
 
+## 2026-06-11
+
+### refactor(leads): No verificados filtrado solo por indicativo (DDD/cobertura)
+- **Módulo:** `src/data/incompleteClientsRepo.ts`, `src/app/user/leads/page.tsx`
+- **What changed:** Eliminada toda la lógica de campaña de "No verificados". `subscribeIncompleteClients` ya no acepta `campaignIds` — lista únicamente clientes cuyos teléfonos coinciden con los indicativos configurados en la cobertura del vendor. Removidos: `CampaignLeadCard`, `useUserCampaignIds`, `isCampaignClient`, `openCampaign*`, states `campaignManaging`/`incWaSent`/`actionFromNoVerificados`. `confirmVisit`/`confirmReject` simplificados (sin `takeIncompleteClient` previo).
+- **Why:** Simplificación solicitada — "No verificados" debe mostrar simplemente todos los clientes incompletos del indicativo del vendor, sin lógica especial de campaña.
+
+### feat(leads): Chat por ciudad muestra todos los prospectos, no solo la cola sin asignar
+- **Módulo:** `src/app/admin/leads/city-chat/page.tsx`, `src/data/leadsRepo.ts`
+- **What changed:** `getLeadQueuePage` acepta `includeAssigned` e `includeStale` (ambos `false` por defecto para no romper otros callers). La pantalla Chat por ciudad ahora los activa por defecto (muestra todos), con dos checkboxes para restringir: "Solo sin asignar" y "Solo activos (últimos 30 días)". Se agregó contador de asignados en stats, badge de vendor en tarjetas, pill verde "Asig. N" en grupos, y cuarto stat card "Asignados".
+- **Why:** El filtro `assignedTo == ""` y la regla de 30 días dejaban leads invisibles. La pantalla ahora funciona como base de datos por indicativo/ciudad, no solo como cola de revisión.
+
 ## 2026-06-09
 
 ### fix(push): notificación "nuevo cliente" falsa al rechazar/visitar desde No verificados

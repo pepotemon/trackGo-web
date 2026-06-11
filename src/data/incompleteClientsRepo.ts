@@ -215,66 +215,11 @@ function isCampaignUnactioned(lead: MetaLeadDoc): boolean {
     return !lead.takenFromIncompleteAt && lead.status !== "visited" && lead.status !== "rejected";
 }
 
-/**
- * Recoverable clients: incomplete/pending leads without an owner.
- * When both campaignIds and phoneCodes are present, both subscriptions run in parallel
- * and results are merged (campaign leads take priority on dedup). When only one is
- * present, that subscription runs alone. Falls back to empty when neither is provided.
- *
- * Campaign leads: shown regardless of assignedTo because autoAssignLead sets assignedTo
- * before the vendor sees the lead. takenFromIncompleteAt (set only by takeIncompleteClient)
- * is the signal that the vendor has already acted — use that to hide instead.
- */
 export function subscribeIncompleteClients(
     phoneCodes: string[],
-    callback: (leads: MetaLeadDoc[]) => void,
-    campaignIds?: string[]
+    callback: (leads: MetaLeadDoc[]) => void
 ): Unsubscribe {
-    const hasCampaigns = !!campaignIds && campaignIds.length > 0;
-    const hasDdds = phoneCodes.length > 0;
-
-    if (hasCampaigns && hasDdds) {
-        let campaignLeads: MetaLeadDoc[] = [];
-        let dddLeads: MetaLeadDoc[] = [];
-
-        function emit() {
-            const campaignLeadIds = new Set(campaignLeads.map((l) => l.id));
-            const merged = [
-                ...campaignLeads,
-                ...dddLeads.filter((l) => !campaignLeadIds.has(l.id)),
-            ].sort((a, b) => recoveryActivityMs(b) - recoveryActivityMs(a));
-            callback(merged);
-        }
-
-        const unsubCampaign = subscribeCoverageByCampaignIds(
-            campaignIds!,
-            INCOMPLETE_STATUSES,
-            (leads) => { campaignLeads = leads; emit(); },
-            isCampaignUnactioned,
-            recoveryActivityMs
-        );
-        const unsubDdd = subscribeCoverageByPhonePrefixes(
-            phoneCodes,
-            INCOMPLETE_STATUSES,
-            (leads) => { dddLeads = leads; emit(); },
-            isRecoverableIncompleteLead,
-            recoveryActivityMs
-        );
-
-        return () => { unsubCampaign(); unsubDdd(); };
-    }
-
-    if (hasCampaigns) {
-        return subscribeCoverageByCampaignIds(
-            campaignIds!,
-            INCOMPLETE_STATUSES,
-            callback,
-            isCampaignUnactioned,
-            recoveryActivityMs
-        );
-    }
-
-    if (!hasDdds) {
+    if (!phoneCodes.length) {
         callback([]);
         return () => {};
     }
