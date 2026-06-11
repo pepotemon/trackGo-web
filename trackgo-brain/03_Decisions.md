@@ -237,7 +237,7 @@ Registro de decisiones de arquitectura y diseño. Cada ADR explica el contexto, 
 
 ## ADR-014: Auto-asignación de clientes de campaña en el bot
 
-**Estado:** Activo
+**Estado:** Superseded by ADR-015
 **Fecha:** 2026-06-09
 
 **Contexto:** Los clientes que llegan con `leadAcquisitionCampaignId` son exclusivos de un vendor (via `subscriptionCities.ownerUserId`). Sin embargo, `autoAssignLead` los procesaba con el matcher geográfico junto al resto, pudiendo asignárselos a cualquier vendor con cobertura en la zona.
@@ -257,3 +257,20 @@ Registro de decisiones de arquitectura y diseño. Cada ADR explica el contexto, 
 ---
 
 *Ver [[06_Changelog]] para cuándo se tomaron estas decisiones.*
+
+---
+
+## ADR-015: Auto-asignacion prioriza geoCoverage sobre campana
+
+**Status:** Active
+**Date:** 2026-06-11
+
+**Context:** Meta referrals and campaign IDs can be wrong or stale. A prospect from one real city can arrive with campaign metadata mapped to another vendor, causing assignments outside the vendor coverage.
+
+**Decision:** `autoAssignLead` no longer assigns directly by `leadAcquisitionCampaignId`. All ready prospects, including campaign-attributed prospects, must pass through `selectAutoAssignUser` and `geoCoverage` matching.
+
+**Consequences:**
+- Campaign metadata remains useful for attribution, labels, and audits, but not as the owner source for automatic assignment.
+- Automatic assignments use `assignmentMode: "coverage_auto"` and geographic match types (`city`, `hub_city`, `state`, `country`).
+- Vendors must have active `autoAssignEnabled` and matching `geoCoverage` to receive ready prospects automatically.
+- Historical logs with `autoAssignMatchType: "campaign"` can still exist from before this decision.

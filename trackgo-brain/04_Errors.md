@@ -196,6 +196,19 @@ Registro de bugs, errores resueltos, y patrones problemáticos. Sirve para no re
 
 ---
 
+## ERR-014: Auto-asignacion por campana puede mandar prospectos fuera de cobertura
+
+**Estado:** Resuelto
+**Fecha:** 2026-06-11
+
+**Problema:** `autoAssignLead` daba prioridad a `leadAcquisitionCampaignId` y asignaba al `ownerUserId` de `cities` sin validar `geoCoverage`. Si Meta enviaba una campana equivocada o stale, un vendor podia recibir prospectos de otra ciudad.
+
+**Solucion:** Eliminado el atajo de asignacion por campana en `functions/src/assignments/autoAssignLead.js`. Todos los prospectos listos pasan por `selectAutoAssignUser`, que usa `geoCoverage`, estado de entrega de suscripcion y limites diarios.
+
+**Leccion:** La metadata de campana sirve para atribucion y auditoria, pero no debe ser la fuente de verdad para decidir cobertura operativa. Ver [[03_Decisions#ADR-015]].
+
+---
+
 ## Patrones problemáticos a evitar
 
 ### No usar `leads` en UI

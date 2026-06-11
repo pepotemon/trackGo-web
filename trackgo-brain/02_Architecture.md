@@ -181,6 +181,7 @@ Restricciones:
   - user.autoAssignEnabled = true
   - asignaciones del día < user.autoAssignDailyLimit
   - lead.location debe estar en user.geoCoverage
+  - leadAcquisitionCampaignId solo se usa como metadata/auditoria; no decide el owner automatico
 ```
 
 ---

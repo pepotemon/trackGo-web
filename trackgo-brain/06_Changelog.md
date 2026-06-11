@@ -8,6 +8,12 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ## 2026-06-11
 
+### fix(assignments): auto-asignacion usa geoCoverage aunque exista campana
+- **Module:** `functions/src/assignments/autoAssignLead.js`
+- **What changed:** Eliminado el atajo que asignaba directamente por `leadAcquisitionCampaignId` al `ownerUserId` de `cities`. Todos los prospectos listos pasan por `selectAutoAssignUser` y el matcher de `geoCoverage`.
+- **Why:** La metadata de campana puede venir equivocada o stale, causando asignaciones fuera de cobertura real (ej. vendedor de Maceio recibiendo prospectos de Fortaleza).
+- **See:** [[03_Decisions#ADR-015]], [[04_Errors#ERR-014]]
+
 ### refactor(leads): No verificados filtrado solo por indicativo (DDD/cobertura)
 - **Módulo:** `src/data/incompleteClientsRepo.ts`, `src/app/user/leads/page.tsx`
 - **What changed:** Eliminada toda la lógica de campaña de "No verificados". `subscribeIncompleteClients` ya no acepta `campaignIds` — lista únicamente clientes cuyos teléfonos coinciden con los indicativos configurados en la cobertura del vendor. Removidos: `CampaignLeadCard`, `useUserCampaignIds`, `isCampaignClient`, `openCampaign*`, states `campaignManaging`/`incWaSent`/`actionFromNoVerificados`. `confirmVisit`/`confirmReject` simplificados (sin `takeIncompleteClient` previo).
