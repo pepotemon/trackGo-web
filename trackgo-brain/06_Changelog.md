@@ -6,6 +6,16 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ---
 
+## 2026-06-22
+
+### feat(admin): copiar datos de prospectos en panel admin
+- **Module:** `src/app/admin/leads/page.tsx`, `src/app/admin/activity/page.tsx`, `src/app/admin/leads/assignments/page.tsx`
+- **What changed:** Añadido botón "Copiar datos" en todos los modales de acciones rápidas del admin (desktop y mobile). Copia al portapapeles: Nombre, Teléfono, Negocio, Dirección y Maps. En actividad y asignaciones los campos disponibles dependen de lo que tenga guardado el documento. El botón cambia a verde con icono ✓ durante 1.2s tras copiar.
+- **Why:** El admin no tenía esta funcionalidad disponible para usuarios normales (vendors). Solicitado por el usuario.
+- **See:** —
+
+---
+
 ## 2026-06-11
 
 ### fix(assignments): auto-asignacion usa geoCoverage aunque exista campana

@@ -28,6 +28,7 @@ import type { DailyEventDoc, UserDoc } from "@/types/accounting";
 import type { AutoAssignLogDoc } from "@/types/leads";
 import {
     ActionTile,
+    ActionTileButton,
     AppIcon,
     Badge,
     Button,
@@ -1183,6 +1184,7 @@ function ActivityActionSheet({
     const canActivityEdit = useCan("activityEdit");
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    const [copied, setCopied] = useState(false);
 
     useEffect(() => {
         if (!open) { setConfirmDelete(false); setDeleting(false); }
@@ -1199,6 +1201,26 @@ function ActivityActionSheet({
     if (!open || !row) return null;
 
     const waUrl = whatsappUrl(row.phone);
+
+    async function handleCopy() {
+        const r = row!;
+        const address = String(r.address || "").trim();
+        const cleanAddress = /^https?:\/\//i.test(address) ? "" : address;
+        const text = [
+            r.name ? `Nombre: ${r.name}` : "",
+            r.phone ? `Telefono: ${r.phone}` : "",
+            r.business ? `Negocio: ${r.business}` : "",
+            cleanAddress ? `Direccion: ${cleanAddress}` : "",
+            r.mapsUrl ? `Maps: ${r.mapsUrl}` : "",
+        ].filter(Boolean).join("\n");
+        try {
+            await navigator.clipboard.writeText(text);
+        } catch {
+            window.prompt("Copia los datos del cliente", text);
+        }
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1200);
+    }
 
     async function handleDelete() {
         if (!onDelete) return;
@@ -1310,6 +1332,15 @@ function ActivityActionSheet({
                                     WhatsApp
                                 </a>
                             ) : null}
+
+                            <button
+                                type="button"
+                                onClick={handleCopy}
+                                className={copied ? "flex min-h-[52px] items-center gap-3 rounded-[14px] bg-emerald-50 px-4 text-[14px] font-bold text-[#101936] transition active:bg-emerald-100" : "flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#f3f0ff] px-4 text-[14px] font-bold text-[#101936] transition active:bg-violet-200"}
+                            >
+                                <AppIcon name={copied ? "check" : "copy"} tone="slate" size="sm" className={copied ? "h-5 w-5 bg-transparent text-emerald-600 ring-0" : "h-5 w-5 bg-transparent text-[#7C3AED] ring-0"} />
+                                {copied ? "Copiado" : "Copiar datos"}
+                            </button>
 
                             {canDelete && onDelete ? (
                                 <button
@@ -1439,8 +1470,29 @@ function ActivityQuickActionsModal({
     const canMaps = useCan("activityMaps");
     const canChat = useCan("activityChat");
     const canEdit = useCan("activityEdit");
+    const [copied, setCopied] = useState(false);
 
     if (!row) return null;
+
+    async function handleCopy() {
+        const r = row!;
+        const address = String(r.address || "").trim();
+        const cleanAddress = /^https?:\/\//i.test(address) ? "" : address;
+        const text = [
+            r.name ? `Nombre: ${r.name}` : "",
+            r.phone ? `Telefono: ${r.phone}` : "",
+            r.business ? `Negocio: ${r.business}` : "",
+            cleanAddress ? `Direccion: ${cleanAddress}` : "",
+            r.mapsUrl ? `Maps: ${r.mapsUrl}` : "",
+        ].filter(Boolean).join("\n");
+        try {
+            await navigator.clipboard.writeText(text);
+        } catch {
+            window.prompt("Copia los datos del cliente", text);
+        }
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1200);
+    }
 
     return (
         <Modal
@@ -1460,6 +1512,12 @@ function ActivityQuickActionsModal({
                 {(canChat || canEdit) ? (
                     <ActionTile href={`/admin/leads/${row.clientId}?from=activity`} label={canChat && canEdit ? "Chat / Editar" : canChat ? "Chat" : "Editar"} icon={canChat ? "chat" : "edit"} tone="orange" />
                 ) : null}
+                <ActionTileButton
+                    onClick={handleCopy}
+                    icon={copied ? "check" : "copy"}
+                    label={copied ? "Copiado" : "Copiar datos"}
+                    tone={copied ? "green" : "slate"}
+                />
                 {!canClientView && !canMaps && !canChat && !canEdit ? (
                     <div className="rounded-xl border border-[#e5e7eb] bg-[#fafafa] p-4 text-center text-[12px] font-semibold text-[#667085]">
                         No tienes permisos para acciones sobre este cliente.

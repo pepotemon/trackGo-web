@@ -1055,12 +1055,35 @@ function LeadActionSheet({
     const canDelete = useCan("leadsDelete");
     const canWhatsapp = useCan("leadsWhatsapp");
     const canChat = useCan("chatView");
+    const [copied, setCopied] = useState(false);
     useBackButtonDismiss(open, onClose);
 
     if (!open) return null;
 
     const hasMaps = !!lead.location.mapsUrl;
     const waUrl = whatsappUrl(lead.phone);
+
+    async function handleCopy() {
+        const mapsUrl = lead.location.mapsUrl || (
+            lead.location.lat != null && lead.location.lng != null
+                ? `https://maps.google.com/?q=${lead.location.lat},${lead.location.lng}`
+                : ""
+        );
+        const text = [
+            lead.name ? `Nombre: ${lead.name}` : "",
+            lead.phone ? `Telefono: ${lead.phone}` : "",
+            lead.business ? `Negocio: ${lead.business}` : "",
+            lead.location.address ? `Direccion: ${lead.location.address}` : "",
+            mapsUrl ? `Maps: ${mapsUrl}` : "",
+        ].filter(Boolean).join("\n");
+        try {
+            await navigator.clipboard.writeText(text);
+        } catch {
+            window.prompt("Copia los datos del cliente", text);
+        }
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1200);
+    }
 
     return (
         <>
@@ -1153,6 +1176,15 @@ function LeadActionSheet({
                             WhatsApp
                         </a>
                     ) : null}
+
+                    <button
+                        type="button"
+                        onClick={handleCopy}
+                        className={copied ? "flex min-h-[52px] items-center gap-3 rounded-[14px] bg-emerald-50 px-4 text-[14px] font-bold text-[#101936] transition active:bg-emerald-100" : "flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#f3f0ff] px-4 text-[14px] font-bold text-[#101936] transition active:bg-violet-200"}
+                    >
+                        <AppIcon name={copied ? "check" : "copy"} tone="slate" size="sm" className={copied ? "h-5 w-5 bg-transparent text-emerald-600 ring-0" : "h-5 w-5 bg-transparent text-[#7C3AED] ring-0"} />
+                        {copied ? "Copiado" : "Copiar datos"}
+                    </button>
 
                     {canDelete ? (
                         <button
@@ -1594,14 +1626,38 @@ function LeadQuickActionsModal({
     const canDelete = useCan("leadsDelete");
     const canWhatsapp = useCan("leadsWhatsapp");
     const canChat = useCan("chatView");
+    const [copied, setCopied] = useState(false);
 
     if (!lead) return null;
+
+    async function handleCopy() {
+        const l = lead!;
+        const mapsUrl = l.location.mapsUrl || (
+            l.location.lat != null && l.location.lng != null
+                ? `https://maps.google.com/?q=${l.location.lat},${l.location.lng}`
+                : ""
+        );
+        const text = [
+            l.name ? `Nombre: ${l.name}` : "",
+            l.phone ? `Telefono: ${l.phone}` : "",
+            l.business ? `Negocio: ${l.business}` : "",
+            l.location.address ? `Direccion: ${l.location.address}` : "",
+            mapsUrl ? `Maps: ${mapsUrl}` : "",
+        ].filter(Boolean).join("\n");
+        try {
+            await navigator.clipboard.writeText(text);
+        } catch {
+            window.prompt("Copia los datos del cliente", text);
+        }
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1200);
+    }
 
     return (
         <Modal
             open={!!lead}
             onClose={onClose}
-            title={displayName(lead)}
+            title={displayName(lead!)}
             subtitle={lead.business || lead.location.address || lead.phone || "Acciones rápidas"}
             size="sm"
         >
@@ -1632,6 +1688,12 @@ function LeadQuickActionsModal({
                         external
                     />
                 ) : null}
+                <ActionTileButton
+                    onClick={handleCopy}
+                    icon={copied ? "check" : "copy"}
+                    label={copied ? "Copiado" : "Copiar datos"}
+                    tone={copied ? "green" : "slate"}
+                />
                 {canEdit ? (
                     <ActionTileButton
                         onClick={() => onEdit(lead)}

@@ -11,7 +11,7 @@ import type {
     AutoAssignLogFilters,
     LeadAutoAssignMatchType,
 } from "@/types/leads";
-import { ActionTile, AppIcon, Badge, Button, Card, Field, Input, KpiCard, Modal, PageHeader } from "@/components/ui";
+import { ActionTile, ActionTileButton, AppIcon, Badge, Button, Card, Field, Input, KpiCard, Modal, PageHeader } from "@/components/ui";
 
 const MATCH_OPTIONS: { value: LeadAutoAssignMatchType; label: string }[] = [
     { value: "city", label: "Ciudad" },
@@ -738,6 +738,8 @@ function AssignmentActionSheet({
     open: boolean;
     onClose: () => void;
 }) {
+    const [copied, setCopied] = useState(false);
+
     useEffect(() => {
         if (!open) return;
         const handler = () => onClose();
@@ -746,6 +748,23 @@ function AssignmentActionSheet({
     }, [open, onClose]);
 
     if (!open || !log) return null;
+
+    const hasData = !!(log.leadName || log.leadPhone || log.leadBusiness);
+
+    async function handleCopy() {
+        const text = [
+            log!.leadName ? `Nombre: ${log!.leadName}` : "",
+            log!.leadPhone ? `Telefono: ${log!.leadPhone}` : "",
+            log!.leadBusiness ? `Negocio: ${log!.leadBusiness}` : "",
+        ].filter(Boolean).join("\n");
+        try {
+            await navigator.clipboard.writeText(text);
+        } catch {
+            window.prompt("Copia los datos del cliente", text);
+        }
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1200);
+    }
 
     return (
         <>
@@ -794,6 +813,17 @@ function AssignmentActionSheet({
                         Sin prospecto asociado.
                     </p>
                 )}
+
+                {hasData ? (
+                    <button
+                        type="button"
+                        onClick={handleCopy}
+                        className={copied ? "mt-2 flex min-h-[52px] items-center gap-3 rounded-[14px] bg-emerald-50 px-4 text-[14px] font-bold text-[#101936] transition active:bg-emerald-100" : "mt-2 flex min-h-[52px] items-center gap-3 rounded-[14px] bg-[#f3f0ff] px-4 text-[14px] font-bold text-[#101936] transition active:bg-violet-200"}
+                    >
+                        <AppIcon name={copied ? "check" : "copy"} tone="slate" size="sm" className={copied ? "h-5 w-5 bg-transparent text-emerald-600 ring-0" : "h-5 w-5 bg-transparent text-[#7C3AED] ring-0"} />
+                        {copied ? "Copiado" : "Copiar datos"}
+                    </button>
+                ) : null}
 
                 <button
                     type="button"
@@ -937,7 +967,27 @@ function AssignmentQuickActionsModal({
     log: AutoAssignLogDoc | null;
     onClose: () => void;
 }) {
+    const [copied, setCopied] = useState(false);
+
     if (!log) return null;
+
+    const hasData = !!(log.leadName || log.leadPhone || log.leadBusiness);
+
+    async function handleCopy() {
+        const l = log!;
+        const text = [
+            l.leadName ? `Nombre: ${l.leadName}` : "",
+            l.leadPhone ? `Telefono: ${l.leadPhone}` : "",
+            l.leadBusiness ? `Negocio: ${l.leadBusiness}` : "",
+        ].filter(Boolean).join("\n");
+        try {
+            await navigator.clipboard.writeText(text);
+        } catch {
+            window.prompt("Copia los datos del cliente", text);
+        }
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1200);
+    }
 
     return (
         <Modal
@@ -947,16 +997,26 @@ function AssignmentQuickActionsModal({
             subtitle={leadGeo(log)}
             size="sm"
         >
-            {log.leadId ? (
-                <div className="grid gap-2">
-                                <ActionTile href={`/admin/clients/${log.leadId}`} icon="users" label="Ver cliente" tone="blue" />
-                    <ActionTile href={`/admin/leads/${log.leadId}?from=assignments`} icon="chat" label="Chat / Editar" tone="purple" />
-                </div>
-            ) : (
-                <div className="rounded-2xl border border-dashed border-[#d0d5dd] bg-[#f9fafb] px-4 py-6 text-center text-[12px] font-semibold text-[#667085]">
-                    Esta asignación no tiene prospecto asociado.
-                </div>
-            )}
+            <div className="grid gap-2">
+                {log.leadId ? (
+                    <>
+                        <ActionTile href={`/admin/clients/${log.leadId}`} icon="users" label="Ver cliente" tone="blue" />
+                        <ActionTile href={`/admin/leads/${log.leadId}?from=assignments`} icon="chat" label="Chat / Editar" tone="purple" />
+                    </>
+                ) : (
+                    <div className="rounded-2xl border border-dashed border-[#d0d5dd] bg-[#f9fafb] px-4 py-6 text-center text-[12px] font-semibold text-[#667085]">
+                        Esta asignación no tiene prospecto asociado.
+                    </div>
+                )}
+                {hasData ? (
+                    <ActionTileButton
+                        onClick={handleCopy}
+                        icon={copied ? "check" : "copy"}
+                        label={copied ? "Copiado" : "Copiar datos"}
+                        tone={copied ? "green" : "slate"}
+                    />
+                ) : null}
+            </div>
         </Modal>
     );
 }
