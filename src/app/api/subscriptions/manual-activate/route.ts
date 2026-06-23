@@ -2,7 +2,7 @@ import { errorResponse, requireServerUser, requireSubscriptionsEdit, ResponseErr
 import { activateManualSubscription } from "@/server/subscriptions/subscriptionService";
 import type { SubscriptionPlanId } from "@/types/subscriptions";
 
-const validPlans = new Set<SubscriptionPlanId>(["base", "crecimiento", "dominio", "custom"]);
+const validPlans = new Set<SubscriptionPlanId>(["crecimiento", "dominio", "custom"]);
 
 export async function POST(request: Request) {
     try {

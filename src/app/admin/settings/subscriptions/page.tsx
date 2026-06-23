@@ -106,7 +106,7 @@ const defaultManualForm: ManualSubscriptionForm = {
     userId: "",
     cityId: "",
     plan: "crecimiento",
-    amount: 400,
+    amount: 350,
     cycleDays: 5,
     syncMeta: true,
 };

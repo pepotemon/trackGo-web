@@ -11,17 +11,9 @@ export type SubscriptionPlanDefinition = {
 
 export const SUBSCRIPTION_PLANS: SubscriptionPlanDefinition[] = [
     {
-        id: "base",
-        name: "Acesso",
-        amount: 300,
-        adsBudget: 150,
-        estimatedLeads: "10-35",
-        description: "Acceso inicial para recibir clientes durante 5 dias y gestionarlos por 7 dias.",
-    },
-    {
         id: "crecimiento",
         name: "Impulso",
-        amount: 400,
+        amount: 350,
         adsBudget: 200,
         estimatedLeads: "25-50",
         description: "Plan recomendado para trabajar una ciudad con mayor volumen de oportunidades.",

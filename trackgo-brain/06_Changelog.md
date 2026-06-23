@@ -6,6 +6,16 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ---
 
+## 2026-06-23
+
+### feat(subscriptions): eliminar plan 300 R$ y actualizar plan Impulso a 350 R$
+- **Module:** `src/lib/subscriptionPlans.ts`, `src/app/api/subscriptions/create-pix/route.ts`, `src/app/api/subscriptions/manual-activate/route.ts`, `src/app/admin/settings/subscriptions/page.tsx`
+- **What changed:** Eliminado plan `base` (300 R$). Plan `crecimiento` ("Impulso") pasa de 400 R$ a 350 R$. Se quita `"base"` del set `validPlans` en ambas rutas API. El formulario de activación manual ahora defaultea a 350 R$.
+- **Why:** Restructuración comercial: inversión 200 R$ + ganancia TrackGo 150 R$ = 350 R$ total. El plan de 300 ya no existe. Requiere actualizar "Reglas comerciales" en Firestore a 57% operativo (200/350).
+- **See:** —
+
+---
+
 ## 2026-06-22
 
 ### feat(admin): copiar datos de prospectos en panel admin
