@@ -20,6 +20,7 @@ export async function PATCH(request: Request) {
         const settings = await saveSubscriptionSettings({
             adsShare: Number(body.adsShare),
             cycleDays: Number(body.cycleDays),
+            taxRate: Number(body.taxRate ?? 0),
         });
         return Response.json({ ok: true, settings });
     } catch (error) {

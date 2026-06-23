@@ -6,6 +6,16 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ---
 
+## 2026-06-23 (2)
+
+### feat(subscriptions): impuesto configurable sobre inversión en Reglas comerciales
+- **Module:** `src/server/subscriptions/subscriptionService.ts`, `src/app/api/subscriptions/settings/route.ts`, `src/app/admin/settings/subscriptions/page.tsx`
+- **What changed:** Nuevo campo `taxRate` en `subscriptionSettings/global` (Firestore). Se configura vía slider en "Reglas comerciales" (0–50%). El `adsBudgetNet = adsBudget × (1 - taxRate)` es lo que recibe Meta Ads; `adsBudget` (bruto) sigue guardado en Firestore como referencia para el vendor. El `dailyBudget` enviado a Meta y almacenado en la suscripción ya refleja el neto. El modal de activación manual muestra "Cobro / Inversión / Neto Meta" en el preview.
+- **Why:** El impuesto del 13% sobre inversión Meta (IOF) debe descontarse del presupuesto efectivo sin afectar lo que se le cobra al vendor.
+- **See:** —
+
+---
+
 ## 2026-06-23
 
 ### feat(subscriptions): eliminar plan 300 R$ y actualizar plan Impulso a 350 R$

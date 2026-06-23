@@ -26,6 +26,7 @@ type CityFormState = {
 type SubscriptionSettings = {
     adsShare: number;
     cycleDays: number;
+    taxRate: number;
     updatedAt?: number | null;
 };
 
@@ -131,7 +132,7 @@ export default function SubscriptionsAdminPage() {
     const [citySaving, setCitySaving] = useState(false);
     const [citySaveError, setCitySaveError] = useState("");
     const [campaignValidation, setCampaignValidation] = useState({ loading: false, ok: false, message: "" });
-    const [settingsDraft, setSettingsDraft] = useState<SubscriptionSettings>({ adsShare: 0.5, cycleDays: 5 });
+    const [settingsDraft, setSettingsDraft] = useState<SubscriptionSettings>({ adsShare: 0.5, cycleDays: 5, taxRate: 0 });
     const [settingsSaving, setSettingsSaving] = useState(false);
     const [settingsError, setSettingsError] = useState("");
     const [detailCityId, setDetailCityId] = useState<string | null>(null);
@@ -157,7 +158,7 @@ export default function SubscriptionsAdminPage() {
         const data = await response.json();
         if (!response.ok || !data.ok) throw new Error(data.message || "No se pudo cargar suscripciones.");
         return {
-            settings: data.settings || { adsShare: 0.5, cycleDays: 5 },
+            settings: data.settings || { adsShare: 0.5, cycleDays: 5, taxRate: 0 },
             cities: data.cities || [],
             subscriptions: data.subscriptions || [],
             checkouts: data.checkouts || [],
@@ -716,7 +717,7 @@ export default function SubscriptionsAdminPage() {
                 users={manualUsers}
                 usersLoading={manualUsersLoading}
                 cities={overview?.cities ?? []}
-                settings={overview?.settings ?? { adsShare: 0.5, cycleDays: 5 }}
+                settings={overview?.settings ?? { adsShare: 0.5, cycleDays: 5, taxRate: 0 }}
                 form={manualForm}
                 saving={manualSaving}
                 error={manualError}
@@ -1269,6 +1270,7 @@ function RulesModal({
 }) {
     const operatingPercent = Math.round(draft.adsShare * 100);
     const trackgoPercent = 100 - operatingPercent;
+    const taxPercent = Math.round((draft.taxRate ?? 0) * 100);
 
     return (
         <Modal open={open} title="Reglas comerciales" subtitle="Configuracion global para nuevos ciclos." size="md" onClose={onClose}>
@@ -1292,6 +1294,21 @@ function RulesModal({
                     </div>
                 </Field>
 
+                <Field label="Impuesto sobre la inversion (%)">
+                    <div className="flex items-center gap-3">
+                        <input
+                            type="range"
+                            min={0}
+                            max={50}
+                            value={taxPercent}
+                            disabled={!canEdit}
+                            onChange={(event) => onChange({ ...draft, taxRate: Number(event.target.value) / 100 })}
+                            className="w-full accent-[#7c3aed]"
+                        />
+                        <span className="w-12 text-right text-[13px] font-black text-[#101936]">{taxPercent}%</span>
+                    </div>
+                </Field>
+
                 <Field label="Duracion del ciclo en dias">
                     <input
                         type="number"
@@ -1304,8 +1321,9 @@ function RulesModal({
                     />
                 </Field>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                     <MoneyTile label="Operacion" value={`${operatingPercent}%`} />
+                    <MoneyTile label="Impuesto" value={`${taxPercent}%`} />
                     <MoneyTile label="TrackGo" value={`${trackgoPercent}%`} />
                 </div>
 
@@ -1351,6 +1369,8 @@ function ManualActivationModal({
     const selectedPlan = SUBSCRIPTION_PLANS.find((plan) => plan.id === form.plan);
     const amount = form.plan === "custom" ? form.amount : (selectedPlan?.amount ?? form.amount);
     const adsBudget = Math.round(amount * settings.adsShare);
+    const taxRate = settings.taxRate ?? 0;
+    const adsBudgetNet = Math.round(adsBudget * (1 - taxRate));
 
     function setPlan(plan: SubscriptionPlanId) {
         const predefined = SUBSCRIPTION_PLANS.find((item) => item.id === plan);
@@ -1430,9 +1450,10 @@ function ManualActivationModal({
                             className={inputClass}
                         />
                     </Field>
-                    <div className="grid grid-cols-2 gap-2 sm:pt-5">
+                    <div className="grid grid-cols-3 gap-2 sm:pt-5">
                         <MoneyTile label="Cobro" value={currency.format(amount)} />
                         <MoneyTile label="Inversion" value={currency.format(adsBudget)} />
+                        <MoneyTile label="Neto Meta" value={currency.format(adsBudgetNet)} />
                     </div>
                 </div>
 

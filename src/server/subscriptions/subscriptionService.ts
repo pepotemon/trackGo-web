@@ -54,17 +54,20 @@ export async function getSubscriptionSettings() {
     const snap = await adminDb.collection("subscriptionSettings").doc("global").get();
     const data = snap.data() || {};
     const adsShare = Number(data.adsShare ?? 0.5);
+    const taxRate = Number(data.taxRate ?? 0);
 
     return {
         adsShare: Number.isFinite(adsShare) ? Math.min(Math.max(adsShare, 0), 1) : 0.5,
         cycleDays: Number(data.cycleDays ?? 5) || 5,
+        taxRate: Number.isFinite(taxRate) ? Math.min(Math.max(taxRate, 0), 0.5) : 0,
         updatedAt: Number(data.updatedAt || 0) || null,
     };
 }
 
-export async function saveSubscriptionSettings(input: { adsShare: number; cycleDays: number }) {
+export async function saveSubscriptionSettings(input: { adsShare: number; cycleDays: number; taxRate?: number }) {
     const adsShare = Number(input.adsShare);
     const cycleDays = Number(input.cycleDays);
+    const taxRate = Number(input.taxRate ?? 0);
 
     if (!Number.isFinite(adsShare) || adsShare < 0.1 || adsShare > 0.9) {
         throw new ResponseError("invalid_ads_share", "La distribucion de anuncios debe estar entre 10% y 90%.");
@@ -74,10 +77,15 @@ export async function saveSubscriptionSettings(input: { adsShare: number; cycleD
         throw new ResponseError("invalid_cycle_days", "El ciclo debe estar entre 1 y 30 dias.");
     }
 
+    if (!Number.isFinite(taxRate) || taxRate < 0 || taxRate > 0.5) {
+        throw new ResponseError("invalid_tax_rate", "El impuesto debe estar entre 0% y 50%.");
+    }
+
     await adminDb.collection("subscriptionSettings").doc("global").set(
         {
             adsShare,
             cycleDays: Math.round(cycleDays),
+            taxRate,
             updatedAt: nowMs(),
         },
         { merge: true },
@@ -350,7 +358,10 @@ function timestampToMs(value: unknown) {
 function subscriptionDailyBudget(data: FirebaseFirestore.DocumentData) {
     const stored = Number(data.dailyBudget || data.metaDailyBudget || 0);
     if (Number.isFinite(stored) && stored > 0) return stored;
-    return calculateAdsBudgetAllocation(Number(data.adsBudget || 0), Number(data.cycleDays || 5) || 5).dailyBudget;
+    const taxRate = Number(data.taxRate ?? 0);
+    const gross = Number(data.adsBudget || 0);
+    const net = Math.round(gross * (1 - taxRate) * 100) / 100;
+    return calculateAdsBudgetAllocation(net, Number(data.cycleDays || 5) || 5).dailyBudget;
 }
 
 async function listActiveCityPoolSubscriptions(cityId: string) {
@@ -651,7 +662,8 @@ export async function createPixSubscriptionCheckout(input: {
     const amount = getPlanAmount(input.plan, input.customAmount);
     const settings = await getSubscriptionSettings();
     const adsBudget = calculateAdsBudget(amount, settings.adsShare);
-    const budgetAllocation = calculateAdsBudgetAllocation(adsBudget, settings.cycleDays);
+    const adsBudgetNet = Math.round(adsBudget * (1 - settings.taxRate) * 100) / 100;
+    const budgetAllocation = calculateAdsBudgetAllocation(adsBudgetNet, settings.cycleDays);
     const checkoutRef = adminDb.collection("subscriptionCheckouts").doc(checkoutId);
     const cityRef = adminDb.collection("cities").doc(input.cityId);
     const reservationExpiresAt = nowMs() + RESERVATION_TTL_MS;
@@ -742,6 +754,7 @@ export async function createPixSubscriptionCheckout(input: {
             targetSpend: budgetAllocation.totalBudget,
             spendPauseThreshold: Math.round(budgetAllocation.totalBudget * 0.98 * 100) / 100,
             adsShare: settings.adsShare,
+            taxRate: settings.taxRate,
             cycleDays: settings.cycleDays,
             paymentId: "",
             status: "pending",
@@ -850,6 +863,7 @@ export async function activateManualSubscription(input: {
         ? Math.min(Math.max(Math.round(Number(input.cycleDays)), 1), 30)
         : settings.cycleDays;
     const adsBudget = calculateAdsBudget(amount, settings.adsShare);
+    const adsBudgetNet = Math.round(adsBudget * (1 - settings.taxRate) * 100) / 100;
     let campaignActivation: Awaited<ReturnType<typeof configureAndActivateCityCampaign>> | null = null;
 
     if (input.syncMeta !== false) {
@@ -909,13 +923,13 @@ export async function activateManualSubscription(input: {
                 campaignId,
                 cityName: String(city.name || cityId),
                 userId,
-                adsBudget,
+                adsBudget: adsBudgetNet,
                 cycleDays,
             });
         }
     }
 
-    const budgetAllocation = calculateAdsBudgetAllocation(adsBudget, cycleDays);
+    const budgetAllocation = calculateAdsBudgetAllocation(adsBudgetNet, cycleDays);
     const spendPauseThreshold = Math.round(budgetAllocation.totalBudget * 0.98 * 100) / 100;
     const startDate = campaignActivation?.startDate ?? new Date();
     const endDate = campaignActivation?.endDate ?? calculateCycleEnd(startDate, cycleDays);
@@ -1013,6 +1027,7 @@ export async function activateManualSubscription(input: {
             cycleSpend: 0,
             lastSpendCheckedAt: now,
             adsShare: settings.adsShare,
+            taxRate: settings.taxRate,
             cycleDays,
             status: "active",
             source: "manual_admin",
