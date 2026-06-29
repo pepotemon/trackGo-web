@@ -819,9 +819,7 @@ function createUpsertLeadAsClient({
             lat: mergedCoords.lat,
             lng: mergedCoords.lng,
 
-            currentLeadMapsConfirmedAt: hasMapsInThisMessage
-                ? now
-                : safeNumber(prev.currentLeadMapsConfirmedAt, 0),
+            ...(hasMapsInThisMessage ? { currentLeadMapsConfirmedAt: now } : {}),
 
             lastInboundIntent: inboundIntent,
             ...mergedTrackGoGeoFields,

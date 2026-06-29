@@ -6,6 +6,16 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ---
 
+## 2026-06-29
+
+### fix(bot): evitar race condition que borraba currentLeadMapsConfirmedAt
+- **Module:** `functions/src/whatsapp/upsertLead.js`
+- **What changed:** En el update de lead existente, cuando `hasMapsInThisMessage = false`, el campo `currentLeadMapsConfirmedAt` ya no se incluye en el payload (antes se escribía `0`). Con `merge: true`, Firestore preserva el valor positivo ya guardado.
+- **Why:** Si dos mensajes llegaban con ~50ms de diferencia (URL de Maps + dirección de texto), el segundo upsert leía `prev.currentLeadMapsConfirmedAt = 0` (antes de que el primero commitara) y lo pisaba, haciendo que el bot pidiera Maps de nuevo aunque ya había sido enviado.
+- **See:** [[04_Errors]]
+
+---
+
 ## 2026-06-23 (2)
 
 ### feat(subscriptions): impuesto configurable sobre inversión en Reglas comerciales
