@@ -6,6 +6,14 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ---
 
+## 2026-07-13 (6)
+
+### fix(resolver): implementar bypass consent.google.com y resolver URLs anidadas
+- **Module:** `functions/src/utils/googleMapsResolver.js`
+- **What changed:** Agregada `extractConsentContinueUrl(finalUrl, html)` que extrae la URL real de Maps desde el parámetro `continue` de consent.google.com o escaneando el HTML como fallback. `fetchUrlFollowingRedirects` ahora acepta `depth` (max 2) y si aterriza en consent.google.com hace un segundo fetch a la URL real. En el loop de URLs anidadas del HTML, si la URL no tiene coords directas se sigue con `fetchUrlFollowingRedirects` (2 sources nuevas: `maps_nested_redirect`, `maps_nested_html`).
+- **Why:** ERR-016 marcado como resuelto pero el código nunca fue implementado. Links `share.google/` y `maps.app.goo.gl` con `?g_st=aw` fallaban porque redirect server-side va a consent.google.com, que no es URL de Maps. Links `share.google/` además pueden embeder la URL real en el HTML de la página, no en el redirect directo.
+- **See:** [[04_Errors#ERR-016]]
+
 ## 2026-07-13 (5)
 
 ### feat(bot): implementar canal WhatsApp Argentina en functions

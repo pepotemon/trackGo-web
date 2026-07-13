@@ -416,7 +416,28 @@ async function geocodeTextInBrazil(query) {
     }
 }
 
-async function fetchUrlFollowingRedirects(url) {
+function extractConsentContinueUrl(finalUrl, html) {
+    const urlMatch = safeString(finalUrl).match(/[?&]continue=([^&]+)/i);
+    if (urlMatch?.[1]) {
+        const decoded = normalizeFetchedUrl(tryDecode(urlMatch[1]));
+        if (decoded && looksLikeMapsUrl(decoded)) return decoded;
+    }
+
+    const source = safeString(html);
+    if (!source) return "";
+
+    const matches = source.match(/https?:\/\/[^\s"'<>\\]+/gi) || [];
+    for (const raw of matches) {
+        const candidate = normalizeFetchedUrl(
+            raw.replace(/[)\],.;"'<>\\]+$/g, "")
+        );
+        if (looksLikeMapsUrl(candidate)) return candidate;
+    }
+
+    return "";
+}
+
+async function fetchUrlFollowingRedirects(url, depth = 0) {
     const source = safeString(url);
     if (!source) {
         return {
@@ -444,6 +465,13 @@ async function fetchUrlFollowingRedirects(url) {
             html = await response.text();
         } catch {
             html = "";
+        }
+
+        if (finalUrl.includes("consent.google.com") && depth < 2) {
+            const realUrl = extractConsentContinueUrl(finalUrl, html);
+            if (realUrl) {
+                return fetchUrlFollowingRedirects(realUrl, depth + 1);
+            }
         }
 
         return {
@@ -544,6 +572,38 @@ async function resolveCoordsFromGoogleMapsUrl(url) {
                 lng: nestedCoords.lng,
                 source: "maps_nested_url",
                 resolvedUrl: nestedUrl,
+                geocodeQuery: "",
+            };
+        }
+
+        // Si la URL anidada es un shortlink (sin coords en texto), seguirla
+        const nestedFetched = await fetchUrlFollowingRedirects(nestedUrl);
+        const nestedFinalUrl = isNavigableGoogleMapsUrl(nestedFetched.finalUrl)
+            ? nestedFetched.finalUrl
+            : nestedUrl;
+
+        const nestedFromFinal = extractCoordsFromAnyText(nestedFinalUrl, {
+            treatAsAsset: isGoogleMapsStaticAssetUrl(nestedFinalUrl),
+        });
+        if (hasValidCoords(nestedFromFinal.lat, nestedFromFinal.lng)) {
+            return {
+                lat: nestedFromFinal.lat,
+                lng: nestedFromFinal.lng,
+                source: "maps_nested_redirect",
+                resolvedUrl: nestedFinalUrl,
+                geocodeQuery: "",
+            };
+        }
+
+        const nestedFromHtml = extractCoordsFromAnyText(nestedFetched.html, {
+            treatAsAsset: false,
+        });
+        if (hasValidCoords(nestedFromHtml.lat, nestedFromHtml.lng)) {
+            return {
+                lat: nestedFromHtml.lat,
+                lng: nestedFromHtml.lng,
+                source: "maps_nested_html",
+                resolvedUrl: nestedFinalUrl,
                 geocodeQuery: "",
             };
         }

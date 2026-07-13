@@ -232,7 +232,7 @@ Registro de bugs, errores resueltos, y patrones problemáticos. Sirve para no re
 
 **Estado:** Resuelto
 **Fecha:** 2026-07-13
-**Commit:** `34d67d4` (trackgo/functions)
+**Commit:** implementado en esta sesión (el commit `34d67d4` referenciado era incorrecto — el fix real fue documentado pero nunca aplicado al código)
 
 **Problema:** Links con parámetro `?g_st=aw` (Google Share Type = Android WhatsApp) enviados por prospectos no podían ser resueltos a coordenadas. El bot devolvía `source: "maps_unresolved"`, el lead quedaba sin `lat/lng` y sin ciudad asignada.
 
