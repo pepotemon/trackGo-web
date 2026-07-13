@@ -6,6 +6,14 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ---
 
+## 2026-07-13 (8)
+
+### fix(bot): parser no reconocía términos de negocio en español/Argentina
+- **Module:** `functions/src/bot/business.js`
+- **What changed:** Agregados ~30 términos de negocio en español argentino a `isLikelyBusinessLine` (peluquería, taller, ferretería, verdulería, carnicería, panadería, almacén, supermercado, heladería, etc.). Agregadas normalizaciones en `normalizeBusinessLabel` para cada uno. Los términos existentes solo tenían equivalentes en portugués (salão, barbearia, padaria) sin sus contrapartes en español.
+- **Why:** El parser devolvía `parsedBusiness = ""` para respuestas comunes en Argentina como "peluquería", "taller", etc. El bot quedaba en loop preguntando el tipo de negocio incluso luego de que el usuario ya lo había respondido.
+- **See:** —
+
 ## 2026-07-13 (7)
 
 ### fix(bot): respuesta inicial en portugués para número Argentina

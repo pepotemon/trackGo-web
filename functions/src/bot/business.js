@@ -328,6 +328,56 @@ function isLikelyBusinessLine(text) {
         "água de coco",
         "lojista",
         "comerciante",
+        // Spanish / Argentine terms
+        "peluqueria",
+        "peluquería",
+        "salon",
+        "taller",
+        "ferreteria",
+        "ferretería",
+        "verduleria",
+        "verdulería",
+        "carniceria",
+        "carnicería",
+        "panaderia",
+        "panadería",
+        "almacen",
+        "almacén",
+        "supermercado",
+        "minimercado",
+        "dietética",
+        "dietetica",
+        "libreria",
+        "librería",
+        "confiteria",
+        "confitería",
+        "lavanderia",
+        "lavandería",
+        "zapateria",
+        "zapatería",
+        "joyeria",
+        "joyería",
+        "heladeria",
+        "heladería",
+        "floristeria",
+        "floristería",
+        "carpinteria",
+        "carpintería",
+        "pintureria",
+        "pinturería",
+        "electronica",
+        "electrónica",
+        "muebleria",
+        "mueblería",
+        "papeleria",
+        "papelería",
+        "soderia",
+        "sodería",
+        "remiseria",
+        "remisería",
+        "estacion de servicio",
+        "estética",
+        "estetica",
     ]);
 }
 
@@ -410,6 +460,28 @@ function normalizeBusinessLabel(text) {
     if (s.includes("atelier")) return "Atelier";
     if (s.includes("loja")) return "Loja";
     if (s.includes("tienda")) return "Tienda";
+    if (includesAnyNormalized(s, ["peluqueria", "peluquería"])) return "Peluquería";
+    if (includesAnyNormalized(s, ["salon de belleza", "salon de belleza"])) return "Salón de belleza";
+    if (includesAnyNormalized(s, ["taller mecanico", "taller mecánico"])) return "Taller mecánico";
+    if (s.includes("taller")) return "Taller";
+    if (includesAnyNormalized(s, ["ferreteria", "ferretería"])) return "Ferretería";
+    if (includesAnyNormalized(s, ["verduleria", "verdulería"])) return "Verdulería";
+    if (includesAnyNormalized(s, ["carniceria", "carnicería"])) return "Carnicería";
+    if (includesAnyNormalized(s, ["panaderia", "panadería"])) return "Panadería";
+    if (includesAnyNormalized(s, ["almacen", "almacén"])) return "Almacén";
+    if (includesAnyNormalized(s, ["supermercado", "minimercado"])) return "Supermercado / minimercado";
+    if (includesAnyNormalized(s, ["dietética", "dietetica"])) return "Dietética";
+    if (includesAnyNormalized(s, ["libreria", "librería"])) return "Librería";
+    if (includesAnyNormalized(s, ["confiteria", "confitería"])) return "Confitería";
+    if (includesAnyNormalized(s, ["lavanderia", "lavandería"])) return "Lavandería";
+    if (includesAnyNormalized(s, ["zapateria", "zapatería"])) return "Zapatería";
+    if (includesAnyNormalized(s, ["joyeria", "joyería"])) return "Joyería";
+    if (includesAnyNormalized(s, ["heladeria", "heladería"])) return "Heladería";
+    if (includesAnyNormalized(s, ["floristeria", "floristería"])) return "Floristería";
+    if (includesAnyNormalized(s, ["carpinteria", "carpintería"])) return "Carpintería";
+    if (includesAnyNormalized(s, ["muebleria", "mueblería"])) return "Mueblería";
+    if (includesAnyNormalized(s, ["soderia", "sodería"])) return "Sodería";
+    if (includesAnyNormalized(s, ["remiseria", "remisería"])) return "Remisería";
     if (includesAnyNormalized(s, ["kiosco", "fonda"])) return raw;
     if (includesAnyNormalized(s, [
         "comercio de",
