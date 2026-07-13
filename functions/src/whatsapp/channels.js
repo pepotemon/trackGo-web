@@ -1,10 +1,12 @@
 const {
     WHATSAPP_PHONE_NUMBER_ID,
     WHATSAPP_PHONE_NUMBER_ID_PA,
+    WHATSAPP_PHONE_NUMBER_ID_AR,
 } = require("../config/params");
 const { safeString } = require("../utils/text");
 
 const FALLBACK_PANAMA_PHONE_NUMBER_ID = "1105131466013890";
+const FALLBACK_ARGENTINA_PHONE_NUMBER_ID = "1217681158095488";
 
 function buildChannel({
     phoneNumberId,
@@ -32,6 +34,10 @@ function getPanamaPhoneNumberId() {
     return safeString(WHATSAPP_PHONE_NUMBER_ID_PA.value()) || FALLBACK_PANAMA_PHONE_NUMBER_ID;
 }
 
+function getArgentinaPhoneNumberId() {
+    return safeString(WHATSAPP_PHONE_NUMBER_ID_AR.value()) || FALLBACK_ARGENTINA_PHONE_NUMBER_ID;
+}
+
 function getDefaultWhatsappChannel() {
     return buildChannel({
         phoneNumberId: getBrazilPhoneNumberId(),
@@ -53,12 +59,26 @@ function getPanamaWhatsappChannel(displayPhoneNumber = "") {
     });
 }
 
+function getArgentinaWhatsappChannel(displayPhoneNumber = "") {
+    return buildChannel({
+        phoneNumberId: getArgentinaPhoneNumberId(),
+        displayPhoneNumber,
+        marketCountry: "AR",
+        language: "es-AR",
+        countryNormalized: "argentina",
+        countryLabel: "Argentina",
+    });
+}
+
 function getWhatsappChannelByPhoneNumberId(phoneNumberId, displayPhoneNumber = "") {
     const id = safeString(phoneNumberId);
-    const panamaId = getPanamaPhoneNumberId();
 
-    if (id && id === panamaId) {
+    if (id && id === getPanamaPhoneNumberId()) {
         return getPanamaWhatsappChannel(displayPhoneNumber);
+    }
+
+    if (id && id === getArgentinaPhoneNumberId()) {
+        return getArgentinaWhatsappChannel(displayPhoneNumber);
     }
 
     const brId = getBrazilPhoneNumberId();
@@ -88,8 +108,16 @@ function getWhatsappChannelFromClient(client) {
     const id = safeString(client?.whatsappPhoneNumberId || "");
     const marketCountry = safeString(client?.marketCountry || "");
 
-    if (id || marketCountry === "PA") {
-        return getWhatsappChannelByPhoneNumberId(id || getPanamaPhoneNumberId());
+    if (id) {
+        return getWhatsappChannelByPhoneNumberId(id);
+    }
+
+    if (marketCountry === "PA") {
+        return getPanamaWhatsappChannel();
+    }
+
+    if (marketCountry === "AR") {
+        return getArgentinaWhatsappChannel();
     }
 
     return getDefaultWhatsappChannel();
@@ -97,9 +125,12 @@ function getWhatsappChannelFromClient(client) {
 
 module.exports = {
     FALLBACK_PANAMA_PHONE_NUMBER_ID,
+    FALLBACK_ARGENTINA_PHONE_NUMBER_ID,
     getPanamaPhoneNumberId,
+    getArgentinaPhoneNumberId,
     getDefaultWhatsappChannel,
     getPanamaWhatsappChannel,
+    getArgentinaWhatsappChannel,
     getWhatsappChannelByPhoneNumberId,
     getWhatsappChannelFromMetadata,
     getWhatsappChannelFromClient,

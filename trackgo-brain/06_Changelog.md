@@ -6,6 +6,14 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ---
 
+## 2026-07-13 (5)
+
+### feat(bot): implementar canal WhatsApp Argentina en functions
+- **Module:** `functions/src/config/params.js`, `functions/src/whatsapp/channels.js`
+- **What changed:** `WHATSAPP_PHONE_NUMBER_ID_AR` registrado como `defineString` en params. `getArgentinaPhoneNumberId()` y `getArgentinaWhatsappChannel()` agregados en channels. `getWhatsappChannelByPhoneNumberId()` reconoce el ID de AR. `getWhatsappChannelFromClient()` devuelve canal AR cuando `marketCountry === "AR"`. Fallback hardcodeado `1217681158095488` por si el param no está disponible en frío.
+- **Why:** El número AR estaba registrado en Meta Cloud API pero el código de functions nunca lo leía ni lo usaba — los mensajes salientes de AR habrían usado el canal de Brasil por defecto.
+- **See:** entrada (4) — registro WABA y PIN
+
 ## 2026-07-13 (4)
 
 ### chore(meta): configurar WABA Argentina y registrar número WhatsApp
