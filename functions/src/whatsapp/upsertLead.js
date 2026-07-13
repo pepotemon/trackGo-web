@@ -367,12 +367,12 @@ function buildMarketFields(channel, prev = {}, phone = "") {
         safeString(channel?.countryNormalized || "") ||
         safeString(prev?.marketCountryNormalized || "") ||
         safeString(inferred?.marketCountryNormalized || "") ||
-        (marketCountry === "PA" ? "panama" : "brasil");
+        (marketCountry === "PA" ? "panama" : marketCountry === "AR" ? "argentina" : "brasil");
     const marketCountryLabel =
         safeString(channel?.countryLabel || "") ||
         safeString(prev?.marketCountryLabel || "") ||
         safeString(inferred?.marketCountryLabel || "") ||
-        (marketCountry === "PA" ? "Panama" : "Brasil");
+        (marketCountry === "PA" ? "Panama" : marketCountry === "AR" ? "Argentina" : "Brasil");
 
     return {
         marketCountry,
@@ -494,7 +494,7 @@ function createUpsertLeadAsClient({
 
         const resolvedReverseGeo = hasValidCoords(lat, lng)
             ? await reverseGeoBrazil(lat, lng, now, {
-                acceptLanguage: marketFields.language === "es-PA" ? "es-PA" : "pt-BR",
+                acceptLanguage: safeString(marketFields.language || "").startsWith("es") ? marketFields.language : "pt-BR",
                 marketCountry: marketFields.marketCountry,
             })
             : buildEmptyReverseGeoBrazil();

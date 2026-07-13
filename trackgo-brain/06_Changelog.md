@@ -6,6 +6,14 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ---
 
+## 2026-07-13 (7)
+
+### fix(bot): respuesta inicial en portugués para número Argentina
+- **Module:** `functions/index.js`, `functions/src/whatsapp/upsertLead.js`, `functions/src/cron/reminderMissingInfo.js`
+- **What changed:** 4 puntos donde el idioma del canal solo chequeaba `=== "es-PA"` y dejaba `es-AR` caer al builder pt-BR. Cambiados todos a `.startsWith("es")`. Fallback de `marketCountryNormalized/Label` en `buildMarketFields` ahora incluye `"AR"` → `"argentina"/"Argentina"`. `acceptLanguage` para reverse geo pasa el idioma real (`es-AR`) en lugar de hardcodear solo `es-PA`.
+- **Why:** El número de Argentina tiene `language: "es-AR"` pero el selector de reply builder solo conocía `"es-PA"` — todos los leads de AR recibían el primer mensaje en portugués.
+- **See:** —
+
 ## 2026-07-13 (6)
 
 ### fix(resolver): implementar bypass consent.google.com y resolver URLs anidadas

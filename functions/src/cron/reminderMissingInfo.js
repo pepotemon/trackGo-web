@@ -151,7 +151,7 @@ function buildShortMissingInfoReminderEsPa(missingType, hasInterest) {
 }
 
 function buildShortMissingInfoReminder(missingType, language, hasInterest) {
-    if (safeString(language || "") === "es-PA") {
+    if (safeString(language || "").startsWith("es")) {
         return buildShortMissingInfoReminderEsPa(missingType, hasInterest);
     }
 

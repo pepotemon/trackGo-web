@@ -399,7 +399,7 @@ async function maybeReplyToLead({
 
     const channel = getWhatsappChannelFromClient(client);
     const reply =
-        channel.language === "es-PA"
+        safeString(channel?.language || "").startsWith("es")
             ? buildBotReplyEsPa({ client, messageType })
             : buildBotReplyPtBr({ client, messageType });
 
