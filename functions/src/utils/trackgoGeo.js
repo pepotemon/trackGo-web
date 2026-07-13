@@ -179,10 +179,104 @@ const TRACKGO_PANAMA_CITY_HUBS = [
     },
 ];
 
+const TRACKGO_ARGENTINA_CITY_HUBS = [
+    {
+        key: "resistencia",
+        label: "Resistencia",
+        cluster: "chaco",
+        lat: -27.4518,
+        lng: -58.9900,
+        radiusKm: 22,
+        hardRadiusKm: 44,
+    },
+    {
+        key: "corrientes",
+        label: "Corrientes",
+        cluster: "corrientes",
+        lat: -27.4691,
+        lng: -58.8306,
+        radiusKm: 22,
+        hardRadiusKm: 44,
+    },
+    {
+        key: "formosa",
+        label: "Formosa",
+        cluster: "formosa",
+        lat: -26.1775,
+        lng: -58.1781,
+        radiusKm: 20,
+        hardRadiusKm: 40,
+    },
+    {
+        key: "posadas",
+        label: "Posadas",
+        cluster: "misiones",
+        lat: -27.3671,
+        lng: -55.8960,
+        radiusKm: 20,
+        hardRadiusKm: 40,
+    },
+    {
+        key: "buenos_aires",
+        label: "Buenos Aires",
+        cluster: "buenos_aires",
+        lat: -34.6132,
+        lng: -58.3772,
+        radiusKm: 35,
+        hardRadiusKm: 70,
+    },
+    {
+        key: "cordoba",
+        label: "Córdoba",
+        cluster: "cordoba",
+        lat: -31.4167,
+        lng: -64.1833,
+        radiusKm: 26,
+        hardRadiusKm: 52,
+    },
+    {
+        key: "rosario",
+        label: "Rosario",
+        cluster: "rosario",
+        lat: -32.9468,
+        lng: -60.6393,
+        radiusKm: 24,
+        hardRadiusKm: 48,
+    },
+    {
+        key: "tucuman",
+        label: "Tucumán",
+        cluster: "tucuman",
+        lat: -26.8256,
+        lng: -65.2066,
+        radiusKm: 22,
+        hardRadiusKm: 44,
+    },
+    {
+        key: "salta",
+        label: "Salta",
+        cluster: "salta",
+        lat: -24.7821,
+        lng: -65.4232,
+        radiusKm: 22,
+        hardRadiusKm: 44,
+    },
+    {
+        key: "mendoza",
+        label: "Mendoza",
+        cluster: "mendoza",
+        lat: -32.8908,
+        lng: -68.8272,
+        radiusKm: 24,
+        hardRadiusKm: 48,
+    },
+];
+
 function getHubsForMarket(marketCountry) {
-    if (String(marketCountry || "").trim().toUpperCase() === "PA") {
-        return TRACKGO_PANAMA_CITY_HUBS;
-    }
+    const country = String(marketCountry || "").trim().toUpperCase();
+
+    if (country === "PA") return TRACKGO_PANAMA_CITY_HUBS;
+    if (country === "AR") return TRACKGO_ARGENTINA_CITY_HUBS;
 
     return TRACKGO_CITY_HUBS;
 }
@@ -275,6 +369,7 @@ function resolveTrackGoGeoFromCoords(lat, lng, now = Date.now(), marketCountry =
 module.exports = {
     TRACKGO_CITY_HUBS,
     TRACKGO_PANAMA_CITY_HUBS,
+    TRACKGO_ARGENTINA_CITY_HUBS,
     buildEmptyTrackGoGeo,
     resolveTrackGoGeoFromCoords,
 };

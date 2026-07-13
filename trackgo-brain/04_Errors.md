@@ -240,7 +240,7 @@ Registro de bugs, errores resueltos, y patrones problemáticos. Sirve para no re
 
 **Solución:** En `fetchUrlFollowingRedirects` (`googleMapsResolver.js`): si `finalUrl` contiene `consent.google.com`, llamar a `extractConsentContinueUrl()` que extrae la URL real de Maps desde el parámetro `continue` (caso habitual) o escaneando el HTML de la página de consent (fallback). Luego hacer un segundo fetch a esa URL para obtener el HTML/URL con coordenadas.
 
-**Lección:** `maps.app.goo.gl` no es solo un shortener — Google lo trata diferente server-side según el origen del share. Siempre verificar con un `fetch()` real antes de asumir que el redirect es trivial. El parámetro `g_st` indica el origen del share: `aw` = Android WhatsApp, `iw` = iOS WhatsApp.
+**Lección:** `maps.app.goo.gl` no es solo un shortener — Google lo trata diferente server-side según el origen del share. Siempre verificar con un `fetch()` real antes de asumir que el redirect es trivial. El parámetro `g_st` indica el origen del share: `aw` = Android WhatsApp, `iw` = iOS WhatsApp. **No correr `extractCoordsFromAnyText` sobre HTML crudo** — el HTML de páginas de Maps o de consent puede contener coords de lugares ajenos en scripts/links y se captura el match incorrecto. Usar solo `extractCoordsFromHtmlMeta` (structured JSON-LD/meta) + `extractMapsUrlsFromHtml` (URLs navegables). **`extractConsentContinueUrl` no debe escanear todas las URLs del HTML** — solo buscar en parámetros URL y en inputs hidden de formulario.
 
 ---
 

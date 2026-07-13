@@ -278,7 +278,7 @@ function extractTextCandidatesFromHtml(html) {
     return Array.from(new Set(candidates.filter(Boolean)));
 }
 
-function buildGeocodeQueries(finalUrl, html) {
+function buildGeocodeQueries(finalUrl, html, marketCountry = "BR") {
     const queries = [];
     const fromUrl = extractPlaceTextFromUrl(finalUrl);
     const fromHtml = extractTextCandidatesFromHtml(html);
@@ -290,40 +290,68 @@ function buildGeocodeQueries(finalUrl, html) {
     }
 
     const unique = Array.from(new Set(queries.filter(Boolean)));
+    const config = getMarketGeocodeConfig(marketCountry);
+    const suffix = config.countrySuffix;
+    const suffixLower = suffix.toLowerCase();
 
     const expanded = [];
     for (const q of unique) {
         expanded.push(q);
 
         const normalized = normalizeLooseText(q);
-        if (
-            normalized &&
-            !normalized.includes("brasil") &&
-            !normalized.includes("brazil") &&
-            !normalized.includes("goias") &&
-            !normalized.includes("goiás") &&
-            !normalized.includes("para") &&
-            !normalized.includes("pará") &&
-            !normalized.includes("amazonas") &&
-            !normalized.includes("minas gerais") &&
-            !normalized.includes("parana") &&
-            !normalized.includes("paraná") &&
-            !normalized.includes("pernambuco") &&
-            !normalized.includes("rio grande do norte") &&
-            !normalized.includes("maranhao") &&
-            !normalized.includes("maranhão")
-        ) {
-            expanded.push(`${q}, Brasil`);
+        if (normalized && !normalized.includes(suffixLower)) {
+            expanded.push(`${q}, ${suffix}`);
         }
     }
 
     return Array.from(new Set(expanded.filter(Boolean)));
 }
 
-function looksSpecificEnoughForBrazilGeocode(query) {
+const MARKET_GEOCODE_CONFIG = {
+    AR: {
+        countrycodes: "ar",
+        acceptLanguage: "es-AR",
+        viewbox: "-73.56,-21.78,-53.63,-55.06",
+        countrySuffix: "Argentina",
+        placeHints: [
+            "resistencia", "corrientes", "posadas", "formosa", "tucuman",
+            "cordoba", "rosario", "buenos aires", "mendoza", "salta",
+            "neuquen", "mar del plata", "chaco", "misiones",
+        ],
+    },
+    PA: {
+        countrycodes: "pa",
+        acceptLanguage: "es-PA",
+        viewbox: "-83.05,11.21,-77.20,7.20",
+        countrySuffix: "Panama",
+        placeHints: [
+            "panama", "colon", "david", "santiago", "chitre", "penonome",
+            "la chorrera", "san miguelito", "arraijan",
+        ],
+    },
+    BR: {
+        countrycodes: "br",
+        acceptLanguage: "pt-BR",
+        viewbox: "-73.99,5.27,-34.79,-33.75",
+        countrySuffix: "Brasil",
+        placeHints: [
+            "belem", "belém", "ananindeua", "marituba", "castanhal",
+            "para", "pará", "goiania", "goiânia", "manaus", "natal",
+            "recife", "curitiba", "belo horizonte", "sao luis", "são luís", "brasil",
+        ],
+    },
+};
+
+function getMarketGeocodeConfig(marketCountry) {
+    const key = String(marketCountry || "BR").toUpperCase();
+    return MARKET_GEOCODE_CONFIG[key] || MARKET_GEOCODE_CONFIG.BR;
+}
+
+function looksSpecificEnoughForGeocode(query, marketCountry = "BR") {
     const q = normalizeLooseText(query);
     if (!q) return false;
 
+    const config = getMarketGeocodeConfig(marketCountry);
     const hasNumber = /\b\d{1,6}\b/.test(q);
 
     const hasStreetWord =
@@ -331,51 +359,35 @@ function looksSpecificEnoughForBrazilGeocode(query) {
         q.includes("avenida") ||
         q.includes("av ") ||
         q.includes("av. ") ||
+        q.includes("calle ") ||
         q.includes("travessa") ||
         q.includes("alameda") ||
         q.includes("estrada") ||
         q.includes("rodovia") ||
-        q.includes("bairro");
+        q.includes("bairro") ||
+        q.includes("barrio") ||
+        q.includes("ruta ");
 
-    const hasBrazilPlaceHint =
-        q.includes("belem") ||
-        q.includes("belém") ||
-        q.includes("ananindeua") ||
-        q.includes("marituba") ||
-        q.includes("castanhal") ||
-        q.includes("para") ||
-        q.includes("pará") ||
-        q.includes("/pa") ||
-        q.includes(" - pa") ||
-        q.includes("goiania") ||
-        q.includes("goiânia") ||
-        q.includes("manaus") ||
-        q.includes("natal") ||
-        q.includes("recife") ||
-        q.includes("curitiba") ||
-        q.includes("belo horizonte") ||
-        q.includes("sao luis") ||
-        q.includes("são luís") ||
-        q.includes("brasil");
+    if (hasStreetWord && hasNumber) return true;
 
-    return (hasStreetWord && hasNumber) || hasBrazilPlaceHint;
+    return config.placeHints.some((hint) => q.includes(hint));
 }
 
-async function geocodeTextInBrazil(query) {
+async function geocodeTextForMarket(query, marketCountry = "BR") {
     const q = cleanupCandidateText(query);
-    if (!q) {
-        return { lat: null, lng: null, label: "" };
-    }
+    if (!q) return { lat: null, lng: null, label: "" };
+
+    const config = getMarketGeocodeConfig(marketCountry);
 
     const url =
         `https://nominatim.openstreetmap.org/search` +
         `?q=${encodeURIComponent(q)}` +
         `&format=jsonv2` +
         `&limit=3` +
-        `&countrycodes=br` +
+        `&countrycodes=${config.countrycodes}` +
         `&addressdetails=1` +
-        `&accept-language=pt-BR` +
-        `&viewbox=-73.99,5.27,-34.79,-33.75`;
+        `&accept-language=${config.acceptLanguage}` +
+        `&viewbox=${config.viewbox}`;
 
     try {
         const response = await fetch(url, {
@@ -386,9 +398,7 @@ async function geocodeTextInBrazil(query) {
             },
         });
 
-        if (!response.ok) {
-            return { lat: null, lng: null, label: q };
-        }
+        if (!response.ok) return { lat: null, lng: null, label: q };
 
         const data = await response.json();
         const results = Array.isArray(data) ? data : [];
@@ -400,14 +410,10 @@ async function geocodeTextInBrazil(query) {
             const displayName = safeString(item?.display_name || "");
 
             if (!hasValidCoords(lat, lng)) continue;
-            if (countryCode !== "br") continue;
+            if (countryCode !== config.countrycodes) continue;
             if (!displayName) continue;
 
-            return {
-                lat,
-                lng,
-                label: q,
-            };
+            return { lat, lng, label: q };
         }
 
         return { lat: null, lng: null, label: q };
@@ -417,21 +423,34 @@ async function geocodeTextInBrazil(query) {
 }
 
 function extractConsentContinueUrl(finalUrl, html) {
-    const urlMatch = safeString(finalUrl).match(/[?&]continue=([^&]+)/i);
-    if (urlMatch?.[1]) {
-        const decoded = normalizeFetchedUrl(tryDecode(urlMatch[1]));
-        if (decoded && looksLikeMapsUrl(decoded)) return decoded;
+    const paramNames = ["continue", "redirect", "destination", "next", "return"];
+    const urlStr = safeString(finalUrl);
+
+    for (const name of paramNames) {
+        const re = new RegExp(`[?&]${name}=([^&]+)`, "i");
+        const match = urlStr.match(re);
+        if (match?.[1]) {
+            const decoded = normalizeFetchedUrl(tryDecode(match[1]));
+            if (decoded && looksLikeMapsUrl(decoded)) return decoded;
+        }
     }
 
     const source = safeString(html);
     if (!source) return "";
 
-    const matches = source.match(/https?:\/\/[^\s"'<>\\]+/gi) || [];
-    for (const raw of matches) {
-        const candidate = normalizeFetchedUrl(
-            raw.replace(/[)\],.;"'<>\\]+$/g, "")
-        );
-        if (looksLikeMapsUrl(candidate)) return candidate;
+    // Only look for hidden form inputs — not arbitrary Maps URLs in the page
+    for (const name of paramNames) {
+        const patterns = [
+            new RegExp(`<input[^>]+name=["']${name}["'][^>]+value=["']([^"']+)["']`, "i"),
+            new RegExp(`<input[^>]+value=["']([^"']+)["'][^>]+name=["']${name}["']`, "i"),
+        ];
+        for (const pattern of patterns) {
+            const m = source.match(pattern);
+            if (m?.[1]) {
+                const decoded = normalizeFetchedUrl(tryDecode(m[1]));
+                if (decoded && looksLikeMapsUrl(decoded)) return decoded;
+            }
+        }
     }
 
     return "";
@@ -490,7 +509,7 @@ async function fetchUrlFollowingRedirects(url, depth = 0) {
     }
 }
 
-async function resolveCoordsFromGoogleMapsUrl(url) {
+async function resolveCoordsFromGoogleMapsUrl(url, marketCountry = "BR") {
     const originalUrl = normalizeFetchedUrl(url);
 
     if (!originalUrl || !isNavigableGoogleMapsUrl(originalUrl)) {
@@ -534,19 +553,7 @@ async function resolveCoordsFromGoogleMapsUrl(url) {
         };
     }
 
-    const fromHtml = extractCoordsFromAnyText(fetched.html, {
-        treatAsAsset: false,
-    });
-    if (hasValidCoords(fromHtml.lat, fromHtml.lng)) {
-        return {
-            lat: fromHtml.lat,
-            lng: fromHtml.lng,
-            source: "maps_html_text",
-            resolvedUrl: finalNavigableUrl,
-            geocodeQuery: "",
-        };
-    }
-
+    // Use structured meta tags only — NOT raw HTML text (too broad, picks up wrong coords)
     const fromHtmlMeta = extractCoordsFromHtmlMeta(fetched.html);
     if (hasValidCoords(fromHtmlMeta.lat, fromHtmlMeta.lng)) {
         return {
@@ -576,7 +583,6 @@ async function resolveCoordsFromGoogleMapsUrl(url) {
             };
         }
 
-        // Si la URL anidada es un shortlink (sin coords en texto), seguirla
         const nestedFetched = await fetchUrlFollowingRedirects(nestedUrl);
         const nestedFinalUrl = isNavigableGoogleMapsUrl(nestedFetched.finalUrl)
             ? nestedFetched.finalUrl
@@ -609,17 +615,14 @@ async function resolveCoordsFromGoogleMapsUrl(url) {
         }
     }
 
-    const geocodeQueries = buildGeocodeQueries(
-        finalNavigableUrl,
-        fetched.html
-    );
+    const geocodeQueries = buildGeocodeQueries(finalNavigableUrl, fetched.html, marketCountry);
 
     for (const query of geocodeQueries) {
-        if (!looksSpecificEnoughForBrazilGeocode(query)) {
+        if (!looksSpecificEnoughForGeocode(query, marketCountry)) {
             continue;
         }
 
-        const geocoded = await geocodeTextInBrazil(query);
+        const geocoded = await geocodeTextForMarket(query, marketCountry);
         if (hasValidCoords(geocoded.lat, geocoded.lng)) {
             return {
                 lat: geocoded.lat,

@@ -6,6 +6,21 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ---
 
+## 2026-07-13 (10)
+
+### fix(resolver): ciudad "Natal" incorrecta en leads de Argentina y otros
+- **Module:** `functions/src/utils/googleMapsResolver.js`, `functions/src/utils/trackgoGeo.js`, `functions/src/whatsapp/upsertLead.js`
+- **What changed:**
+  1. Eliminado el paso `fromHtml = extractCoordsFromAnyText(fetched.html)` de `resolveCoordsFromGoogleMapsUrl` — ese paso corría patrones de coordenadas sobre el HTML crudo completo, pudiendo matchear coords de Natal (u otra ciudad) embebidas en scripts/links de la página.
+  2. `extractConsentContinueUrl` ya no escanea todas las URLs del HTML de consent.google.com como fallback. Ahora solo busca en parámetros URL (`continue`, `redirect`, `destination`, `next`, `return`) e inputs hidden de formulario — evita capturar una URL de Maps equivocada que referencie otra ciudad.
+  3. `geocodeTextInBrazil` reemplazada por `geocodeTextForMarket(query, marketCountry)` con configuración por país: usa `countrycodes=ar` + `accept-language=es-AR` + bounding box de Argentina para leads AR, y equivalentes para PA/BR.
+  4. `buildGeocodeQueries` recibe `marketCountry` y agrega el sufijo correcto al query (`, Argentina` en vez de `, Brasil`).
+  5. `looksSpecificEnoughForBrazilGeocode` reemplazada por `looksSpecificEnoughForGeocode(query, marketCountry)` con placeHints por país.
+  6. `resolveCoordsFromGoogleMapsUrl` y `resolveEffectiveCoords` reciben `marketCountry` y lo propagan.
+  7. `trackgoGeo.js`: agregada `TRACKGO_ARGENTINA_CITY_HUBS` (Resistencia, Corrientes, Formosa, Posadas, Buenos Aires, Córdoba, Rosario, Tucumán, Salta, Mendoza). `getHubsForMarket("AR")` ahora devuelve estos hubs en vez de caer a los hubs de Brasil.
+- **Why:** Links `maps.app.goo.gl?g_st=iw` (iOS WhatsApp) y otros shortlinks siempre resolvían "Natal" como ciudad. El HTML de la página de consent o del redirect intermedio contenía coordenadas de Natal en algún script/link, y `extractCoordsFromAnyText` sobre HTML crudo las capturaba antes de que se pudiera encontrar la URL correcta. Además, los leads de Argentina no tenían hubs propios — `getHubsForMarket("AR")` devolvía hubs de Brasil.
+- **See:** [[04_Errors#ERR-016]]
+
 ## 2026-07-13 (9)
 
 ### fix(bot): catch-all estricto para tipos de negocio no reconocidos

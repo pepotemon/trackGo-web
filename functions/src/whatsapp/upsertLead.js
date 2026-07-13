@@ -243,7 +243,7 @@ function extractCoordsFromMapsUrl(url) {
     }
 }
 
-async function resolveEffectiveCoords(locationLat, locationLng, originalMapsUrl) {
+async function resolveEffectiveCoords(locationLat, locationLng, originalMapsUrl, marketCountry = "BR") {
     const originalClean = safeString(originalMapsUrl || "");
 
     if (hasValidCoords(locationLat, locationLng)) {
@@ -278,7 +278,7 @@ async function resolveEffectiveCoords(locationLat, locationLng, originalMapsUrl)
     }
 
     try {
-        const resolved = await resolveCoordsFromGoogleMapsUrl(originalClean);
+        const resolved = await resolveCoordsFromGoogleMapsUrl(originalClean, marketCountry);
 
         if (hasValidCoords(resolved?.lat, resolved?.lng)) {
             const publicMapsUrl = buildSafePublicMapsUrl({
@@ -462,7 +462,8 @@ function createUpsertLeadAsClient({
         const effectiveCoords = await resolveEffectiveCoords(
             rawLocationLat,
             rawLocationLng,
-            inboundOriginalMapsUrl
+            inboundOriginalMapsUrl,
+            marketFields.marketCountry
         );
 
         const lat = effectiveCoords.lat;
