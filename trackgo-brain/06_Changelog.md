@@ -6,6 +6,14 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ---
 
+## 2026-07-13 (4)
+
+### chore(meta): configurar WABA Argentina y registrar número WhatsApp
+- **Module:** `functions/.env.trackgo-f2461`, Meta Business Manager (manual)
+- **What changed:** WABA Argentina (`1558135945992315`) suscrita al webhook de TrackGo (`POST /subscribed_apps → {success:true}`). Número `+54 9 362 519-2845` (Phone Number ID `1217681158095488`) registrado en Cloud API con PIN `171866` (`POST /register → {success:true}`). Ambos valores guardados en `.env.trackgo-f2461` (`WHATSAPP_PHONE_NUMBER_ID_AR`, `WHATSAPP_PIN_AR`).
+- **Why:** El número de Argentina estaba en estado "no registrado" en Meta — sin registro Cloud API el bot no puede enviar mensajes. La WABA tampoco estaba suscrita al webhook de la app TrackGo.
+- **See:** —
+
 ## 2026-07-13 (3)
 
 ### fix(resolver): bypassear consent.google.com al resolver links maps.app.goo.gl
