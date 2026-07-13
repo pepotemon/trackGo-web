@@ -6,6 +6,24 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ---
 
+## 2026-07-13 (2)
+
+### feat(bot): soporte de canal WhatsApp Argentina (número dedicado)
+- **Module:** `functions/src/config/params.js`, `functions/src/whatsapp/channels.js`, `functions/index.js`
+- **What changed:** Agregado canal Argentina al bot de Firebase Functions. `WHATSAPP_PHONE_NUMBER_ID_AR` como nuevo param. `getArgentinaWhatsappChannel()` con `marketCountry: "AR"`, `language: "es-AR"`, `countryNormalized: "argentina"`. El router de respuestas del bot trata `es-AR` igual que `es-PA` (mismo builder en español). Mensajes pre-cargados de WhatsApp en el mapa del vendor cambiados de portugués a español.
+- **Why:** Expansión de operaciones a Argentina con número de WhatsApp dedicado.
+- **See:** [[04_Errors#ERR-015]]
+
+## 2026-07-13
+
+### fix(coverage): soporte de Argentina en matching de cobertura y prefijos de teléfono
+- **Module:** `features/leads/coverageMatching.ts`, `lib/phoneCoverage.ts`, `lib/phonePrefixes.ts`
+- **What changed:** Tres fixes para que Argentina funcione como país de campaña: (1) `leadCountry()` ahora usa un mapa `MARKET_COUNTRY_CODE` que incluye `AR → argentina`; (2) `extractPhoneCoverageCode` reconoce el prefijo `54` via `LATAM_2_DIGIT_COUNTRY_CODES`; (3) `LATAM_COUNTRIES` incluye `54 → Argentina` para filtros del admin.
+- **Why:** Expansión de operaciones a Argentina. Antes, leads argentinos sin `geoAdminCountryNormalized` caían al fallback "brasil" y no matcheaban ninguna cobertura.
+- **See:** [[04_Errors#ERR-015]]
+
+---
+
 ## 2026-06-29
 
 ### fix(bot): evitar race condition que borraba currentLeadMapsConfirmedAt

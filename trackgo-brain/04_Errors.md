@@ -209,6 +209,25 @@ Registro de bugs, errores resueltos, y patrones problemáticos. Sirve para no re
 
 ---
 
+## ERR-015: País Argentina no reconocido en matching de cobertura y prefijos de teléfono
+
+**Estado:** Resuelto
+**Fecha:** 2026-07-13
+
+**Problema:** Tres gaps al expandir operaciones a Argentina:
+1. `coverageMatching.ts` — `leadCountry()` tenía hardcodeado solo `"PA"` → `"panama"`. Leads de Argentina sin `adminCountryNormalized` caían al fallback `"brasil"` y no matcheaban cobertura Argentina.
+2. `phoneCoverage.ts` — `INTL_COUNTRY_CODES` solo tiene códigos de 3 dígitos. El `"54"` de Argentina (2 dígitos) devolvía `null` en `extractPhoneCoverageCode`, rompiendo filtros por prefijo.
+3. `phonePrefixes.ts` — `LATAM_COUNTRIES` no tenía `"54": "Argentina"`, así que no aparecía como opción de filtro en el admin.
+
+**Solución:**
+- `coverageMatching.ts`: reemplazado el ternario hardcodeado por `MARKET_COUNTRY_CODE: Record<string, string>` con `BR`, `PA`, `AR`.
+- `phoneCoverage.ts`: agregado `LATAM_2_DIGIT_COUNTRY_CODES = ["54"]` con su propio loop después del de 3 dígitos.
+- `phonePrefixes.ts`: agregado `"54": "Argentina"` a `LATAM_COUNTRIES`.
+
+**Lección:** Al agregar un país nuevo, revisar estos tres archivos: `coverageMatching.ts`, `phoneCoverage.ts`, `phonePrefixes.ts`. El patrón de `LATAM_2_DIGIT_COUNTRY_CODES` está disponible para futuros países con código de 2 dígitos (MX=52, CL=56, CO=57, VE=58).
+
+---
+
 ## Patrones problemáticos a evitar
 
 ### No usar `leads` en UI

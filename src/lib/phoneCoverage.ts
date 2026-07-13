@@ -1,4 +1,5 @@
 const INTL_COUNTRY_CODES = ["507", "502", "503", "504", "505", "506", "509", "593", "591", "595", "598"];
+const LATAM_2_DIGIT_COUNTRY_CODES = ["54"];
 
 function digits(value: unknown) {
     return String(value ?? "").replace(/\D+/g, "");
@@ -15,6 +16,10 @@ export function extractPhoneCoverageCode(phone: unknown): string | null {
     }
 
     for (const cc of INTL_COUNTRY_CODES) {
+        if (value.startsWith(cc)) return cc;
+    }
+
+    for (const cc of LATAM_2_DIGIT_COUNTRY_CODES) {
         if (value.startsWith(cc)) return cc;
     }
 

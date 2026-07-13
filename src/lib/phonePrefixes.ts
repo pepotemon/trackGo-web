@@ -77,6 +77,7 @@ const BRAZIL_DDDS: Record<string, string> = {
 };
 
 const LATAM_COUNTRIES: Record<string, string> = {
+    "54": "Argentina",
     "502": "Guatemala",
     "503": "El Salvador",
     "504": "Honduras",

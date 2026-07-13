@@ -16,7 +16,7 @@ import {
     REJECTED_REASON_LABELS,
     type RejectedReason,
 } from "@/types/userLeads";
-import { buildWhatsAppUrl } from "@/lib/whatsapp";
+import { buildWhatsAppUrl, normalizeWhatsAppPhone } from "@/lib/whatsapp";
 import { getWhatsAppSentIds, markWhatsAppSent } from "@/lib/userContactState";
 import { useBackButtonDismiss } from "@/hooks/useBackButtonDismiss";
 import { useWhatsAppDailyLimit } from "@/hooks/useWhatsAppDailyLimit";
@@ -265,16 +265,14 @@ function MapPageInner() {
     }
 
     function openWhatsApp(lead: MetaLeadDoc) {
-        const fixedUrl = buildWhatsAppUrl(lead.phone, `Olá, ${lead.name || "tudo bem"}! Estou entrando em contato sobre seu interesse.`);
+        const waMessage = `Hola${lead.name ? `, ${lead.name}` : ""}! Me comunico por tu interés.`;
+        const url = buildWhatsAppUrl(lead.phone, waMessage) ||
+            (() => {
+                const normalized = normalizeWhatsAppPhone(lead.phone);
+                return normalized ? `https://wa.me/${normalized}?text=${encodeURIComponent(waMessage)}` : "";
+            })();
         triggerWa(() => {
-            if (fixedUrl) {
-                window.open(fixedUrl, "_blank");
-            } else {
-                const phone = lead.phone.replace(/\D/g, "");
-                const br = phone.startsWith("55") ? phone : `55${phone}`;
-                const msg = encodeURIComponent(`Olá, ${lead.name || "tudo bem"}! Estou entrando em contato sobre seu interesse.`);
-                window.open(`https://wa.me/${br}?text=${msg}`, "_blank");
-            }
+            if (url) window.open(url, "_blank");
             markWhatsAppSent(lead.id);
             setWaSent((prev) => new Set(prev).add(lead.id));
         });

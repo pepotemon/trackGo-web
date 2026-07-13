@@ -88,12 +88,19 @@ export function userCoverageLabel(user: UserDoc) {
         .join(" - ");
 }
 
+const MARKET_COUNTRY_CODE: Record<string, string> = {
+    BR: "brasil",
+    PA: "panama",
+    AR: "argentina",
+};
+
 function leadCountry(lead: MetaLeadDoc) {
     const marketCountry = s(lead.raw.marketCountry);
     return (
         sn(lead.location.adminCountryNormalized) ||
         sn(lead.raw.marketCountryNormalized) ||
-        (marketCountry === "PA" ? "panama" : "brasil")
+        MARKET_COUNTRY_CODE[marketCountry] ||
+        "brasil"
     );
 }
 
