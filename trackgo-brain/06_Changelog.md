@@ -6,6 +6,14 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ---
 
+## 2026-07-13 (3)
+
+### fix(resolver): bypassear consent.google.com al resolver links maps.app.goo.gl
+- **Module:** `functions/src/utils/googleMapsResolver.js`
+- **What changed:** `fetchUrlFollowingRedirects` detecta si el redirect aterrizó en `consent.google.com` y extrae la URL real de Maps desde el parámetro `continue` de la URL o del HTML de la página de consent. Luego hace un segundo fetch a esa URL para continuar la cadena normal de resolución de coordenadas.
+- **Why:** Links compartidos desde WhatsApp Android (`?g_st=aw`) redirigían server-side a consent.google.com, bloqueando la resolución de coordenadas y dejando leads sin ciudad asignada.
+- **See:** [[04_Errors#ERR-016]]
+
 ## 2026-07-13 (2)
 
 ### feat(bot): soporte de canal WhatsApp Argentina (número dedicado)

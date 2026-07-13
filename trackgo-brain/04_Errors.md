@@ -228,6 +228,22 @@ Registro de bugs, errores resueltos, y patrones problemáticos. Sirve para no re
 
 ---
 
+## ERR-016: Links maps.app.goo.gl compartidos desde WhatsApp Android no resuelven coordenadas
+
+**Estado:** Resuelto
+**Fecha:** 2026-07-13
+**Commit:** `34d67d4` (trackgo/functions)
+
+**Problema:** Links con parámetro `?g_st=aw` (Google Share Type = Android WhatsApp) enviados por prospectos no podían ser resueltos a coordenadas. El bot devolvía `source: "maps_unresolved"`, el lead quedaba sin `lat/lng` y sin ciudad asignada.
+
+**Causa raíz:** Al hacer `fetch()` server-side sin cookies de browser, Google redirige `maps.app.goo.gl` → `consent.google.com/m?continue=https://www.google.com/maps/...` en lugar de ir directo a Maps. `consent.google.com` no es reconocida como URL de Maps por `isNavigableGoogleMapsUrl()`, así que `finalNavigableUrl` volvía al URL corto original — que tampoco tiene coordenadas.
+
+**Solución:** En `fetchUrlFollowingRedirects` (`googleMapsResolver.js`): si `finalUrl` contiene `consent.google.com`, llamar a `extractConsentContinueUrl()` que extrae la URL real de Maps desde el parámetro `continue` (caso habitual) o escaneando el HTML de la página de consent (fallback). Luego hacer un segundo fetch a esa URL para obtener el HTML/URL con coordenadas.
+
+**Lección:** `maps.app.goo.gl` no es solo un shortener — Google lo trata diferente server-side según el origen del share. Siempre verificar con un `fetch()` real antes de asumir que el redirect es trivial. El parámetro `g_st` indica el origen del share: `aw` = Android WhatsApp, `iw` = iOS WhatsApp.
+
+---
+
 ## Patrones problemáticos a evitar
 
 ### No usar `leads` en UI
