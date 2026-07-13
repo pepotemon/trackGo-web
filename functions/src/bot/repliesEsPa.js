@@ -15,7 +15,7 @@ function buildIntroMessageEsPa() {
     return [
         "Hola, gracias por contactarnos.",
         "",
-        "Trabajamos con microcredito comercial para duenos de negocios activos.",
+        "Trabajamos con microcredito comercial para dueños de negocios activos.",
         "",
         "¿Cuentas con un negocio propio activo?",
     ].join("\n");
@@ -56,7 +56,7 @@ function buildNotSuitableReplyEsPa(reason) {
     return [
         "Gracias por contactarnos.",
         "",
-        "Por ahora trabajamos solo con duenos de negocios activos.",
+        "Por ahora trabajamos solo con dueños de negocios activos.",
         reason ? `Motivo identificado: ${reason}.` : "",
         "",
         "Por eso no podemos continuar el analisis con este perfil.",

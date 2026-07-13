@@ -6,6 +6,14 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ---
 
+## 2026-07-13 (11)
+
+### fix(bot): corregir "ñ" faltante en mensajes del bot en español
+- **Module:** `functions/src/bot/repliesEsPa.js`
+- **What changed:** Corregidas 2 ocurrencias de `duenos` → `dueños` en mensajes enviados a prospectos: `buildIntroMessageEsPa` (mensaje de bienvenida) y `buildNotSuitableReplyEsPa` (mensaje de cierre). Aplica a Panama y Argentina.
+- **Why:** Los mensajes llegaban con "duenos de negocios" en lugar de "dueños de negocios", lo que se ve poco profesional y mal escrito en español.
+- **See:** —
+
 ## 2026-07-13 (10)
 
 ### fix(resolver): ciudad "Natal" incorrecta en leads de Argentina y otros
