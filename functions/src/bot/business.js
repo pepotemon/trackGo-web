@@ -642,7 +642,59 @@ function isPossibleBusinessFallbackTextFactory({ looksLikePersonName }) {
             return true;
         }
 
-        return false;
+        // Catch-all: acepta cualquier texto que no haya sido rechazado arriba,
+        // siempre que pase un filtro muy estricto de palabras no-negocio.
+        if (s.length < 4) return false;
+        if (!/[a-zA-ZÀ-ÿ]{2}/.test(v)) return false; // necesita al menos 2 letras consecutivas
+
+        const nonBusinessExact = [
+            // afirmaciones / negaciones
+            "si", "sí", "no", "nop", "nope", "ok", "oke", "okey", "dale",
+            "bueno", "bien", "claro", "listo", "sale", "va", "ya", "obvio",
+            "igual", "perfecto", "entendido", "entendi", "certo", "correcto",
+            "correto", "exacto", "exactamente", "exactamente", "de acuerdo",
+            "de acordo", "por supuesto", "claro que si", "claro que sí",
+            // saludos / despedidas
+            "hola", "ola", "hi", "hey", "buenas", "buenos dias", "buenos días",
+            "buen dia", "buen día", "buenas tardes", "buenas noches",
+            "chau", "chao", "bye", "adios", "adiós", "hasta luego",
+            "bom dia", "boa tarde", "boa noite", "oi", "tchau",
+            // agradecimientos
+            "gracias", "grax", "muchas gracias", "muy amable",
+            "obrigado", "obrigada", "muito obrigado", "muito obrigada",
+            // esperas / tiempo
+            "espera", "espere", "un momento", "un segundo", "ahorita",
+            "ahora", "luego", "despues", "después", "manana", "mañana",
+            "hoy", "antes", "ya voy", "voy", "ya llego",
+            // expresiones / relleno
+            "jaja", "jeje", "jajaja", "jejeje", "haha", "lol", "xd",
+            "wow", "uy", "ay", "ahi", "ahí", "aca", "acá",
+            "vamos", "veamos", "genial", "super", "súper", "excelente",
+            "que bien", "qué bien", "muy bien", "todo bien",
+            // intenciones / interés
+            "me interesa", "quisiera", "quiero saber", "quiero informacion",
+            "quiero información", "necesito informacion", "necesito información",
+            "tengo interes", "tengo interés", "tengo interesse",
+            // respuestas simples de contexto
+            "no sé", "no se", "no sé bien", "no tengo", "no tengo negocio",
+            "todavia no", "todavía no", "ainda nao", "ainda não",
+            "ninguno", "ninguna", "nada",
+        ];
+
+        const sNorm = s;
+        if (nonBusinessExact.some((t) => sNorm === normalizeLooseText(t))) return false;
+
+        // rechaza frases que empiezan con palabras de intención, no de negocio
+        const nonBusinessPrefixes = [
+            "quiero ", "quero ", "necesito ", "preciso ", "busco ",
+            "me gustaria ", "me gustaría ", "gostaria ", "quisiera ",
+            "estoy buscando ", "estoy interesado", "estou interessado",
+            "como puedo ", "cómo puedo ", "como posso ", "como funciona",
+            "cuanto ", "cuánto ", "quanto ", "cuando ", "cuándo ", "quando ",
+        ];
+        if (nonBusinessPrefixes.some((p) => sNorm.startsWith(normalizeLooseText(p)))) return false;
+
+        return true;
     };
 }
 

@@ -6,6 +6,14 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ---
 
+## 2026-07-13 (9)
+
+### fix(bot): catch-all estricto para tipos de negocio no reconocidos
+- **Module:** `functions/src/bot/business.js`
+- **What changed:** `isPossibleBusinessFallbackText` ahora termina con un catch-all: si el texto tiene ≥4 chars, al menos 2 letras consecutivas, y NO es una palabra de la lista de rechazo (afirmaciones, saludos, despedidas, agradecimientos, rellenos, frases de intención), se acepta como negocio. Lista de ~60 tokens/frases no-negocio en español y portugués.
+- **Why:** La lista hardcodeada de negocios nunca puede ser completa. "peluquería", "acopio", "vivero", etc. no estaban y el bot pedía el tipo en loop. Ahora acepta cualquier tipo de negocio nuevo sin requerir modificar el código.
+- **See:** entrada (8) de hoy
+
 ## 2026-07-13 (8)
 
 ### fix(bot): parser no reconocía términos de negocio en español/Argentina
