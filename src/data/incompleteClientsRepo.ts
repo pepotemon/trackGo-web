@@ -37,6 +37,7 @@ export const BRAZIL_DDDS: Record<string, string> = {
 };
 
 const INTL_COUNTRY_CODES = ["507","502","503","504","505","506","509","593","591","595","598"];
+const LATAM_2DIGIT_CC = ["54"];
 const INCOMPLETE_STATUSES = ["pending_review", "incomplete"] as const;
 const RECOVERY_WAIT_MS = 24 * 60 * 60 * 1000;
 
@@ -44,6 +45,7 @@ const COUNTRY_NAMES: Record<string, string> = {
     "507": "Panamá", "502": "Guatemala", "503": "El Salvador", "504": "Honduras",
     "505": "Nicaragua", "506": "Costa Rica", "509": "Rep. Dom.", "593": "Ecuador",
     "591": "Bolivia", "595": "Paraguay", "598": "Uruguay",
+    "54": "Argentina",
 };
 
 export function dddCity(ddd: string): string {
@@ -61,6 +63,10 @@ export function extractDDD(phone: string): string | null {
     for (const cc of INTL_COUNTRY_CODES) {
         if (digits.startsWith(cc)) return cc;
     }
+    // Argentina and other LATAM 2-digit country codes (e.g. +54 9 11 XXXX-XXXX)
+    for (const cc of LATAM_2DIGIT_CC) {
+        if (digits.startsWith(cc) && digits.length >= 11) return cc;
+    }
     // Brazil with country code: +55 XX NNNN-NNNN (≥12 digits)
     if (digits.startsWith("55") && digits.length >= 12) return digits.slice(2, 4);
     // Brazil local format: XX NNNN-NNNN
@@ -76,6 +82,9 @@ function matchesCoverage(lead: MetaLeadDoc, phoneCodes: string[]): boolean {
 function phonePrefixesForCode(code: string) {
     if (INTL_COUNTRY_CODES.includes(code)) {
         return [code, `+${code}`, `55${code}`];
+    }
+    if (LATAM_2DIGIT_CC.includes(code)) {
+        return [code, `+${code}`];
     }
     return [code, `55${code}`, `+55${code}`];
 }

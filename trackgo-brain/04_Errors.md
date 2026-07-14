@@ -214,17 +214,19 @@ Registro de bugs, errores resueltos, y patrones problemáticos. Sirve para no re
 **Estado:** Resuelto
 **Fecha:** 2026-07-13
 
-**Problema:** Tres gaps al expandir operaciones a Argentina:
+**Problema:** Cuatro gaps al expandir operaciones a Argentina:
 1. `coverageMatching.ts` — `leadCountry()` tenía hardcodeado solo `"PA"` → `"panama"`. Leads de Argentina sin `adminCountryNormalized` caían al fallback `"brasil"` y no matcheaban cobertura Argentina.
 2. `phoneCoverage.ts` — `INTL_COUNTRY_CODES` solo tiene códigos de 3 dígitos. El `"54"` de Argentina (2 dígitos) devolvía `null` en `extractPhoneCoverageCode`, rompiendo filtros por prefijo.
 3. `phonePrefixes.ts` — `LATAM_COUNTRIES` no tenía `"54": "Argentina"`, así que no aparecía como opción de filtro en el admin.
+4. `incompleteClientsRepo.ts` *(detectado 2026-07-14)* — `extractDDD` y `phonePrefixesForCode` no conocían Argentina: `extractDDD` devolvía `null` para números como `5493794119260` (13 dígitos con prefijo "54"), y `phonePrefixesForCode("54")` generaba `["54","5554","+5554"]` en lugar de `["54","+54"]`. Resultado: la tab "No verificados" aparecía vacía para usuarios de Argentina.
 
 **Solución:**
 - `coverageMatching.ts`: reemplazado el ternario hardcodeado por `MARKET_COUNTRY_CODE: Record<string, string>` con `BR`, `PA`, `AR`.
 - `phoneCoverage.ts`: agregado `LATAM_2_DIGIT_COUNTRY_CODES = ["54"]` con su propio loop después del de 3 dígitos.
 - `phonePrefixes.ts`: agregado `"54": "Argentina"` a `LATAM_COUNTRIES`.
+- `incompleteClientsRepo.ts`: agregado `LATAM_2DIGIT_CC = ["54"]` + loop en `extractDDD` + rama en `phonePrefixesForCode` para generar prefijos correctos. Agregado `"54": "Argentina"` a `COUNTRY_NAMES`.
 
-**Lección:** Al agregar un país nuevo, revisar estos tres archivos: `coverageMatching.ts`, `phoneCoverage.ts`, `phonePrefixes.ts`. El patrón de `LATAM_2_DIGIT_COUNTRY_CODES` está disponible para futuros países con código de 2 dígitos (MX=52, CL=56, CO=57, VE=58).
+**Lección:** Al agregar un país nuevo, revisar CUATRO archivos: `coverageMatching.ts`, `phoneCoverage.ts`, `phonePrefixes.ts`, `incompleteClientsRepo.ts`. El patrón de `LATAM_2_DIGIT_COUNTRY_CODES` está disponible para futuros países con código de 2 dígitos (MX=52, CL=56, CO=57, VE=58).
 
 ---
 

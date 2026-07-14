@@ -8,6 +8,14 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ## 2026-07-14
 
+### fix(incompleteClientsRepo): Argentina no aparecía en tab "No Verificados"
+- **Module:** `src/data/incompleteClientsRepo.ts`
+- **What changed:** `extractDDD` ahora reconoce números argentinos (+54, ≥11 dígitos) usando `LATAM_2DIGIT_CC`. `phonePrefixesForCode("54")` ahora devuelve `["54","+54"]` en lugar de `["54","5554","+5554"]`. Agregado `"54": "Argentina"` a `COUNTRY_NAMES`.
+- **Why:** Números como `5493794119260` devolvían `null` en `extractDDD` (13 dígitos, no encajaban en ningún path existente), haciendo que el filtro `matchesCoverage` los descartara a todos.
+- **See:** [[04_Errors#ERR-015]]
+
+---
+
 ### fix(resolver): ciudad "Natal" persiste en links g_st=aw/iw — fix de patrones HTML
 - **Module:** `functions/src/utils/googleMapsResolver.js`, `src/data/leadsRepo.ts`
 - **What changed:**
