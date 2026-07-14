@@ -8,6 +8,17 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ## 2026-07-14
 
+### fix(resolver): ciudad "Natal" persiste en links g_st=aw/iw — fix de patrones HTML
+- **Module:** `functions/src/utils/googleMapsResolver.js`, `src/data/leadsRepo.ts`
+- **What changed:**
+  1. `extractCoordsFromHtmlMeta`: reescrita para buscar coordenadas SOLO dentro de bloques `<script type="application/ld+json">` usando `"latitude"/"longitude"` (formato schema.org). Eliminados los patrones `"center":{"lat":X,"lng":Y}` (viewport del mapa de Google JS) y `"lat":X..."lng":Y` (genérico). Esos patrones capturaban el centro del viewport de la página de Maps servida server-side, que Google centra en la región NE de Brasil (Natal) cuando el servidor no tiene user-location.
+  2. Loop de URLs anidadas: `extractCoordsFromAnyText(nestedFetched.html)` reemplazado por `extractCoordsFromHtmlMeta(nestedFetched.html)`. Violaba la lección del ERR-016 pero solo había sido corregido para el HTML principal, no para el nested.
+  3. `geoDisplayLabel` en `leadsRepo.ts`: eliminado `geoNearestHubLabel` del fallback de visualización. Ese campo se setea para el hub más cercano aunque el lead esté fuera de cobertura — mostraba "Natal" en la tarjeta cuando las coords eran incorrectas.
+- **Why:** El fix anterior (commit 9aa9a94) eliminó `extractCoordsFromAnyText` sobre HTML crudo PRINCIPAL pero dejó el mismo patrón en el loop de URLs anidadas, y `extractCoordsFromHtmlMeta` tenía patrones demasiado genéricos que matcheaban el viewport de Google Maps centrado en Natal.
+- **See:** [[04_Errors#ERR-016]]
+
+---
+
 ### chore(meta): creación manual de campaña Meta Ads para Resistencia, Argentina
 - **Module:** Meta Ads API (Graph API v19.0)
 - **What changed:** Creada campaña completa desde Claude Code via API directa (sin pasar por el flujo de suscripción): 1 campaña → 1 adset → 2 creativos → 2 anuncios. Todo en estado PAUSADO.

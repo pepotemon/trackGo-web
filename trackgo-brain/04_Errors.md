@@ -230,17 +230,31 @@ Registro de bugs, errores resueltos, y patrones problemáticos. Sirve para no re
 
 ## ERR-016: Links maps.app.goo.gl compartidos desde WhatsApp Android no resuelven coordenadas
 
-**Estado:** Resuelto
-**Fecha:** 2026-07-13
-**Commit:** implementado en esta sesión (el commit `34d67d4` referenciado era incorrecto — el fix real fue documentado pero nunca aplicado al código)
+**Estado:** Resuelto (fix iterativo — 3 capas)
+**Fecha:** 2026-07-13 → 2026-07-14
 
-**Problema:** Links con parámetro `?g_st=aw` (Google Share Type = Android WhatsApp) enviados por prospectos no podían ser resueltos a coordenadas. El bot devolvía `source: "maps_unresolved"`, el lead quedaba sin `lat/lng` y sin ciudad asignada.
+**Problema:** Links con parámetro `?g_st=aw` (Android WhatsApp) o `?g_st=iw` (iOS WhatsApp) causaban que el lead quedara con ciudad = "Natal" aunque el negocio estuviera en otra ciudad.
 
-**Causa raíz:** Al hacer `fetch()` server-side sin cookies de browser, Google redirige `maps.app.goo.gl` → `consent.google.com/m?continue=https://www.google.com/maps/...` en lugar de ir directo a Maps. `consent.google.com` no es reconocida como URL de Maps por `isNavigableGoogleMapsUrl()`, así que `finalNavigableUrl` volvía al URL corto original — que tampoco tiene coordenadas.
+**Causa raíz (capa 1 — fix 9aa9a94):** `extractCoordsFromAnyText` corría sobre el HTML crudo completo — capturaba coords de Natal embebidas en scripts/links de la página de consent.
 
-**Solución:** En `fetchUrlFollowingRedirects` (`googleMapsResolver.js`): si `finalUrl` contiene `consent.google.com`, llamar a `extractConsentContinueUrl()` que extrae la URL real de Maps desde el parámetro `continue` (caso habitual) o escaneando el HTML de la página de consent (fallback). Luego hacer un segundo fetch a esa URL para obtener el HTML/URL con coordenadas.
+**Causa raíz (capa 2 — fix 2026-07-14):** `extractCoordsFromHtmlMeta` tenía patrones demasiado genéricos:
+- `"center":{"lat":X,"lng":Y}` — este es el VIEWPORT del mapa de Google JS. Google Maps servido server-side (sin user-location) centra el mapa en la región NE de Brasil, que resulta estar cerca de Natal.
+- `"lat":X..."lng":Y` — genérico, matcheaba cualquier var JS con esas keys.
+Ambos capturaban las coords del viewport (Natal) en vez de las del negocio.
 
-**Lección:** `maps.app.goo.gl` no es solo un shortener — Google lo trata diferente server-side según el origen del share. Siempre verificar con un `fetch()` real antes de asumir que el redirect es trivial. El parámetro `g_st` indica el origen del share: `aw` = Android WhatsApp, `iw` = iOS WhatsApp. **No correr `extractCoordsFromAnyText` sobre HTML crudo** — el HTML de páginas de Maps o de consent puede contener coords de lugares ajenos en scripts/links y se captura el match incorrecto. Usar solo `extractCoordsFromHtmlMeta` (structured JSON-LD/meta) + `extractMapsUrlsFromHtml` (URLs navegables). **`extractConsentContinueUrl` no debe escanear todas las URLs del HTML** — solo buscar en parámetros URL y en inputs hidden de formulario.
+**Causa raíz (capa 3 — fix 2026-07-14):** `extractCoordsFromAnyText(nestedFetched.html)` en el loop de URLs anidadas violaba la misma lección que el fix anterior había aplicado solo al HTML principal.
+
+**Solución (2026-07-14):**
+- `extractCoordsFromHtmlMeta` reescrita: solo busca en bloques `<script type="application/ld+json">` usando `"latitude"/"longitude"` (schema.org). Elimina viewport/JS patterns.
+- Loop nested: `extractCoordsFromAnyText(nestedFetched.html)` → `extractCoordsFromHtmlMeta(nestedFetched.html)`.
+- `geoDisplayLabel` en `leadsRepo.ts`: eliminado `geoNearestHubLabel` del fallback — mostraba ciudad del hub más cercano aunque el lead estuviera fuera de cobertura o tuviera coords incorrectas.
+
+**Lección actualizada:**
+- `maps.app.goo.gl` con `g_st` redirige a consent.google.com server-side. El fix de consent ya está en su lugar.
+- **Nunca** correr `extractCoordsFromAnyText` sobre HTML crudo (ni principal ni nested).
+- `extractCoordsFromHtmlMeta` debe buscar SOLO en JSON-LD estructurado, SOLO con `"latitude"/"longitude"` — no `"lat"/"lng"` ni `"center"`.
+- El patrón `"center":{"lat":X,"lng":Y}` es el viewport de Google Maps JS, no la ubicación del negocio.
+- `geoNearestHubLabel` es el hub más cercano sin importar distancia — nunca usarlo como display de ciudad.
 
 ---
 

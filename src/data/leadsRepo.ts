@@ -158,7 +158,6 @@ function geoDisplayLabel(raw: UnknownRecord) {
         (city && state ? `${city} - ${state}` : "") ||
         city ||
         text(raw.geoCityLabel) ||
-        text(raw.geoNearestHubLabel) ||
         state
     );
 }

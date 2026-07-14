@@ -124,24 +124,29 @@ function extractCoordsFromHtmlMeta(html) {
         return { lat: null, lng: null };
     }
 
-    const decoded = normalizeFetchedUrl(source);
+    // Only look inside <script type="application/ld+json"> blocks to avoid
+    // capturing Google Maps JS viewport/center data ("center":{"lat":...,"lng":...})
+    // which is set to the server's regional default and is NOT the business location.
+    const jsonLdBlocks = [];
+    const jsonLdRe = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+    let m;
+    while ((m = jsonLdRe.exec(source)) !== null) {
+        if (m[1]) jsonLdBlocks.push(m[1]);
+    }
 
-    const hints = [
-        /"center":\s*\{\s*"lat":\s*(-?\d+(?:\.\d+)?),\s*"lng":\s*(-?\d+(?:\.\d+)?)\s*\}/i,
-        /"latitude":\s*(-?\d+(?:\.\d+)?).*?"longitude":\s*(-?\d+(?:\.\d+)?)/i,
-        /"lat":\s*(-?\d+(?:\.\d+)?).*?"lng":\s*(-?\d+(?:\.\d+)?)/i,
-        /"mapcenter":\s*"(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)"/i,
-    ];
+    for (const block of jsonLdBlocks) {
+        const decoded = normalizeFetchedUrl(block);
 
-    for (const pattern of hints) {
-        const match = decoded.match(pattern);
-        if (!match?.[1] || !match?.[2]) continue;
+        // schema.org JSON-LD uses "latitude"/"longitude" (not "lat"/"lng")
+        const latMatch = decoded.match(/"latitude"\s*:\s*"?(-?\d+(?:\.\d+)?)"?/i);
+        const lngMatch = decoded.match(/"longitude"\s*:\s*"?(-?\d+(?:\.\d+)?)"?/i);
 
-        const lat = roundCoord(match[1]);
-        const lng = roundCoord(match[2]);
-
-        if (hasValidCoords(lat, lng)) {
-            return { lat, lng };
+        if (latMatch?.[1] && lngMatch?.[1]) {
+            const lat = roundCoord(latMatch[1]);
+            const lng = roundCoord(lngMatch[1]);
+            if (hasValidCoords(lat, lng)) {
+                return { lat, lng };
+            }
         }
     }
 
@@ -601,14 +606,12 @@ async function resolveCoordsFromGoogleMapsUrl(url, marketCountry = "BR") {
             };
         }
 
-        const nestedFromHtml = extractCoordsFromAnyText(nestedFetched.html, {
-            treatAsAsset: false,
-        });
-        if (hasValidCoords(nestedFromHtml.lat, nestedFromHtml.lng)) {
+        const nestedFromHtmlMeta = extractCoordsFromHtmlMeta(nestedFetched.html);
+        if (hasValidCoords(nestedFromHtmlMeta.lat, nestedFromHtmlMeta.lng)) {
             return {
-                lat: nestedFromHtml.lat,
-                lng: nestedFromHtml.lng,
-                source: "maps_nested_html",
+                lat: nestedFromHtmlMeta.lat,
+                lng: nestedFromHtmlMeta.lng,
+                source: "maps_nested_html_meta",
                 resolvedUrl: nestedFinalUrl,
                 geocodeQuery: "",
             };
