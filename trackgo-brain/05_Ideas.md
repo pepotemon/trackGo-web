@@ -98,6 +98,14 @@ Backlog informal de ideas, mejoras técnicas y features potenciales. No comprome
 
 ---
 
+### IDEA-T006: Granularidad por DDD para Argentina
+**Contexto:** Hoy Argentina usa código de país `"54"` para toda la cobertura (ver [[03_Decisions#ADR-017]]). Un usuario con `"54"` ve prospectos de todo el país.  
+**Propuesta:** Extender `incompleteClientsRepo.ts` con un mapa `ARGENTINA_DDDS` equivalente al `BRAZIL_DDDS` existente, usando los códigos de área argentinos (ej. `"379"` → Resistencia, `"11"` → Buenos Aires). Ajustar `extractDDD` para que, si el número empieza con `"54"`, extraiga el DDD regional en lugar de devolver siempre `"54"`.  
+**Esfuerzo estimado:** Medio  
+**Prioridad:** Baja (solo necesario si hay múltiples vendors en Argentina en distintas ciudades)
+
+---
+
 ### IDEA-T005: Invalidar caché de perfil activamente
 **Contexto:** Cambios de permisos no se reflejan sin cerrar sesión. Ver [[04_Errors#ERR-008]].  
 **Propuesta:** Usar Firestore `onSnapshot` en el documento del usuario para invalidar caché en tiempo real.  

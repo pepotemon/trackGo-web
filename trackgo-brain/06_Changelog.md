@@ -8,6 +8,12 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ## 2026-07-14
 
+### docs(brain): granularidad de cobertura Argentina — indicativo "54"
+- **Module:** `trackgo-brain/03_Decisions.md`, `trackgo-brain/05_Ideas.md`
+- **What changed:** Documentado que Argentina opera con un único indicativo `"54"` (país completo, sin DDD). Agregado ADR-017. Registrado IDEA-T006 para granularidad futura por ciudad argentina.
+- **Why:** Pregunta operativa sobre qué indicativo asignar a usuarios en Argentina (ej. Resistencia).
+- **See:** [[03_Decisions#ADR-017]], [[05_Ideas#IDEA-T006]]
+
 ### fix(incompleteClientsRepo): Argentina no aparecía en tab "No Verificados"
 - **Module:** `src/data/incompleteClientsRepo.ts`
 - **What changed:** `extractDDD` ahora reconoce números argentinos (+54, ≥11 dígitos) usando `LATAM_2DIGIT_CC`. `phonePrefixesForCode("54")` ahora devuelve `["54","+54"]` en lugar de `["54","5554","+5554"]`. Agregado `"54": "Argentina"` a `COUNTRY_NAMES`.

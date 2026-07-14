@@ -278,6 +278,22 @@ Registro de decisiones de arquitectura y diseño. Cada ADR explica el contexto, 
 
 ---
 
+## ADR-017: Granularidad de cobertura por país — Argentina usa código de país, no DDD
+
+**Estado:** Activo
+**Fecha:** 2026-07-14
+
+**Contexto:** Brasil se cubre con DDDs de 2 dígitos (ej. "11" = São Paulo, "81" = Recife). Al expandir a Argentina surgió la pregunta de qué indicativo asignar a los usuarios — si el código de país "54" o algún código de área regional (ej. "379" para Resistencia).
+
+**Decisión:** Argentina usa el código de país `"54"` como única unidad de cobertura. Un usuario con indicativo `"54"` ve todos los prospectos argentinos sin distinción de ciudad. No existe granularidad por DDD argentino en el sistema actual.
+
+**Consecuencias:**
+- Asignar `54` como indicativo a cualquier usuario que opere en Argentina.
+- Un solo usuario con `54` recibirá prospectos de todo el país (Buenos Aires, Córdoba, Resistencia, etc.).
+- Si en el futuro se requiere segmentar por ciudad argentina, habrá que extender `BRAZIL_DDDS` con un mapa equivalente para Argentina y ajustar `extractDDD`. Ver [[05_Ideas#IDEA-T006]].
+
+---
+
 ## ADR-015: Auto-asignacion prioriza geoCoverage sobre campana
 
 **Status:** Active
