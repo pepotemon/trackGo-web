@@ -6,6 +6,16 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ---
 
+## 2026-07-14
+
+### chore(meta): creación manual de campaña Meta Ads para Resistencia, Argentina
+- **Module:** Meta Ads API (Graph API v19.0)
+- **What changed:** Creada campaña completa desde Claude Code via API directa (sin pasar por el flujo de suscripción): 1 campaña → 1 adset → 2 creativos → 2 anuncios. Todo en estado PAUSADO.
+- **Why:** Primera campaña de Argentina. El flujo de suscripción existente opera sobre ciudades ya configuradas; esta campaña fue creada manualmente como punto de partida para Resistencia - Chaco.
+- **See:** [[08_Workflows#Flujo de creación manual de campaña Meta Ads]], [[03_Decisions#ADR-016]]
+
+---
+
 ## 2026-07-13 (11)
 
 ### fix(bot): corregir "ñ" faltante en mensajes del bot en español

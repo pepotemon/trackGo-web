@@ -236,6 +236,146 @@ useWhatsAppDailyLimit.ts verifica:
 
 ---
 
+## Flujo de creación manual de campaña Meta Ads
+
+Usar cuando hay que crear una campaña para una ciudad nueva desde cero (sin pasar por el flujo de suscripción).
+
+### Prerequisitos (verificar antes de empezar)
+
+| Item | Dónde verificar |
+|---|---|
+| Página de FB existe en el negocio TrackGo | `GET /906164879256382/owned_pages` |
+| WABA existe y número verificado | `GET /906164879256382/owned_whatsapp_business_accounts` |
+| WABA asignada a la página | Business Suite → Configuración → WhatsApp → Páginas asignadas |
+| System user "TrackGo" tiene rol en la página | Business Suite → Configuración → Páginas → Personas |
+| Audiencia guardada existe en la cuenta | `GET /act_1677554803260265/saved_audiences` |
+
+### IDs fijos
+
+```
+Business ID:    906164879256382
+Ad Account:     act_1677554803260265
+System user:    TrackGo (agregar como Anunciante en cada página nueva)
+Graph API:      v19.0
+```
+
+### IDs por país/página
+
+| País | Página | Page ID | WABA ID | WhatsApp |
+|---|---|---|---|---|
+| Argentina | Credito Comercial - Argentina | `1277602658762993` | `1558135945992315` | `5493625192845` |
+| Brasil | Crédito Comercial - Brasil | `906157149257155` | `1647410183361267` | `559180468472` |
+| Panamá | Credito Comercial Panamá | `1159295907257113` | `2398466063967406` | `50767518087` |
+
+### Paso 1 — Crear campaña
+
+```bash
+POST /act_1677554803260265/campaigns
+{
+  "name": "{Ciudad} | WhatsApp | Microcrédito | Comerciantes",
+  "objective": "OUTCOME_ENGAGEMENT",
+  "status": "PAUSED",
+  "special_ad_categories": [],
+  "is_adset_budget_sharing_enabled": false
+}
+```
+
+### Paso 2 — Crear adset
+
+```bash
+POST /act_1677554803260265/adsets
+{
+  "name": "TrackGo - {Ciudad} - {PAIS}",
+  "campaign_id": "{campaign_id}",
+  "daily_budget": 3400,          # en centavos de USD → $34
+  "billing_event": "IMPRESSIONS",
+  "optimization_goal": "CONVERSATIONS",
+  "destination_type": "WHATSAPP",
+  "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+  "promoted_object": {
+    "page_id": "{page_id}",
+    "whatsapp_phone_number": "{numero_sin_+}"
+  },
+  "targeting": { ...spec de audiencia guardada... },
+  "status": "PAUSED"
+}
+```
+
+Obtener el targeting de la audiencia guardada:
+```
+GET /act_1677554803260265/saved_audiences?fields=id,name,targeting
+→ copiar el objeto "targeting" de la audiencia deseada
+```
+
+### Paso 3 — Crear creativos (Python recomendado para evitar problemas de encoding)
+
+```python
+import urllib.request, urllib.parse, json
+
+story_spec = {
+    "page_id": PAGE_ID,
+    "link_data": {
+        "link": "https://api.whatsapp.com/send",
+        "message": "TEXTO_DEL_ANUNCIO",
+        "name": "TÍTULO_DEL_ANUNCIO",
+        "image_hash": "HASH_IMAGEN_PLACEHOLDER",  # reemplazar en Ads Manager
+        "call_to_action": {
+            "type": "WHATSAPP_MESSAGE",
+            "value": {"app_destination": "WHATSAPP"}
+        },
+        "page_welcome_message": json.dumps({
+            "type": "VISUAL_EDITOR", "version": 2,
+            "landing_screen_type": "welcome_message",
+            "media_type": "text",
+            "text_format": {
+                "customer_action_type": "autofill_message",
+                "message": {
+                    "autofill_message": {"content": "¡Hola! Quiero más información."},
+                    "text": "¡Hola! ¿En qué podemos ayudarte?"
+                }
+            },
+            "user_edit": False, "surface": "visual_editor_new"
+        }),
+        "use_flexible_image_aspect_ratio": True
+    }
+}
+payload = urllib.parse.urlencode({
+    "name": "Nombre del creativo",
+    "object_story_spec": json.dumps(story_spec),
+    "access_token": TOKEN,
+}).encode()
+```
+
+### Paso 4 — Crear anuncios
+
+```python
+payload = urllib.parse.urlencode({
+    "name": "Nombre del anuncio",
+    "adset_id": ADSET_ID,
+    "creative": json.dumps({"creative_id": CREATIVE_ID}),
+    "status": "PAUSED",
+    "access_token": TOKEN,
+}).encode()
+# POST a /act_1677554803260265/ads
+```
+
+### Paso 5 — Reemplazar imágenes (manual, Ads Manager)
+
+- Entrar a Ads Manager → abrir cada anuncio → editar creativo → subir imagen real
+- Los image_hash son reutilizables si ya están subidos en la misma cuenta
+
+### Errores comunes
+
+| Error | Causa | Solución |
+|---|---|---|
+| `is_adset_budget_sharing_enabled` requerido | Cambio reciente en API | Agregar `"is_adset_budget_sharing_enabled": false` |
+| `This WhatsApp phone number is not linked` | Número con código de país incorrecto | Verificar: AR=54, BR=55, PA=507, sin el `+` |
+| `Permisos de página insuficientes` | System user no está en la página | Business Suite → Página → Personas → agregar TrackGo como Anunciante |
+| `Página no vinculada a WhatsApp` | WABA no asignada a la página | Business Suite → WhatsApp → Páginas asignadas → agregar página |
+| `object_story_spec inválido` | Encoding roto con curl para JSON anidado | Usar Python con `json.dumps()` en vez de curl |
+
+---
+
 ## Workflow de desarrollo con Second Brain
 
 ```

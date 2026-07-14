@@ -260,6 +260,24 @@ Registro de decisiones de arquitectura y diseño. Cada ADR explica el contexto, 
 
 ---
 
+## ADR-016: Creación manual de campañas Meta Ads vía Graph API
+
+**Status:** Active
+**Date:** 2026-07-14
+
+**Context:** El flujo de suscripción existente activa campañas preexistentes en Meta (configuradas manualmente antes). Para ciudades nuevas como Resistencia (Argentina), no había campaña en Meta ni flujo automatizado para crearla desde cero.
+
+**Decision:** Las campañas nuevas para ciudades nuevas se crean manualmente vía Graph API v19.0 siguiendo el patrón documentado en [[08_Workflows#Flujo de creación manual de campaña Meta Ads]]. La estructura es siempre: 1 campaña → 1 adset → N creativos → N anuncios. Todo se crea en estado PAUSED; el operador activa cuando esté listo.
+
+**Consequences:**
+- La creación se hace con el token `META_ACCESS_TOKEN` del system user "TrackGo" — el system user debe tener rol Anunciante en cada página nueva.
+- El WABA de cada país debe estar asignado a su página correspondiente en Business Suite antes de poder crear adsets con `destination_type: WHATSAPP`.
+- Los creativos se crean con image_hash placeholder; el operador reemplaza las imágenes reales vía Ads Manager antes de activar.
+- Formato de número WhatsApp en API: sin `+`, con código de país (AR=54, BR=55, PA=507).
+- Usar Python con `json.dumps()` para construir requests con JSON anidado — curl falla con encoding en este caso.
+
+---
+
 ## ADR-015: Auto-asignacion prioriza geoCoverage sobre campana
 
 **Status:** Active
