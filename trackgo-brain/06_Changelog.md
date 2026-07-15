@@ -8,6 +8,12 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ## 2026-07-15
 
+### fix(bot): AI no debe mencionar modalidades de pago ni frecuencia (mensual, etc.)
+- **Module:** `functions/src/bot/aiLeadAssistant.js`
+- **What changed:** Agregada regla explícita al prompt del AI que le prohíbe mencionar modalidades de pago, frecuencia de cuotas (mensual, quincenal, semanal, etc.), tipos de crédito o condiciones de devolución. Si le preguntan, debe derivar al asesor humano.
+- **Why:** El AI estaba respondiendo preguntas sobre cómo funciona el crédito inventando "mensual" u otras condiciones que no le corresponde dar. Esa información es responsabilidad del asesor.
+- **See:** —
+
 ### fix(bot): comportamiento repetitivo y sin contexto del bot en español y portugués
 - **Module:** `functions/src/bot/aiLeadAssistant.js`, `functions/src/bot/repliesEsPa.js`, `functions/src/bot/replies.js`, `functions/index.js`
 - **What changed:** El bot ahora se presenta como asistente automático desde el primer mensaje. El AI recibe los últimos 8 mensajes de la conversación como historial, lo que le permite no repetir preguntas ya respondidas, manejar objeciones ("¿para qué necesitás mi ubicación?"), confusión ("no entiendo") y resistencia ("mañana lo hago"). Se añadieron reglas explícitas al prompt del AI para todos estos casos.
