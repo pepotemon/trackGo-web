@@ -416,6 +416,29 @@ async function maybeReplyToLead({
         currentBotStage = "limit:human_needed";
     }
 
+    let recentMessages = [];
+    if (shouldTryAi) {
+        try {
+            const msgsSnap = await db
+                .collection("clients")
+                .doc(clientId)
+                .collection("messages")
+                .orderBy("createdAt", "desc")
+                .limit(8)
+                .get();
+            recentMessages = msgsSnap.docs
+                .reverse()
+                .map((d) => d.data())
+                .map((m) => ({
+                    role: safeString(m.direction || "") === "outbound" ? "bot" : "client",
+                    text: safeString(m.text || ""),
+                }))
+                .filter((m) => m.text);
+        } catch (histErr) {
+            console.warn("[WHATSAPP BOT] Could not load message history:", histErr?.message);
+        }
+    }
+
     try {
         await inboxRef.set(
             {
@@ -425,7 +448,7 @@ async function maybeReplyToLead({
             },
             { merge: true }
         );
-        aiResult = shouldTryAi ? await analyzeLeadReplyWithAi({ client, channel, reply }) : null;
+        aiResult = shouldTryAi ? await analyzeLeadReplyWithAi({ client, channel, reply, recentMessages }) : null;
         if (aiResult?.reply) {
             body = safeString(aiResult.reply || body);
             currentBotStage = `ai:${safeString(aiResult.nextState || "assist")}`;

@@ -110,10 +110,19 @@ function languageName(language) {
     return safeString(language || "").startsWith("es") ? "Spanish" : "Portuguese";
 }
 
-function buildPrompt({ client, channel, reply }) {
+function buildPrompt({ client, channel, reply, recentMessages = [] }) {
     const targetLanguage = languageName(channel?.language);
     const hasBusiness = !!safeString(client?.business || client?.businessRaw || "");
     const hasMaps = !!safeString(client?.mapsUrl || "") || safeNumber(client?.currentLeadMapsConfirmedAt, 0) > 0;
+    const mapsRequests = countStage(client, "maps");
+
+    const historySection = recentMessages.length > 0
+        ? [
+            "",
+            "Conversation history (oldest first):",
+            ...recentMessages.map((m) => `  [${m.role === "bot" ? "Bot" : "Client"}]: ${m.text}`),
+        ].join("\n")
+        : "";
 
     return [
         `You are a friendly WhatsApp assistant for TrackGo, a commercial microcredit company. Reply in ${targetLanguage}.`,
@@ -124,15 +133,22 @@ function buildPrompt({ client, channel, reply }) {
         "Conversation rules:",
         "- Ask only ONE thing per message. Never list multiple requests at once.",
         "- Keep messages short (1-3 lines). This is WhatsApp, not email.",
-        "- Be warm and natural — not robotic, not overly formal.",
+        "- Be warm and natural — conversational, empathetic, not robotic or overly formal.",
         "- Collect business type FIRST. Only ask for Maps location after you have the business type.",
+        "- CRITICAL: Read the full conversation history carefully. Never ask for information the user has already provided in a previous message.",
+        "- Never repeat the exact same request that was already made in the last bot message. If you need to ask again, rephrase it or offer a simpler alternative.",
+        "- If the person does not understand what you are asking: apologize briefly, explain it more simply, and offer an alternative. For example, if they can't share a Maps link, ask for their city and neighborhood instead so a human can follow up.",
+        "- If the person asks WHY you need their location: explain clearly — it is needed to check coverage in their area and assign the right local representative for their region. Never ignore this question.",
+        "- If the person says they will send it later, or needs help from someone else, or cannot do it right now: acknowledge warmly ('Perfecto, sin apuro' / 'Tudo bem, sem pressa'), confirm the conversation stays open, and do NOT insist further.",
+        "- If the person explicitly refuses to share their location after being asked more than twice: stop insisting. Tell them a human from the team will reach out to them directly.",
+        "- If the person asks about taxes, registration, or being formal: clarify that informal and home-based businesses qualify — no registration required.",
+        "- If the person directly asks whether they are talking to a bot, robot, or machine: confirm you are an automatic assistant and that a human team member will review their information.",
         "- If they send a written address instead of a Maps link: ask them to open Google Maps, find their business, tap Share, and send the link here.",
         "- Never promise approval, loan amounts, interest rates, or required documents.",
         "- Do not ask for ID, bank statements, or any sensitive document.",
         "- Delivery, home-based shops, informal stands, food trucks, and small stores qualify.",
         "- Retired people, pensioners, salaried employees, and app drivers (Uber, iFood, Rappi, inDriver) do NOT qualify — close warmly and briefly.",
         "- If the person says they are not interested or asks to stop: close warmly.",
-        "- Only mention you are an automatic assistant if directly asked.",
         "",
         "Current lead state:",
         JSON.stringify({
@@ -148,11 +164,12 @@ function buildPrompt({ client, channel, reply }) {
             currentBotStage: safeString(reply?.stage || ""),
             currentBotReply: safeString(reply?.body || ""),
             botReplyCount: safeNumber(client?.botReplyCount, 0),
-            mapsRequests: countStage(client, "maps"),
+            mapsRequests,
             businessRequests: countStage(client, "business"),
             hasBusiness,
             hasMaps,
         }),
+        historySection,
         "",
         "Return only valid JSON with this shape:",
         JSON.stringify({
@@ -223,7 +240,7 @@ function sanitizeAiResult(payload) {
     };
 }
 
-async function analyzeLeadReplyWithAi({ client, channel, reply }) {
+async function analyzeLeadReplyWithAi({ client, channel, reply, recentMessages = [] }) {
     if (!shouldTryAiLeadAssistant({ client, reply })) return null;
 
     const key = OPENAI_API_KEY.value();
@@ -237,7 +254,7 @@ async function analyzeLeadReplyWithAi({ client, channel, reply }) {
         },
         body: JSON.stringify({
             model: AI_MODEL,
-            input: buildPrompt({ client, channel, reply }),
+            input: buildPrompt({ client, channel, reply, recentMessages }),
             reasoning: {
                 effort: "minimal",
             },

@@ -294,6 +294,22 @@ Registro de decisiones de arquitectura y diseño. Cada ADR explica el contexto, 
 
 ---
 
+## ADR-018: El AI del bot siempre recibe historial de conversación
+
+**Status:** Active
+**Date:** 2026-07-15
+
+**Context:** El AI del bot recibía solo el último mensaje del usuario (`lastInboundText`), causando que repitiera preguntas ya respondidas y no pudiera manejar objeciones ni confusión.
+
+**Decision:** Antes de cada llamada al AI, cargar los últimos 8 mensajes de `clients/{clientId}/messages` y pasarlos como `recentMessages`. El prompt incluye el historial formateado con roles `[Bot]` / `[Client]`. El AI tiene instrucción explícita de no pedir información que ya figura en el historial.
+
+**Consequences:**
+- Cada respuesta del AI cuesta 1 Firestore read adicional (8 docs), aceptable dado el volumen de conversaciones.
+- Limite de 8 mensajes es suficiente para el contexto relevante y mantiene el prompt corto.
+- Si el fetch falla, el AI responde igual pero sin historial (degradación segura).
+
+---
+
 ## ADR-015: Auto-asignacion prioriza geoCoverage sobre campana
 
 **Status:** Active

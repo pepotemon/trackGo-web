@@ -260,6 +260,24 @@ Ambos capturaban las coords del viewport (Natal) en vez de las del negocio.
 
 ---
 
+## ERR-017: Bot repite preguntas ignorando respuestas previas y no maneja objeciones
+
+**Estado:** Resuelto
+**Fecha:** 2026-07-15
+
+**Problema:** El bot en español (y portugués) preguntaba tipo de negocio o ubicación Maps repetidamente aunque el usuario ya los hubiera respondido. No manejaba frases como "¿para qué necesitás mi ubicación?", "no entiendo lo que decís", "mañana lo hago" — simplemente repetía la misma solicitud.
+
+**Causa raíz:** `analyzeLeadReplyWithAi` solo recibía `lastInboundText` (el último mensaje del usuario) sin historial de conversación. El AI no podía saber qué se había preguntado antes ni qué el usuario ya había respondido.
+
+**Solución (2026-07-15):**
+1. `functions/index.js`: antes de llamar al AI, se cargan los últimos 8 mensajes de `clients/{clientId}/messages` (ordenados por `createdAt`) y se pasan como `recentMessages`.
+2. `functions/src/bot/aiLeadAssistant.js`: `buildPrompt` incluye el historial en el prompt como "Conversation history (oldest first)". Se agregaron reglas explícitas para: no repetir preguntas ya respondidas, explicar por qué se pide la ubicación, ofrecer alternativas cuando el usuario no puede compartir Maps, manejar "lo hago después", dejar de insistir tras 2 rechazos de Maps.
+3. `functions/src/bot/repliesEsPa.js` y `replies.js`: el mensaje de intro ahora dice "soy un asistente automático de TrackGo" (antes no se identificaba).
+
+**Lección:** El AI en modo conversacional SIEMPRE necesita historial de mensajes. Pasar solo el último mensaje es insuficiente y causa comportamiento repetitivo y descontextualizado.
+
+---
+
 ## Patrones problemáticos a evitar
 
 ### No usar `leads` en UI

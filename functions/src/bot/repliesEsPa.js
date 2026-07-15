@@ -13,7 +13,7 @@ const {
 
 function buildIntroMessageEsPa() {
     return [
-        "Hola, gracias por contactarnos.",
+        "Hola, soy un asistente automático de TrackGo.",
         "",
         "Trabajamos con microcredito comercial para dueños de negocios activos.",
         "",

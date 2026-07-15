@@ -13,7 +13,7 @@ const {
 
 function buildIntroMessagePtBr() {
     return [
-        "Olá, obrigado pelo contato.",
+        "Olá, sou um assistente automático da TrackGo.",
         "",
         "Trabalhamos com microcrédito comercial para donos de negócio ativo.",
         "",

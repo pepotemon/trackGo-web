@@ -6,6 +6,16 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ---
 
+## 2026-07-15
+
+### fix(bot): comportamiento repetitivo y sin contexto del bot en español y portugués
+- **Module:** `functions/src/bot/aiLeadAssistant.js`, `functions/src/bot/repliesEsPa.js`, `functions/src/bot/replies.js`, `functions/index.js`
+- **What changed:** El bot ahora se presenta como asistente automático desde el primer mensaje. El AI recibe los últimos 8 mensajes de la conversación como historial, lo que le permite no repetir preguntas ya respondidas, manejar objeciones ("¿para qué necesitás mi ubicación?"), confusión ("no entiendo") y resistencia ("mañana lo hago"). Se añadieron reglas explícitas al prompt del AI para todos estos casos.
+- **Why:** Conversaciones reales mostraban al bot pidiendo Maps o tipo de negocio reiteradamente ignorando respuestas previas, sonando mecánico y generando desconfianza en los prospectos. Causa raíz: el AI solo veía `lastInboundText` sin historial.
+- **See:** [[04_Errors#ERR-017]], [[03_Decisions#ADR-018]]
+
+---
+
 ## 2026-07-14
 
 ### docs(brain): granularidad de cobertura Argentina — indicativo "54"
