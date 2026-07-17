@@ -6,6 +6,14 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ---
 
+## 2026-07-16
+
+### feat(subscriptions): separar expiración por fecha y por presupuesto — GitHub Actions cron
+- **Module:** `src/server/subscriptions/subscriptionService.ts`, `src/app/api/cron/subscriptions/check-spend/route.ts`, `.github/workflows/check-spend.yml`
+- **What changed:** La expiración por fecha (`safety_deadline`) ya no pausa la campaña en Meta — es solo visual/administrativa. Se creó `checkAndPauseByBudget()` que verifica el gasto en Meta y pausa la campaña cuando llega al 98% del presupuesto. El nuevo endpoint `/api/cron/subscriptions/check-spend` es llamado cada 30 minutos por un GitHub Actions workflow (gratis en el plan actual).
+- **Why:** El cron de Vercel Hobby solo permite frecuencia diaria. Para que la pausa por presupuesto sea automática y frecuente, se usa GitHub Actions como cron externo gratuito.
+- **See:** [[03_Decisions#ADR-019]]
+
 ## 2026-07-15
 
 ### fix(bot): AI no debe mencionar modalidades de pago ni frecuencia (mensual, etc.)

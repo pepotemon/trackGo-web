@@ -1,0 +1,17 @@
+name: Check Campaign Budget
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  check-spend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check budget and pause campaigns
+        run: |
+          curl -f -X POST "${{ secrets.APP_URL }}/api/cron/subscriptions/check-spend" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            -d '{"limit": 20}'

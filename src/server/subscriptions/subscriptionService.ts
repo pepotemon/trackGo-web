@@ -1890,54 +1890,8 @@ export async function expireDueSubscriptions(limit = 20) {
         }
 
         const endDateMs = timestampToMs(subscription.endDate);
-        let expirationReason: "target_spend_reached" | "safety_deadline" | null =
+        const expirationReason: "safety_deadline" | null =
             endDateMs !== null && endDateMs <= nowMillis ? "safety_deadline" : null;
-        let spendSnapshot: Awaited<ReturnType<typeof getMetaCampaignCycleSpend>> | null = null;
-
-        if (!expirationReason && campaignId) {
-            const spendPauseThreshold = Number(subscription.spendPauseThreshold || subscription.targetSpend || subscription.adsBudget || 0);
-            if (Number.isFinite(spendPauseThreshold) && spendPauseThreshold > 0) {
-                try {
-                    spendSnapshot = await getMetaCampaignCycleSpend({
-                        campaignId,
-                        spendBaseline: Number(subscription.spendBaseline || 0),
-                    });
-                    await doc.ref.set(
-                        {
-                            cycleSpend: spendSnapshot.cycleSpend,
-                            metaTotalSpend: spendSnapshot.totalSpend,
-                            spendBaseline: spendSnapshot.spendBaseline,
-                            lastSpendCheckedAt: nowMs(),
-                            lastSpendCheckFailure: FieldValue.delete(),
-                            updatedAt: nowMs(),
-                        },
-                        { merge: true },
-                    );
-                    const citySnap = await adminDb.collection("cities").doc(cityId).get();
-                    const city = citySnap.data() || {};
-                    const isSharedPool = Number(city.activeParticipantsCount || 0) > 1;
-                    const poolBaseline = Number(city.sharedPoolSpendBaseline || spendSnapshot.spendBaseline || 0);
-                    const poolTarget = Number(city.sharedPoolTargetSpend || 0);
-                    const poolCycleSpend = Math.max(0, Math.round((spendSnapshot.totalSpend - poolBaseline) * 100) / 100);
-                    if (isSharedPool && poolTarget > 0) {
-                        if (poolCycleSpend >= Math.round(poolTarget * 0.98 * 100) / 100) {
-                            expirationReason = "target_spend_reached";
-                        }
-                    } else if (spendSnapshot.cycleSpend >= spendPauseThreshold) {
-                        expirationReason = "target_spend_reached";
-                    }
-                } catch (error) {
-                    await doc.ref.set(
-                        {
-                            lastSpendCheckedAt: nowMs(),
-                            lastSpendCheckFailure: error instanceof Error ? error.message : "meta_spend_check_failed",
-                            updatedAt: nowMs(),
-                        },
-                        { merge: true },
-                    );
-                }
-            }
-        }
 
         if (!expirationReason) continue;
 
@@ -1956,7 +1910,6 @@ export async function expireDueSubscriptions(limit = 20) {
 
         results.push(await expireWithCampaign(doc.ref, subscriptionId, subscription, cityId, campaignId, adsetIds, {
             reason: expirationReason,
-            spendSnapshot,
         }));
     }
 
@@ -2125,7 +2078,7 @@ async function expireWithCampaign(
             return { subscriptionId, cityId, status: "expired" };
         }
 
-        if (campaignId) {
+        if (campaignId && meta?.reason === "target_spend_reached") {
             await pauseCityCampaign({ campaignId, adsetIds });
         }
 
@@ -2179,4 +2132,109 @@ async function expireWithCampaign(
         );
         return { subscriptionId, cityId, status: "failed", message };
     }
+}
+
+export async function checkAndPauseByBudget(limit = 20) {
+    const results: Array<{
+        subscriptionId: string;
+        cityId: string;
+        status: "expired" | "failed" | "skipped";
+        message?: string;
+    }> = [];
+
+    const activeSnap = await adminDb
+        .collection("subscriptions")
+        .where("status", "==", "active")
+        .limit(Math.max(limit, 50))
+        .get();
+
+    for (const doc of activeSnap.docs) {
+        if (results.filter((item) => item.status !== "skipped").length >= limit) break;
+
+        const subscriptionId = doc.id;
+        const subscription = doc.data();
+        const cityId = String(subscription.cityId || "");
+        const campaignId = String(subscription.campaignId || "");
+        const adsetIds = Array.isArray(subscription.adsetIds)
+            ? subscription.adsetIds.map((id) => String(id)).filter(Boolean)
+            : [];
+
+        if (!cityId || !campaignId) continue;
+
+        const spendPauseThreshold = Number(
+            subscription.spendPauseThreshold || subscription.targetSpend || subscription.adsBudget || 0,
+        );
+        if (!Number.isFinite(spendPauseThreshold) || spendPauseThreshold <= 0) continue;
+
+        let spendSnapshot: Awaited<ReturnType<typeof getMetaCampaignCycleSpend>> | null = null;
+        let budgetReached = false;
+
+        try {
+            spendSnapshot = await getMetaCampaignCycleSpend({
+                campaignId,
+                spendBaseline: Number(subscription.spendBaseline || 0),
+            });
+            await doc.ref.set(
+                {
+                    cycleSpend: spendSnapshot.cycleSpend,
+                    metaTotalSpend: spendSnapshot.totalSpend,
+                    spendBaseline: spendSnapshot.spendBaseline,
+                    lastSpendCheckedAt: nowMs(),
+                    lastSpendCheckFailure: FieldValue.delete(),
+                    updatedAt: nowMs(),
+                },
+                { merge: true },
+            );
+
+            const citySnap = await adminDb.collection("cities").doc(cityId).get();
+            const city = citySnap.data() || {};
+            const isSharedPool = Number(city.activeParticipantsCount || 0) > 1;
+            const poolBaseline = Number(city.sharedPoolSpendBaseline || spendSnapshot.spendBaseline || 0);
+            const poolTarget = Number(city.sharedPoolTargetSpend || 0);
+            const poolCycleSpend = Math.max(
+                0,
+                Math.round((spendSnapshot.totalSpend - poolBaseline) * 100) / 100,
+            );
+
+            if (isSharedPool && poolTarget > 0) {
+                budgetReached = poolCycleSpend >= Math.round(poolTarget * 0.98 * 100) / 100;
+            } else {
+                budgetReached = spendSnapshot.cycleSpend >= spendPauseThreshold;
+            }
+        } catch (error) {
+            await doc.ref.set(
+                {
+                    lastSpendCheckedAt: nowMs(),
+                    lastSpendCheckFailure:
+                        error instanceof Error ? error.message : "meta_spend_check_failed",
+                    updatedAt: nowMs(),
+                },
+                { merge: true },
+            );
+        }
+
+        if (!budgetReached) continue;
+
+        const locked = await adminDb.runTransaction(async (tx) => {
+            const fresh = await tx.get(doc.ref);
+            const data = fresh.data() || {};
+            if (data.status !== "active") return false;
+            tx.set(doc.ref, { status: "expiring", expiringAt: nowMs(), updatedAt: nowMs() }, { merge: true });
+            return true;
+        });
+
+        if (!locked) {
+            results.push({ subscriptionId, cityId, status: "skipped", message: "already_processing" });
+            continue;
+        }
+
+        results.push(
+            await expireWithCampaign(doc.ref, subscriptionId, subscription, cityId, campaignId, adsetIds, {
+                reason: "target_spend_reached",
+                spendSnapshot,
+            }),
+        );
+    }
+
+    return { processed: results.length, results };
 }

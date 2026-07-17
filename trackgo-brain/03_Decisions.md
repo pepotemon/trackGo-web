@@ -310,6 +310,21 @@ Registro de decisiones de arquitectura y diseño. Cada ADR explica el contexto, 
 
 ---
 
+## ADR-019: Cron de presupuesto via GitHub Actions (no Vercel cron)
+
+**Status:** Active
+**Date:** 2026-07-16
+
+**Context:** El plan Vercel Hobby solo permite crons con frecuencia mínima diaria. La pausa automática de campañas por presupuesto necesita correr cada 30 minutos para ser útil.
+
+**Decision:** Usar GitHub Actions con schedule `*/30 * * * *` para llamar `/api/cron/subscriptions/check-spend`. GitHub Actions es gratuito hasta 2000 min/mes en repos privados. Requiere dos secrets en el repo: `APP_URL` (URL de Vercel) y `CRON_SECRET` (mismo valor que la env var de Vercel).
+
+**Consequences:**
+- La expiración por fecha (`safety_deadline`) es solo administrativa — no pausa campaña en Meta.
+- La pausa real de la campaña en Meta siempre viene de `target_spend_reached`.
+- Si los secrets de GitHub no están configurados, el cron falla silenciosamente — hay que configurarlos en Settings > Secrets and variables > Actions.
+- El cron se puede disparar manualmente desde la UI de GitHub Actions con `workflow_dispatch`.
+
 ## ADR-015: Auto-asignacion prioriza geoCoverage sobre campana
 
 **Status:** Active
