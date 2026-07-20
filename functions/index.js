@@ -581,10 +581,13 @@ async function maybeReplyToLead({
         clientPatch.aiLastModel = safeString(aiResult.model || "");
         clientPatch.aiLastReply = body;
         clientPatch.aiLastUsage = aiResult.usage || null;
-        if (aiResult.shouldClose) {
+        const aiWantsHuman = aiResult.shouldClose || safeString(aiResult.nextState || "") === "human_needed";
+        if (aiWantsHuman) {
             clientPatch.chatMode = "human";
             clientPatch.botPausedAt = now;
-            clientPatch.botPausedBy = "ai_close";
+            clientPatch.botPausedBy = safeString(aiResult.nextState || "") === "human_needed" ? "ai_human_needed" : "ai_close";
+            clientPatch.humanNeededAt = now;
+            clientPatch.humanNeededReason = "ai_escalation";
         }
     }
 

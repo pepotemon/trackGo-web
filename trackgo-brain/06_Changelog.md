@@ -8,6 +8,12 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ## 2026-07-20
 
+### fix(bot): reducir insistencia en Maps y escalar automáticamente cuando AI pide humano
+- **Module:** `functions/src/bot/aiLeadAssistant.js`, `functions/index.js`
+- **What changed:** (1) `MAX_MISSING_MAPS_REPLIES` bajó de 4 a 2 — el bot para de pedir el link después de 2 intentos. (2) Cuando el AI retorna `nextState: "human_needed"`, el bot se pausa inmediatamente (`chatMode = "human"`, `botPausedBy = "ai_human_needed"`, `humanNeededReason = "ai_escalation"`) en lugar de continuar pidiendo Maps en el siguiente mensaje.
+- **Why:** El bot era demasiado insistente con el link de Maps incluso cuando el AI ya había indicado que el cliente necesitaba hablar con una persona. El cliente recibía "te paso al encargado" y luego el bot seguía pidiendo Maps en el siguiente mensaje.
+- **See:** —
+
 ### fix(bot): detector de perfil no calificado ignoraba forma femenina "funcionária"
 - **Module:** `functions/src/bot/intents.js`
 - **What changed:** Agregadas las variantes faltantes al detector de señales salariales: `"sou funcionaria"` / `"sou funcionária"` (forma femenina), `"nao sou dona"` / `"não sou dona"` / `"nao sou dono"` / `"não sou dono"` y variantes. También agregadas las equivalentes en español: `"no soy duena"` / `"no soy dueño"` y variantes.
