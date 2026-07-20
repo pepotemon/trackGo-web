@@ -83,6 +83,7 @@ function buildShortMissingMapsReply(messageType) {
         buildShortAckPrefix(messageType),
         "",
         "Ahora enviame la ubicacion del negocio en Google Maps.",
+        "Lo necesitamos para verificar disponibilidad en tu zona y coordinar el horario de visita.",
         "Abre Google Maps, busca tu negocio, toca \"Compartir\" y enviame el enlace aqui.",
     ].join("\n");
 }
@@ -120,6 +121,7 @@ function buildAutomaticStillMissingReply({ hasBusiness, hasMaps }) {
             "Disculpa, soy una asistente automatica.",
             "",
             "Para continuar, todavia necesito la ubicacion en Google Maps.",
+            "Lo usamos para verificar disponibilidad en tu zona y definir el horario de visita.",
         ].join("\n");
     }
 

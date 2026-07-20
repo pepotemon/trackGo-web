@@ -278,6 +278,27 @@ Ambos capturaban las coords del viewport (Natal) en vez de las del negocio.
 
 ---
 
+## ERR-018: Bot ignora forma femenina "funcionária" en detección de perfil no calificado
+
+**Estado:** Resuelto  
+**Fecha:** 2026-07-20
+
+**Problema:** Una prospecto que dijo "sou funcionária" (empleada, forma femenina) no fue detectada como perfil no calificado. El bot respondió "Perfeito, Bruna!" e ignoró la descalificación, pidiendo el link de Maps reiteradamente. También envió 4 mensajes duplicados en el mismo segundo.
+
+**Causa raíz 1 (principal):** `detectUnsupportedProfileSignals` en `intents.js` tenía "sou funcionario" y "sou funcionário" (masculino) pero no las formas femeninas "sou funcionaria" / "sou funcionária". Idem para "não sou dona" y variantes.
+
+**Causa raíz 2 (duplicados):** El cooldown entre respuestas bot es solo 8 segundos. Meta re-entrega webhooks si la función tarda, y múltiples instancias Cloud Function pueden correr en paralelo → race condition → 3-4 mensajes idénticos enviados.
+
+**Solución (2026-07-20):**
+1. `functions/src/bot/intents.js`: agregadas formas femeninas y variantes "no soy dueña/dono" al keyword list de señales salariales.
+2. `functions/src/whatsapp/processIncoming.js`: dos transacciones Firestore para cerrar las race conditions:
+   - **Claim de messageId**: transacción atómica al inicio que salta si `status === "processing"` o `"processed"`. Previene que Meta re-entregue el mismo webhook y sea procesado dos veces.
+   - **Lock por clientId**: antes de llamar `maybeReplyToLead`, transacción atómica que verifica `max(botReplyClaimedAt, lastBotReplyAt) < 30s`. Solo la instancia que gana el lock envía el mensaje.
+
+**Lección:** Siempre incluir formas masculinas Y femeninas de cada término en el keyword list. Los idiomas con género gramatical requieren ambas variantes.
+
+---
+
 ## Patrones problemáticos a evitar
 
 ### No usar `leads` en UI

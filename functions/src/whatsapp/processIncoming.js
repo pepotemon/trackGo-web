@@ -172,14 +172,26 @@ function createProcessIncomingWhatsappMessage({
             if (!waId || !messageId) continue;
 
             const inboxRef = db.collection("incomingLeads").doc(messageId);
-            const existingInbox = await inboxRef.get();
 
-            if (existingInbox.exists) {
-                const existingData = existingInbox.data() || {};
-                if (existingData.status === "processed") {
-                    console.log("[WHATSAPP] duplicated inbound skipped:", messageId);
-                    continue;
-                }
+            // Atomically claim this messageId to prevent duplicate processing
+            // (Meta re-delivers webhooks if the function takes > ~5s to acknowledge)
+            let claimed = false;
+            try {
+                await db.runTransaction(async (t) => {
+                    const snap = await t.get(inboxRef);
+                    if (snap.exists) {
+                        const d = snap.data() || {};
+                        if (d.status === "processed" || d.status === "processing") return;
+                    }
+                    t.set(inboxRef, { id: messageId, status: "processing", claimedAt: Date.now() }, { merge: true });
+                    claimed = true;
+                });
+            } catch (txErr) {
+                console.warn("[WHATSAPP] claim transaction failed for:", messageId, txErr?.message);
+            }
+            if (!claimed) {
+                console.log("[WHATSAPP] duplicated inbound skipped:", messageId);
+                continue;
             }
 
             const contact =
@@ -448,12 +460,41 @@ function createProcessIncomingWhatsappMessage({
 
                     await sleep(delayMs);
 
-                    await maybeReplyToLead({
-                        clientId: result.clientId,
-                        waId,
-                        messageType: msgType,
-                        inboxRef,
-                    });
+                    // Acquire per-client lock to prevent concurrent bot replies.
+                    // Multiple messages from the same client can arrive within seconds;
+                    // all instances sleep concurrently and wake up before any of them
+                    // has written lastBotReplyAt, so the cooldown check in shouldSendBotReply
+                    // would pass for all of them simultaneously.
+                    let replyGranted = false;
+                    try {
+                        const clientRef = db.collection("clients").doc(result.clientId);
+                        await db.runTransaction(async (t) => {
+                            const snap = await t.get(clientRef);
+                            if (!snap.exists) return;
+                            const d = snap.data() || {};
+                            const mostRecent = Math.max(d.botReplyClaimedAt || 0, d.lastBotReplyAt || 0);
+                            if (Date.now() - mostRecent < 30_000) return;
+                            t.update(clientRef, { botReplyClaimedAt: Date.now() });
+                            replyGranted = true;
+                        });
+                    } catch (lockErr) {
+                        console.warn("[WHATSAPP BOT] lock transaction failed:", result.clientId, lockErr?.message);
+                    }
+
+                    if (!replyGranted) {
+                        console.log("[WHATSAPP BOT] reply skipped - concurrent reply for client:", result.clientId);
+                        await inboxRef.set(
+                            { botReplyStatus: "skipped", botReplyReason: "concurrent_reply", botReplyAt: Date.now() },
+                            { merge: true }
+                        );
+                    } else {
+                        await maybeReplyToLead({
+                            clientId: result.clientId,
+                            waId,
+                            messageType: msgType,
+                            inboxRef,
+                        });
+                    }
                 } catch (botError) {
                     console.error("[WHATSAPP BOT] reply error:", botError);
 

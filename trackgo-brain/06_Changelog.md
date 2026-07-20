@@ -6,6 +6,26 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ---
 
+## 2026-07-20
+
+### fix(bot): detector de perfil no calificado ignoraba forma femenina "funcionária"
+- **Module:** `functions/src/bot/intents.js`
+- **What changed:** Agregadas las variantes faltantes al detector de señales salariales: `"sou funcionaria"` / `"sou funcionária"` (forma femenina), `"nao sou dona"` / `"não sou dona"` / `"nao sou dono"` / `"não sou dono"` y variantes. También agregadas las equivalentes en español: `"no soy duena"` / `"no soy dueño"` y variantes.
+- **Why:** Una prospecto dijo "sou funcionária" y el bot la ignoró completamente, siguiendo el flujo como si fuera dueña del salón. El keyword list tenía solo la forma masculina. Conversación real mostró el bot enviando 4 mensajes duplicados pidiendo link de Maps.
+- **See:** [[04_Errors#ERR-018]]
+
+### fix(bot): mensajes duplicados por race condition en Cloud Functions
+- **Module:** `functions/src/whatsapp/processIncoming.js`
+- **What changed:** Dos transacciones Firestore para cerrar race conditions: (1) claim atómico del `messageId` al inicio del handler — si otro proceso ya lo reclamó, se saltea; (2) lock atómico por `clientId` antes de llamar `maybeReplyToLead` — solo la instancia que gana el lock (`max(botReplyClaimedAt, lastBotReplyAt) < 30s`) envía el mensaje.
+- **Why:** Multiple Cloud Function instances corrían en paralelo porque Meta re-entrega webhooks si la función tarda > 5s, y el sleep de 10-15s del bot permitía que múltiples instancias pasaran el cooldown de 8s antes de que ninguna escribiera `lastBotReplyAt`.
+- **See:** [[04_Errors#ERR-018]]
+
+### fix(bot): pedido de link Maps sin contexto — agregar motivo de la visita
+- **Module:** `functions/src/bot/replies.js`, `functions/src/bot/repliesEsPa.js`, `functions/src/bot/aiLeadAssistant.js`
+- **What changed:** Los mensajes de solicitud de ubicación ahora incluyen una línea explicando para qué se usa: verificar disponibilidad en la zona y definir el horario de visita. Tanto en templates fijos (PT-BR y ES-PA/AR) como en el prompt del AI.
+- **Why:** Los prospectos no entienden por qué se pide Maps si nunca se les explica. Agregar el motivo reduce la fricción y aumenta la tasa de envío.
+- **See:** —
+
 ## 2026-07-16
 
 ### feat(subscriptions): separar expiración por fecha y por presupuesto — GitHub Actions cron
