@@ -283,6 +283,27 @@ function extractTextCandidatesFromHtml(html) {
     return Array.from(new Set(candidates.filter(Boolean)));
 }
 
+function extractBrazilianCityStateCandidates(value) {
+    const source = cleanupCandidateText(value);
+    if (!source) return [];
+
+    const candidates = [];
+    const cityStateMatch = source.match(
+        /(?:^|,)\s*([^,]+?)\s*-\s*(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)\b/i
+    );
+
+    if (cityStateMatch?.[1] && cityStateMatch?.[2]) {
+        const city = cleanupCandidateText(cityStateMatch[1]);
+        const state = cityStateMatch[2].toUpperCase();
+        if (city) candidates.push(`${city}, ${state}, Brasil`);
+    }
+
+    const cepMatch = source.match(/\b\d{5}-?\d{3}\b/);
+    if (cepMatch?.[0]) candidates.push(`${cepMatch[0]}, Brasil`);
+
+    return Array.from(new Set(candidates));
+}
+
 function buildGeocodeQueries(finalUrl, html, marketCountry = "BR") {
     const queries = [];
     const fromUrl = extractPlaceTextFromUrl(finalUrl);
@@ -306,6 +327,10 @@ function buildGeocodeQueries(finalUrl, html, marketCountry = "BR") {
         const normalized = normalizeLooseText(q);
         if (normalized && !normalized.includes(suffixLower)) {
             expanded.push(`${q}, ${suffix}`);
+        }
+
+        if (String(marketCountry || "").toUpperCase() === "BR") {
+            expanded.push(...extractBrazilianCityStateCandidates(q));
         }
     }
 
@@ -374,6 +399,12 @@ function looksSpecificEnoughForGeocode(query, marketCountry = "BR") {
         q.includes("ruta ");
 
     if (hasStreetWord && hasNumber) return true;
+
+    if (String(marketCountry || "").toUpperCase() === "BR") {
+        const hasCep = /\b\d{5}-?\d{3}\b/.test(q);
+        const hasCityState = /(?:^|,)\s*(?:ac|al|ap|am|ba|ce|df|es|go|ma|mt|ms|mg|pa|pb|pr|pe|pi|rj|rn|rs|ro|rr|sc|sp|se|to)\s*(?:,|$)/i.test(q);
+        if (hasCep || hasCityState) return true;
+    }
 
     return config.placeHints.some((hint) => q.includes(hint));
 }

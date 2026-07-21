@@ -8,6 +8,12 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ## 2026-07-21
 
+### fix(maps): resolver acepta CEP y ciudad/estado de Brasil
+- **Module:** `functions/src/utils/googleMapsResolver.js`, `functions/src/whatsapp/upsertLead.js`
+- **What changed:** El resolvedor ahora consulta direcciones de Google Maps que traen CEP o combinacion ciudad/UF aunque la ciudad no figure en los hints. Tambien reintenta un enlace Maps previo sin coordenadas cuando el prospecto vuelve a escribir.
+- **Why:** El enlace de ADEGA 3 IRMAOS en Patos-PB contenia direccion suficiente, pero era descartado antes de geocodificar por no tener calle con numero ni una ciudad predefinida.
+- **See:** [[04_Errors#ERR-020]]
+
 ### fix(bot): contrato de acciones para AI conversacional
 - **Module:** `functions/src/bot/aiLeadAssistant.js`, `functions/index.js`
 - **What changed:** El AI ahora devuelve una accion limitada (`ask_business`, `ask_maps`, `answer_only`, `human_review`, `close`) en vez de campos de extraccion/calificacion que el flujo no aplicaba. La accion define la etapa registrada y pausa el bot al requerir revision humana o cierre.

@@ -312,6 +312,19 @@ Ambos capturaban las coords del viewport (Natal) en vez de las del negocio.
 
 ---
 
+## ERR-020: Direcciones Maps con CEP de ciudades fuera de los hints no se geocodificaban
+
+**Estado:** Resuelto
+**Fecha:** 2026-07-21
+
+**Problema:** Un enlace abreviado de Google Maps para "ADEGA 3 IRMAOS, Santa Cecilia, Patos - PB, 58708-170" llegaba sin coordenadas en la URL. Tras expandirse, el resolvedor extraia la direccion, pero `looksSpecificEnoughForGeocode` solo permitia calles con numero o una lista limitada de ciudades. Patos-PB quedaba descartada antes de consultar Nominatim.
+
+**Solucion:** Para Brasil, el resolvedor acepta un CEP valido o una combinacion ciudad/UF como consulta suficiente. Genera candidatos de ciudad/UF y CEP como fallback. Los prospectos existentes con enlace guardado y sin coordenadas se reintentan al recibir su proximo mensaje.
+
+**Leccion:** Los filtros que protegen un geocodificador no pueden depender de una lista cerrada de ciudades. Un CEP valido y ciudad/UF son senales geograficas suficientes para Brasil.
+
+---
+
 ## Patrones problemáticos a evitar
 
 ### No usar `leads` en UI

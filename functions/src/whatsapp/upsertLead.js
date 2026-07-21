@@ -459,10 +459,24 @@ function createUpsertLeadAsClient({
             safeString(generatedMapsUrlFromText || "") ||
             safeString(generatedMapsUrlFromCoords || "");
 
+        let found = await findClientByPhone(phone, channel);
+        if (!found && contactWaId) {
+            found = await findClientByWaId(contactWaId, channel);
+        }
+
+        const storedClient = found?.data || {};
+        const storedMapsUrlToRetry =
+            !inboundOriginalMapsUrl &&
+            !hasValidCoords(rawLocationLat, rawLocationLng) &&
+            !hasValidCoords(storedClient.lat, storedClient.lng)
+                ? safeString(storedClient.originalMapsUrl || storedClient.mapsUrl || "")
+                : "";
+        const mapsUrlToResolve = inboundOriginalMapsUrl || storedMapsUrlToRetry;
+
         const effectiveCoords = await resolveEffectiveCoords(
             rawLocationLat,
             rawLocationLng,
-            inboundOriginalMapsUrl,
+            mapsUrlToResolve,
             marketFields.marketCountry
         );
 
@@ -511,11 +525,6 @@ function createUpsertLeadAsClient({
         const profileType = parsed.profileType || "business";
         const leadQuality = parsed.leadQuality || "unknown";
         const notSuitableReason = parsed.notSuitableReason || "";
-
-        let found = await findClientByPhone(phone, channel);
-        if (!found && contactWaId) {
-            found = await findClientByWaId(contactWaId, channel);
-        }
 
         if (!found) {
             const newClientRef = db.collection("clients").doc();
