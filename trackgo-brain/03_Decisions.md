@@ -339,3 +339,19 @@ Registro de decisiones de arquitectura y diseño. Cada ADR explica el contexto, 
 - Automatic assignments use `assignmentMode: "coverage_auto"` and geographic match types (`city`, `hub_city`, `state`, `country`).
 - Vendors must have active `autoAssignEnabled` and matching `geoCoverage` to receive ready prospects automatically.
 - Historical logs with `autoAssignMatchType: "campaign"` can still exist from before this decision.
+
+---
+
+## ADR-020: AI conversacional con acciones limitadas y validacion determinista
+
+**Estado:** Activo
+**Fecha:** 2026-07-21
+
+**Contexto:** El AI redactaba respuestas, extracciones y calificaciones, pero el flujo solo usaba el texto y `nextState`. Eso podia crear una diferencia entre lo que el prompt declaraba y lo que TrackGo realmente validaba. Tambien las etapas `ai:asking_location` no se contabilizaban como solicitudes de Maps.
+
+**Decision:** El AI queda limitado a conversar y devolver una accion controlada: `ask_business`, `ask_maps`, `answer_only`, `human_review` o `close`. Las reglas deterministas mantienen la fuente de verdad para negocio, enlace Maps, elegibilidad, asignacion y estados del prospecto.
+
+**Consequences:**
+- Las solicitudes de negocio y Maps se registran con etapas que los contadores existentes reconocen.
+- `human_review` pausa el bot y deja el caso pendiente para una persona; `close` pausa la automatizacion sin prometer contacto humano.
+- El historial de WhatsApp se trata como contenido no confiable dentro del prompt para reducir intentos de alterar sus instrucciones.

@@ -451,7 +451,7 @@ async function maybeReplyToLead({
         aiResult = shouldTryAi ? await analyzeLeadReplyWithAi({ client, channel, reply, recentMessages }) : null;
         if (aiResult?.reply) {
             body = safeString(aiResult.reply || body);
-            currentBotStage = `ai:${safeString(aiResult.nextState || "assist")}`;
+            currentBotStage = `ai:${safeString(aiResult.action || "answer_only")}`;
             aiReplyStatus = "used";
         } else {
             aiReplyStatus = shouldTryAi ? "not_used" : "skipped";
@@ -514,7 +514,7 @@ async function maybeReplyToLead({
                 aiReplyError,
                 aiReplyRawOutput: "",
                 aiReplyIntent: safeString(aiResult?.intent || ""),
-                aiReplyNextState: safeString(aiResult?.nextState || ""),
+                aiReplyAction: safeString(aiResult?.action || ""),
                 aiReplyModel: safeString(aiResult?.model || ""),
                 aiReplyUsage: aiResult?.usage || null,
                 automationLimitReached: reachedAutomationLimit,
@@ -576,18 +576,21 @@ async function maybeReplyToLead({
     if (aiResult) {
         clientPatch.aiLastUsedAt = now;
         clientPatch.aiLastIntent = safeString(aiResult.intent || "");
-        clientPatch.aiLastNextState = safeString(aiResult.nextState || "");
-        clientPatch.aiLastQualification = safeString(aiResult.qualification || "");
+        clientPatch.aiLastAction = safeString(aiResult.action || "");
         clientPatch.aiLastModel = safeString(aiResult.model || "");
         clientPatch.aiLastReply = body;
         clientPatch.aiLastUsage = aiResult.usage || null;
-        const aiWantsHuman = aiResult.shouldClose || safeString(aiResult.nextState || "") === "human_needed";
-        if (aiWantsHuman) {
+        const aiAction = safeString(aiResult.action || "");
+        if (aiAction === "human_review") {
             clientPatch.chatMode = "human";
             clientPatch.botPausedAt = now;
-            clientPatch.botPausedBy = safeString(aiResult.nextState || "") === "human_needed" ? "ai_human_needed" : "ai_close";
+            clientPatch.botPausedBy = "ai_human_review";
             clientPatch.humanNeededAt = now;
             clientPatch.humanNeededReason = "ai_escalation";
+        } else if (aiAction === "close") {
+            clientPatch.chatMode = "human";
+            clientPatch.botPausedAt = now;
+            clientPatch.botPausedBy = "ai_close";
         }
     }
 
@@ -614,7 +617,7 @@ async function maybeReplyToLead({
             aiReplyError,
             aiReplyRawOutput: "",
             aiReplyIntent: safeString(aiResult?.intent || ""),
-            aiReplyNextState: safeString(aiResult?.nextState || ""),
+            aiReplyAction: safeString(aiResult?.action || ""),
             aiReplyModel: safeString(aiResult?.model || ""),
             aiReplyUsage: aiResult?.usage || null,
             automationLimitReached: reachedAutomationLimit,

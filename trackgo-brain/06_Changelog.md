@@ -6,6 +6,16 @@ Historial de cambios significativos del proyecto. Organizado por fecha descenden
 
 ---
 
+## 2026-07-21
+
+### fix(bot): contrato de acciones para AI conversacional
+- **Module:** `functions/src/bot/aiLeadAssistant.js`, `functions/index.js`
+- **What changed:** El AI ahora devuelve una accion limitada (`ask_business`, `ask_maps`, `answer_only`, `human_review`, `close`) en vez de campos de extraccion/calificacion que el flujo no aplicaba. La accion define la etapa registrada y pausa el bot al requerir revision humana o cierre.
+- **Why:** La validacion de negocio, Maps y elegibilidad pertenece a las reglas deterministas de TrackGo. Ademas, las etapas anteriores `ai:asking_location` no incrementaban el contador de solicitudes Maps.
+- **See:** [[03_Decisions#ADR-020]], [[04_Errors#ERR-019]]
+
+---
+
 ## 2026-07-20
 
 ### fix(bot): reducir insistencia en Maps y escalar automáticamente cuando AI pide humano

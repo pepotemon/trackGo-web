@@ -64,6 +64,17 @@ Backlog informal de ideas, mejoras técnicas y features potenciales. No comprome
 
 ---
 
+### IDEA-008: Contacto directo del vendedor tras verificar un prospecto
+**Contexto:** Cuando la IA o el bot termina de verificar un prospecto, TrackGo puede informar que su caso ya está listo, pero no ofrece una vía personal y clara para comunicarse con el vendedor responsable.
+**Propuesta:** Permitir que cada vendedor registre y edite desde su perfil un `nombre para WhatsApp` y un `número de WhatsApp de contacto`, con un interruptor de activación. Al verificar un prospecto, el mensaje automatizado podrá presentar al responsable (por ejemplo, "Carlos, tu cobrador encargado") e incluir un botón para abrir una conversación directa por WhatsApp. El administrador debe poder revisar qué vendedores tienen este contacto configurado y habilitado.
+**Decisión de UX pendiente:** Ofrecer dos modos: `canal centralizado`, donde la conversación sigue en el WhatsApp conectado a TrackGo y queda registrada; y `contacto directo`, donde el botón abre el WhatsApp del vendedor. El segundo modo mejora la cercanía, pero los mensajes posteriores no se registrarán automáticamente en TrackGo.
+**Consideraciones:** Validar el número en formato internacional, no exponerlo si el vendedor no lo habilita y revisar que el mensaje/CTA sea compatible con la plantilla de WhatsApp usada para iniciar conversaciones.
+**Esfuerzo estimado:** Medio (campos en `/users`, perfil de vendedor, administración, plantilla y enlace de WhatsApp)
+**Prioridad:** Media
+**Estado:** Pendiente de definición y aprobación de producto
+
+---
+
 ## Ideas técnicas
 
 ### IDEA-T001: Migración automática de permisos legacy

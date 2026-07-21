@@ -299,6 +299,19 @@ Ambos capturaban las coords del viewport (Natal) en vez de las del negocio.
 
 ---
 
+## ERR-019: Etapas AI no incrementaban contadores de negocio y Maps
+
+**Estado:** Resuelto
+**Fecha:** 2026-07-21
+
+**Problema:** El AI respondia con estados como `asking_location`, pero `functions/index.js` los guardaba como `ai:asking_location`. Los limites de insistencia cuentan fragmentos `maps` y `business`, por lo que esas respuestas del AI no siempre se incluian al decidir cuando dejar de pedir la ubicacion.
+
+**Solucion:** Reemplazado `nextState` por acciones limitadas. Las acciones `ask_maps` y `ask_business` se guardan como `ai:ask_maps` y `ai:ask_business`, que los contadores existentes reconocen.
+
+**Leccion:** Los valores que alimentan limites operativos deben compartir el mismo vocabulario que los contadores que los consumen. No usar estados solo descriptivos si tambien controlan comportamiento.
+
+---
+
 ## Patrones problemáticos a evitar
 
 ### No usar `leads` en UI
